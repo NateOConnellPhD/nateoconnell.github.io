@@ -2,7 +2,7 @@
 
 The user pushed the new website to [NateOConnellPhD/nateoconnell.github.io](https://github.com/NateOConnellPhD/nateoconnell.github.io) with a fresh initial commit, `99aaebb`. Local `main` and `origin/main` matched when checked, and the old Hugo upgrade branches were removed. Future updates use ordinary commits and pushes; do not repeat the history-reset commands.
 
-The professional domain is `nateoconnell.com`, registered at Namecheap. The blog is **Out-of-Bag Thoughts**, and the user also owns `outofbagthoughts.com`. Its address behavior (a separate blog deployment or a redirect) is pending the user's choice. No DNS or GitHub settings have been changed by the agent. Public website and DNS checks were blocked by this session's network restrictions.
+The professional domain is `nateoconnell.com`, registered at Namecheap. The blog is **Out-of-Bag Thoughts**, and the user chose to redirect `outofbagthoughts.com` to `https://nateoconnell.com/blog/`. The Blog navigation item stays within the professional website in the same browser tab. No DNS, Cloudflare, or GitHub settings have been changed by the agent. Public website and DNS checks were blocked by this session's network restrictions.
 
 ## Professional domain: nateoconnell.com
 
@@ -46,12 +46,40 @@ The old project URL was `https://nateoconnellphd.github.io/nateoconnell.github.i
 
 Do not add a second domain to this repository's `CNAME`. GitHub Pages supports one custom domain per site, plus its corresponding `www` variant. DNS cannot send one domain to a website subdirectory. [GitHub domain limitations](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages).
 
-The user is choosing between:
+The selected behavior is a permanent redirect to the integrated blog. Visitors' address bars change to `nateoconnell.com/blog/`. Posts, their canonical URLs, RSS, and Pages CMS remain in this one repository. Links from the professional website go directly to `/blog/`, without an extra redirect or new browser tab.
 
-- **A separate blog deployment:** `outofbagthoughts.com` stays in the address bar, including while reading posts. With GitHub Pages, this needs its own Pages site/repository and custom domain. Plan the content/editor arrangement before moving posts or creating another repository.
-- **A redirect:** `outofbagthoughts.com` sends visitors to `https://nateoconnell.com/blog/`, and the address bar changes to that destination. Use an HTTPS-capable redirect service. Namecheap's basic forwarding documentation does not establish HTTPS support at the source domain; it distinguishes HTTP-to-HTTPS forwarding from HTTPS-to-HTTPS forwarding, which requires a certificate for both domains. [Namecheap redirect documentation](https://www.namecheap.com/support/knowledgebase/article.aspx/385/2237/how-to-set-up-a-url-redirect-for-a-domain/).
+Use Cloudflare's Free plan for DNS and HTTPS forwarding of the blog alias. Registration stays with its current registrar; only `outofbagthoughts.com` needs Cloudflare nameservers for this setup. The professional domain can keep its existing DNS provider. [Cloudflare redirect availability](https://developers.cloudflare.com/rules/url-forwarding/), [free Universal SSL](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/).
 
-The source currently keeps the blog at `/blog/` while that choice is pending. Do not configure a masked/frame redirect.
+First finish the professional-domain setup above and confirm `https://nateoconnell.com/blog/` loads. Then:
+
+1. Sign in to [Cloudflare](https://dash.cloudflare.com/), add `outofbagthoughts.com` as a domain, and choose **Free**. Review its imported DNS records against the registrar's existing records, keeping email and verification records intact.
+2. In that domain's **DNS → Records**, use the following records for the alias. Replace conflicting web/parking records for `@` and `www` only:
+
+   | Type | Name | IPv4 address | Proxy status |
+   | --- | --- | --- | --- |
+   | A | `@` | `192.0.2.1` | Proxied (orange cloud) |
+   | A | `www` | `192.0.2.1` | Proxied (orange cloud) |
+
+   This is Cloudflare's documented placeholder for redirect-only domains; no origin server is needed. The redirect rule below handles requests at the edge. [Cloudflare alias-domain setup](https://developers.cloudflare.com/fundamentals/manage-domains/redirect-domain/).
+3. Under **Rules**, create a **Redirect Rule** named **Out-of-Bag Thoughts → blog**. Choose a custom filter expression:
+
+   ```text
+   (http.host eq "outofbagthoughts.com") or (http.host eq "www.outofbagthoughts.com")
+   ```
+
+   Set the action to **Static**, URL `https://nateoconnell.com/blog/`, status **301**, and **Preserve query string** enabled. Deploy the rule. This treats the domain as an address for the blog index: incoming paths go to `/blog/`; individual posts are shared using their canonical `nateoconnell.com/blog/...` URLs. [Redirect rule dashboard instructions](https://developers.cloudflare.com/rules/url-forwarding/single-redirects/create-dashboard/).
+4. Cloudflare supplies two account-specific nameservers. At the registrar for **outofbagthoughts.com**, replace that domain's nameservers with those exact values. In Namecheap this is **Domain List → Manage → Nameservers → Custom DNS**. If DNSSEC is already enabled, follow Cloudflare's instructions to remove the old DNSSEC configuration before switching and re-enable it with Cloudflare after activation. [Cloudflare nameserver setup](https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/).
+5. Wait for the domain to become **Active** and for **SSL/TLS → Edge Certificates → Universal SSL** to show an active certificate. Free certificates are provisioned after activation and cover the apex and `www`; issuance can take up to 24 hours. [Certificate activation](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/enable-universal-ssl/).
+6. Confirm the four addresses below return a redirect to the same blog URL, including secure requests. Check that `https://outofbagthoughts.com/?tag=Sports` retains its query string. No certificate warning or redirect loop should appear.
+
+   | Incoming address | Expected destination |
+   | --- | --- |
+   | `http://outofbagthoughts.com/` | `https://nateoconnell.com/blog/` |
+   | `https://outofbagthoughts.com/` | `https://nateoconnell.com/blog/` |
+   | `http://www.outofbagthoughts.com/` | `https://nateoconnell.com/blog/` |
+   | `https://www.outofbagthoughts.com/` | `https://nateoconnell.com/blog/` |
+
+The rule and account setup are prepared instructions, not an activated service. Do not use Namecheap's masked/frame forwarding. Its basic forwarding alone does not establish HTTPS support at the source domain. [Namecheap forwarding documentation](https://www.namecheap.com/support/knowledgebase/article.aspx/385/2237/how-to-set-up-a-url-redirect-for-a-domain/).
 
 ## Browser editing
 
@@ -60,7 +88,7 @@ Sign in at [Pages CMS](https://app.pagescms.org), authorize its GitHub App for o
 ## Remaining launch checks
 
 - Confirm the domain resolves, GitHub Pages deploys successfully, and HTTPS is enabled.
-- Choose and configure the blog's domain behavior.
+- Activate and verify the prepared HTTPS redirect for both blog-domain variants.
 - Review the layout on desktop and an actual phone.
 - Complete Pages CMS draft, formatting, upload, and phone paste checks.
 - Keep the two sample blog posts unpublished until replaced with real posts.
