@@ -17,7 +17,7 @@ I also serve as Director of Biostatistics for the [ARISE Cancer Consortium](http
 
 My professional service includes grant review for the NIH, Department of Defense, and ASCO’s Conquer Cancer Foundation, reviewing for more than 20 journals, and membership on the [Nature Medicine Statistical Advisory Panel](https://www.nature.com/nm/statistics-advisory-panel) in Neurology & Psychiatry.
 
-On **Residual Thoughts**, I write about technical ideas and other things I explore out of curiosity.
+On **Out-of-Bag Thoughts**, I write about technical ideas and other things I explore out of curiosity.
 
 ## Students and mentorship
 
@@ -27,7 +27,7 @@ I encourage students interested in machine learning, statistical inference, or a
 
 Outside work, I enjoy time with my wife, our two kids, and our dog, Enzo. I used to long distances [run competitively](https://www.savannahtribune.com/articles/georgian-wins-inaugural-rock-n-roll-marathon/) and still enjoy it, though I’ve gotten more into weightlifting in recent years. Related, I've developed my own weightlifting app, **Platebook**, that uses Bayesian models to track and estimate strength, fatigue, and recovery dynamics, along with a "smart" lifting program generator that builds a recovery optimal weekly workout plan within a user's parameters. I’ll share the app (for free) and its methods here when they’re ready.
 
-I grew up playing baseball as an Atlanta Braves fan, and I still watch 100+ games a year still today. I’m also a Philadelphia 76ers fan (there's a story for how I'm an Atlanta baseball fan but Philly basketball fan). I also love college football. A lot of my statistical side projects start with a sports question I want to figure out simply because I’m a fan. There doesn’t need to be a paper at the end of it. My blog, **Residual Thoughts**, will have room for those projects, technical posts, and whatever else I feel like writing about.
+I grew up playing baseball as an Atlanta Braves fan, and I still watch 100+ games a year still today. I’m also a Philadelphia 76ers fan (there's a story for how I'm an Atlanta baseball fan but Philly basketball fan). I also love college football. A lot of my statistical side projects start with a sports question I want to figure out simply because I’m a fan. There doesn’t need to be a paper at the end of it. My blog, **Out-of-Bag Thoughts**, will have room for those projects, technical posts, and whatever else I feel like writing about.
 
 I’m also a car enthusiast. I love watching F1 racing (Ferrari is my team) and take fantasy F1 probably too seriously. I've developed some statistical tools I use for my F1 fantasy game, and I've been ranked as high as 30th in the world out of 2 million+ globally.
 

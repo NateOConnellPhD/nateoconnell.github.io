@@ -6,7 +6,9 @@ A locally developed Jekyll website for GitHub Pages, with Pages CMS for browser-
 
 The local site contains Nathaniel O’Connell’s profile, approved biography, headshot, downloadable CV, three selected talks, five current research manuscripts, and nine selected publications. The research page separates methods and theory from clinical research. Its five clinical highlights are PREVENT, UPBEAT, CROWN, the Wells migraine trial, and the E1912 adverse-events paper. The two sample blog posts are unpublished drafts, ready to replace when writing the first post.
 
-The current source rendered successfully with Jekyll. Browser layout review is still pending; start the preview server below when reviewing locally. The local `origin` points to the user's existing `NateOConnellPhD/nateoconnell.github.io` repository. The user fetched its history in Terminal, and the fetched `main` contains a Hugo site with Actions deployment, an `example.com` URL placeholder, and no tracked `CNAME`. The new site is configured for the repository's GitHub Pages project path. Replacement and pushing remain for the user to run in Terminal; no hosting or domain settings have been changed.
+The website was pushed to `NateOConnellPhD/nateoconnell.github.io` with a fresh initial commit, `99aaebb`; the old Hugo branches were removed. The source is now prepared for `https://nateoconnell.com` with an empty base path and a `CNAME` file. The domain is registered at Namecheap; active nameservers, DNS records, and live deployment have not been verified. The blog is named **Out-of-Bag Thoughts**, and the user also owns `outofbagthoughts.com`. Its separate-domain routing is still being decided. These new source changes require a normal push and domain setup; no DNS changes have been made by the agent.
+
+Earlier site versions rendered successfully with Jekyll. This domain and naming update received source checks only. Browser layout review is still pending; start the preview server below when reviewing locally.
 
 See `docs/REVIEW.md` for what was actually checked and any remaining limitations.
 

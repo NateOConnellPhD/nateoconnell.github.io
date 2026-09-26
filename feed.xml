@@ -3,7 +3,7 @@ layout: null
 ---
 <?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>{{ site.data.profile.name | append: ' — Residual Thoughts' | xml_escape }}</title>
+  <title>{{ site.data.profile.name | append: ' — Out-of-Bag Thoughts' | xml_escape }}</title>
   <link href="{{ '/feed.xml' | absolute_url | xml_escape }}" rel="self"/>
   <link href="{{ '/blog/' | absolute_url | xml_escape }}"/>
   <id>{{ '/blog/' | absolute_url | xml_escape }}</id>
