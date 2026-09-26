@@ -5,7 +5,7 @@ section: about
 permalink: /about/
 description: "Biography, background, and research interests."
 ---
-I’m Nathaniel O’Connell, PhD, an Associate Professor in the [Department of Biostatistics and Data Science](https://school.wakehealth.edu/departments/biostatistics-and-data-science) at Wake Forest University School of Medicine. My research focuses on the intersection of machine learning and statistical inference, especially uncertainty quantification for prediction models and estimates of their performance.
+I’m Nathaniel (Nate) O’Connell, PhD, an Associate Professor in the [Department of Biostatistics and Data Science](https://school.wakehealth.edu/departments/biostatistics-and-data-science) at Wake Forest University School of Medicine. My research focuses on the intersection of machine learning and statistical inference, especially uncertainty quantification for prediction models and estimates of their performance.
 
 Much of my methodological work is motivated by questions from biomedical collaborations and real-world issues I encounter routinely in my applied work. Over years of applied research, I have repeatedly encountered problems for which I could not find satisfactory answers. In collaborations involving machine learning and prediction, many of these questions concern uncertainty: how much confidence we can place in predictions and performance estimates, and how the choices made during an analysis affect the conclusions we draw.
 
