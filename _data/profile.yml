@@ -7,7 +7,7 @@ introduction: "My research includes uncertainty quantification in machine learni
 email: "nathaniel.oconnell@wfusm.edu"
 portrait: "/assets/images/head-shot.jpg"
 portrait_alt: "Portrait of Nathaniel S. O’Connell"
-preview_mode: true
+preview_mode: false
 interests:
   - name: "Uncertainty in machine learning"
     description: "Statistical theory and methods for quantifying uncertainty in prediction models and their performance, with particular attention to random forests and the dependence created by reusing data."
