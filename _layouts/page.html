@@ -1,0 +1,7 @@
+---
+layout: default
+---
+<div class="wrap page-shell">
+  <header class="page-heading"><p class="eyebrow">{{ page.eyebrow | default: 'A little background' | escape }}</p><h1>{{ page.title | escape }}</h1>{% if page.description %}<p class="page-deck">{{ page.description | escape }}</p>{% endif %}</header>
+  <div class="prose">{% include content.html body=content %}</div>
+</div>

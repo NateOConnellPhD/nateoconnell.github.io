@@ -1,0 +1,58 @@
+#!/bin/sh
+# Run from any directory with: sh /path/to/Professional_Site/scripts/site COMMAND
+# No install occurs unless COMMAND is explicitly "install".
+set -eu
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+task_dir="$project_dir/.codex-tmp/site-preview"
+mkdir -p "$task_dir/tmp" "$task_dir/bundle-config" "$task_dir/bundle-user"
+export TMPDIR="$task_dir/tmp"
+export BUNDLE_APP_CONFIG="$task_dir/bundle-config"
+export BUNDLE_USER_HOME="$task_dir/bundle-user"
+export BUNDLE_USER_CACHE="$task_dir/bundle-user/cache"
+export GEM_SPEC_CACHE="$task_dir/gem-spec-cache"
+export BUNDLE_PATH="$task_dir/gems"
+export BUNDLE_DISABLE_SHARED_GEMS=true
+export GEM_HOME="$task_dir/tooling"
+export GEM_PATH="$GEM_HOME"
+export JEKYLL_ENV=development
+bundler_version=2.4.22
+run_bundle() {
+  if [ ! -f "$GEM_HOME/bin/bundle" ]; then
+    printf '%s\n' 'Run sh scripts/site install before building or serving.' >&2
+    exit 1
+  fi
+  ruby "$GEM_HOME/bin/bundle" "_${bundler_version}_" "$@"
+}
+run_jekyll() (
+  # Use only the gems installed by Bundler. This site has no Gemfile plugins.
+  # Direct launch avoids Bundler's unrelated system manual-page directory scan.
+  ruby_api_version=$(ruby -rrbconfig -e 'print RbConfig::CONFIG["ruby_version"]')
+  export GEM_HOME="$BUNDLE_PATH/ruby/$ruby_api_version"
+  export GEM_PATH="$GEM_HOME"
+  export JEKYLL_NO_BUNDLER_REQUIRE=true
+  if [ ! -f "$GEM_HOME/bin/jekyll" ]; then
+    printf '%s\n' 'Run sh scripts/site install before building or serving.' >&2
+    exit 1
+  fi
+  ruby "$GEM_HOME/bin/jekyll" _3.10.0_ "$@"
+)
+cd "$project_dir"
+case "${1:-help}" in
+  install)
+    if [ ! -d "$GEM_HOME/gems/bundler-$bundler_version" ]; then
+      printf '{}\n' > "$task_dir/gemrc"
+      gem install bundler --config-file "$task_dir/gemrc" --version "$bundler_version" --install-dir "$GEM_HOME" --no-document
+    fi
+    run_bundle install --jobs=1
+    ;;
+  build)
+    # Keep the local preview at /; GitHub Pages uses _config.yml's project path.
+    run_jekyll build --baseurl "" --destination "$task_dir/site"
+    ;;
+  serve)
+    run_jekyll serve --baseurl "" --destination "$task_dir/site" --host 127.0.0.1 --port 4000 --no-watch
+    ;;
+  *)
+    printf '%s\n' 'Usage: sh scripts/site install|build|serve' 'Install downloads gems into .codex-tmp/site-preview; build and serve require them.' 'Serve binds only to 127.0.0.1:4000. Stop it with Control+C.'
+    ;;
+esac

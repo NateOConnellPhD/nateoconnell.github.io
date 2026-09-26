@@ -1,0 +1,45 @@
+title: "Nathaniel S. O’Connell, PhD — Research & writing"
+description: "Biostatistics, machine learning, and statistical inference. Research and writing by Nathaniel S. O’Connell."
+url: "https://nateoconnellphd.github.io"
+baseurl: "/nateoconnell.github.io"
+lang: en
+timezone: America/New_York
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+permalink: /blog/:year/:month/:day/:title/
+future: false
+unpublished: false
+strict_front_matter: true
+sass:
+  cache: false
+include: [_pages]
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - docs
+  - scripts
+  - vendor
+  - .codex
+  - .codex-tmp
+  - Context_not_for_upload
+  - context_not_for_upload
+  - .bundle
+  - .pages.yml
+  - AGENTS.md
+collections:
+  research:
+    output: true
+    permalink: /research/:name/
+  talks:
+    output: true
+    permalink: /talks/:name/
+defaults:
+  - scope: {path: "", type: posts}
+    values: {layout: post, section: blog, published: false}
+  - scope: {path: "", type: research}
+    values: {layout: research-item, section: research, area: "Methods & theory", published: false}
+  - scope: {path: "", type: talks}
+    values: {layout: talk, section: talks, published: false}

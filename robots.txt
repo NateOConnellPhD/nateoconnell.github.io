@@ -1,0 +1,5 @@
+---
+layout: null
+---
+User-agent: *
+{% if site.data.profile.preview_mode %}Disallow: /{% else %}Allow: /{% endif %}

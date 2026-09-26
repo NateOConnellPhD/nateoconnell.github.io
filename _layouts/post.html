@@ -1,0 +1,10 @@
+---
+layout: default
+---
+<article class="wrap article-shell">
+  <a class="back-link" href="{{ '/blog/' | relative_url }}"><span aria-hidden="true">←</span> All writing</a>
+  <header class="article-heading"><p class="eyebrow">{% if page.example %}Example post · placeholder content{% else %}Residual Thoughts{% endif %}</p><h1>{{ page.title | escape }}</h1><p class="page-deck">{{ page.description | escape }}</p><div class="article-meta">{% unless page.example %}<time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: '%d %B %Y' }}</time><span aria-hidden="true">·</span>{% endunless %}{% assign words = content | strip_html | number_of_words %}{% assign minutes = words | divided_by: 220 | plus: 1 %}<span>{{ minutes }} min read</span>{% for tag in page.tags %}<a href="{{ '/blog/' | relative_url }}?tag={{ tag | url_encode }}">{{ tag | escape }}</a>{% endfor %}</div></header>
+  {% if page.cover and page.cover != empty %}<figure class="article-cover"><img src="{{ page.cover | relative_url }}" alt="{{ page.cover_alt | escape }}">{% if page.cover_caption %}<figcaption>{{ page.cover_caption | escape }}</figcaption>{% endif %}</figure>{% endif %}
+  <div class="prose article-body">{% include content.html body=content %}</div>
+  <footer class="article-end"><span class="end-mark" aria-hidden="true">✳</span><p>More from Residual Thoughts</p><a class="text-link" href="{{ '/blog/' | relative_url }}">Explore all posts <span aria-hidden="true">↗</span></a></footer>
+</article>

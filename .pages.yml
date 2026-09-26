@@ -1,0 +1,185 @@
+# Browser editor: https://app.pagescms.org
+# Drafts remain in Git history. Do not store confidential material in this repository.
+media:
+  - name: images
+    label: Images
+    input: assets/images
+    output: /assets/images
+    extensions: [jpg, jpeg, png, webp, gif, avif]
+    rename: random
+  - name: files
+    label: CV & research PDFs
+    input: assets/files
+    output: /assets/files
+    extensions: [pdf]
+    rename: safe
+  - name: presentations
+    label: Talk slides
+    input: Presentations
+    output: /Presentations
+    extensions: [pdf, pptx]
+    rename: safe
+
+content:
+  - name: posts
+    label: Blog posts
+    type: collection
+    path: _posts
+    format: yaml-frontmatter
+    filename: "{year}-{month}-{day}-{primary}.md"
+    subfolders: false
+    view:
+      primary: title
+      fields: [title, date, published, example]
+      sort: [date]
+      default: {sort: date, order: desc}
+    fields:
+      - {name: title, label: Title, type: string, required: true}
+      - {name: date, label: Publication date, type: date, required: true, options: {time: false, format: yyyy-MM-dd}}
+      - {name: description, label: Short summary, type: text, required: true}
+      - {name: tags, label: Topics, type: string, list: true}
+      - name: published
+        label: Publish on the website
+        type: boolean
+        default: false
+        description: "Leave off to save a draft. Turn on and save to publish. Future-dated posts require a new site build after their date; they are not automatically scheduled."
+      - {name: example, label: Mark as example content, type: boolean, default: false}
+      - {name: cover, label: Cover image (optional), type: image, options: {media: images}}
+      - {name: cover_alt, label: Cover image description, type: string, description: "Describe the image for someone who cannot see it."}
+      - {name: cover_caption, label: Cover caption (optional), type: string}
+      - name: body
+        label: Post
+        type: rich-text
+        options: {format: markdown, media: images, switcher: true, rename: random}
+
+  - name: research
+    label: Research & work
+    type: collection
+    path: _research
+    format: yaml-frontmatter
+    filename: "{primary}.md"
+    subfolders: false
+    view: {primary: title, fields: [title, area, kind, year, published]}
+    fields:
+      - {name: title, label: Title, type: string, required: true}
+      - {name: kind, label: Type of work, type: select, required: true, options: {values: [Publication, Preprint, Manuscript, Project, Other]}}
+      - {name: area, label: Research area, type: select, required: true, default: "Methods & theory", options: {values: ["Methods & theory", "Clinical research"]}}
+      - {name: study, label: Study label (optional), type: string, description: "A short label displayed above the title, such as PREVENT or UPBEAT."}
+      - {name: year, label: Year, type: number, required: true}
+      - {name: authors, label: Authors or collaborators, type: string}
+      - {name: venue, label: Journal, venue, or status, type: string}
+      - {name: summary, label: Short summary, type: text, required: true}
+      - {name: featured, label: Feature on the homepage, type: boolean, default: false}
+      - {name: order, label: Display order (lowest first), type: number, default: 10, description: "Used on the research page and for homepage highlights."}
+      - {name: published, label: Publish on the website, type: boolean, default: false, description: "Controls website visibility. Use Type of work to distinguish a journal publication from a preprint or manuscript in progress."}
+      - {name: example, label: Mark as example content, type: boolean, default: false}
+      - {name: link, label: Publication or project URL, type: string}
+      - {name: pdf, label: PDF (optional), type: file, options: {media: files, extensions: [pdf]}}
+      - {name: code, label: Code URL (optional), type: string}
+      - {name: body, label: Details, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
+
+  - name: talks
+    label: Talks & seminars
+    type: collection
+    path: _talks
+    format: yaml-frontmatter
+    filename: "{year}-{month}-{day}-{primary}.md"
+    subfolders: false
+    view: {primary: title, fields: [title, event_date, venue, published]}
+    fields:
+      - {name: title, label: Title, type: string, required: true}
+      - {name: kind, label: Format, type: select, required: true, options: {values: [Talk, Seminar, Grand rounds, Workshop, Panel, Lecture]}}
+      - {name: event_date, label: Event date, type: date, required: true, options: {time: false, format: yyyy-MM-dd}}
+      - {name: venue, label: Event or host institution, type: string, required: true}
+      - {name: summary, label: Short description, type: text, required: true}
+      - {name: slides, label: Slides (PDF or PowerPoint), type: file, options: {media: presentations, extensions: [pdf, pptx]}}
+      - {name: recording, label: Recording URL, type: string}
+      - {name: event_url, label: Event URL, type: string}
+      - {name: published, label: Publish on the website, type: boolean, default: false}
+      - {name: example, label: Mark as example content, type: boolean, default: false}
+      - {name: body, label: Abstract & notes, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
+
+  - name: profile
+    label: Name, profile & contact
+    type: file
+    path: _data/profile.yml
+    fields:
+      - {name: name, label: Your name, type: string, required: true}
+      - {name: role, label: Role or title, type: string}
+      - {name: department, label: Department, type: string}
+      - {name: division, label: Division, type: string}
+      - {name: affiliation, label: Institution or affiliation, type: string}
+      - {name: introduction, label: Homepage introduction, type: text}
+      - {name: email, label: Public contact email, type: string}
+      - {name: portrait, label: Portrait, type: image, options: {media: images}}
+      - {name: portrait_alt, label: Portrait image description, type: string}
+      - name: preview_mode
+        label: Show preview notice and discourage search indexing
+        type: boolean
+        default: true
+        description: "Turn off only after replacing example content. This is not password protection."
+      - name: interests
+        label: Research interests
+        type: object
+        list: true
+        fields:
+          - {name: name, label: Topic, type: string}
+          - {name: description, label: Description, type: text}
+      - name: links
+        label: Profile links
+        type: object
+        list: true
+        fields:
+          - {name: label, label: Label (e.g. ORCID or Google Scholar), type: string, required: true}
+          - {name: url, label: URL, type: string, required: true}
+          - {name: personal, label: My own profile, type: boolean, default: true, description: "Turn off for department or organization links."}
+
+  - name: home
+    label: Homepage text
+    type: file
+    path: _data/home.yml
+    fields:
+      - {name: eyebrow, label: Small heading above introduction, type: string}
+      - {name: heading, label: Main heading, type: text}
+      - {name: research_intro, label: Homepage research introduction, type: text}
+      - {name: blog_intro, label: Blog introduction, type: text}
+      - {name: contact_heading, label: Contact heading, type: string}
+      - {name: contact_text, label: Contact introduction, type: text}
+
+  - name: research_page
+    label: Research introductions
+    type: file
+    path: _data/research.yml
+    fields:
+      - {name: introduction, label: Methods & theory introduction, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
+      - {name: clinical_introduction, label: Clinical research introduction, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
+
+  - name: biography
+    label: Biography
+    type: file
+    path: _pages/about.md
+    fields:
+      - {name: title, label: Page title, type: string}
+      - {name: description, label: Search description, type: text}
+      - {name: layout, type: string, hidden: true, default: about}
+      - {name: section, type: string, hidden: true, default: about}
+      - {name: permalink, type: string, hidden: true, default: /about/}
+      - {name: body, label: Biography, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
+
+  - name: cv
+    label: Curriculum vitae
+    type: file
+    path: _pages/cv.md
+    fields:
+      - {name: title, label: Page title, type: string}
+      - {name: description, label: Search description, type: text}
+      - {name: layout, type: string, hidden: true, default: cv}
+      - {name: section, type: string, hidden: true, default: cv}
+      - {name: permalink, type: string, hidden: true, default: /cv/}
+      - {name: pdf, label: Downloadable CV PDF, type: file, options: {media: files, extensions: [pdf]}}
+      - {name: updated, label: Last updated (optional), type: date, default: "", options: {time: false, format: yyyy-MM-dd}}
+      - {name: body, label: Web version of your CV, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
+
+settings:
+  content:
+    merge: true

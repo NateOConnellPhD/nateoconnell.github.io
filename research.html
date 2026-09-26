@@ -1,0 +1,29 @@
+---
+layout: default
+title: Research & work
+section: research
+permalink: /research/
+description: "Statistical methods and theory, alongside selected clinical research collaborations."
+---
+<div class="wrap page-shell">
+  <header class="page-heading"><p class="eyebrow">Questions, methods & contributions</p><h1>Research & work<span class="accent">.</span></h1><nav class="research-jumps" aria-label="Research areas"><a class="text-link" href="#methods-theory">Methods & theory <span aria-hidden="true">↓</span></a><a class="text-link" href="#clinical-research">Clinical research <span aria-hidden="true">↓</span></a></nav></header>
+  {% assign works = site.research | where: 'published', true | sort: 'order' %}
+  {% assign methods = works | where: 'area', 'Methods & theory' %}
+  {% assign clinical = works | where: 'area', 'Clinical research' %}
+  <section class="research-group" id="methods-theory" aria-labelledby="methods-heading" data-filter-list>
+    <h2 id="methods-heading">Methods & theory</h2>
+    {% assign research_intro_html = site.data.research.introduction | markdownify %}<div class="prose">{% include content.html body=research_intro_html %}</div>
+  <div class="filter-toolbar" hidden data-filter-controls><div class="filter-buttons" role="group" aria-label="Filter methods and theory">
+    <button type="button" data-filter="all" aria-pressed="true">All methods & theory</button>
+    {% assign kinds = 'Publication|Preprint|Manuscript|Project|Other' | split: '|' %}
+    {% for kind in kinds %}{% assign kind_works = methods | where: 'kind', kind %}{% if kind_works.size > 0 %}<button type="button" data-filter="{{ kind | downcase }}" aria-pressed="false">{% case kind %}{% when 'Publication' %}Selected publications{% when 'Manuscript' %}Work in progress{% when 'Other' %}Other work{% else %}{{ kind }}s{% endcase %}</button>{% endif %}{% endfor %}
+  </div></div>
+  {% for item in methods %}{% include work-row.html item=item %}{% else %}<p class="empty-state">Methods and theory will appear here.</p>{% endfor %}
+  <p class="empty-state" data-no-results hidden>No work in this category yet.</p><p class="sr-only" data-result-count role="status" aria-live="polite"></p>
+  </section>
+  <section class="research-group" id="clinical-research" aria-labelledby="clinical-heading">
+    <h2 id="clinical-heading">Clinical research</h2>
+    {% assign clinical_intro_html = site.data.research.clinical_introduction | markdownify %}<div class="prose">{% include content.html body=clinical_intro_html %}</div>
+    {% for item in clinical %}{% include work-row.html item=item %}{% else %}<p class="empty-state">Clinical research will appear here.</p>{% endfor %}
+  </section>
+</div>

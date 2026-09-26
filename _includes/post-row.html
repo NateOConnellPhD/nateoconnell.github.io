@@ -1,0 +1,4 @@
+<article class="post-row" data-entry data-kind="all" data-tags="{{ include.item.tags | join: '|' | escape }}" data-search="{{ include.item.title | append: ' ' | append: include.item.description | append: ' ' | append: include.item.tags | escape }}">
+  <div class="row-meta">{% if include.item.example %}<span class="example-label">Example post</span>{% else %}<time datetime="{{ include.item.date | date_to_xmlschema }}">{{ include.item.date | date: '%d %b %Y' }}</time>{% endif %}</div>
+  <div><h3><a href="{{ include.item.url | relative_url }}">{{ include.item.title | escape }} <span class="text-arrow" aria-hidden="true">↗</span></a></h3><p>{{ include.item.description | escape }}</p><div class="post-tags">{% for tag in include.item.tags %}<span>{{ tag | escape }}</span>{% endfor %}</div></div>
+</article>

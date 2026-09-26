@@ -1,0 +1,25 @@
+name: "Nathaniel S. O’Connell, PhD"
+role: "Associate Professor"
+department: "Department of Biostatistics and Data Science"
+division: "Division of Public Health Science"
+affiliation: "Wake Forest University School of Medicine"
+introduction: "My research includes uncertainty quantification in machine learning and prediction models, Bayesian adaptive trial design, and collaborative biomedical research. Years of applied work have shaped the questions behind my increasing focus on statistical methodology and theory."
+email: "nathaniel.oconnell@wfusm.edu"
+portrait: "/assets/images/head-shot.jpg"
+portrait_alt: "Portrait of Nathaniel S. O’Connell"
+preview_mode: true
+interests:
+  - name: "Uncertainty in machine learning"
+    description: "Statistical theory and methods for quantifying uncertainty in prediction models and their performance, with particular attention to random forests and the dependence created by reusing data."
+  - name: "Cross-validation and model stability"
+    description: "How resampling designs affect performance estimates, how to estimate their uncertainty, and how tuning choices influence the reproducibility of fitted coefficients and selected variables."
+  - name: "Bayesian adaptive trial design"
+    description: "Dose-finding and dose-optimization methods that account for patient heterogeneity and repeated outcomes, motivated by questions in oncology and other clinical collaborations."
+links:
+  - label: GitHub
+    url: "https://github.com/NateOConnellPhD"
+  - label: LinkedIn
+    url: "https://www.linkedin.com/in/nathaniel-o-connell-1a04a076/"
+  - label: Department LinkedIn
+    url: "https://www.linkedin.com/company/wake-bds/posts/?feedView=all"
+    personal: false

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="{{ site.lang | default: 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title %}{{ page.title | escape }} — {% endif %}{{ site.data.profile.name | escape }}</title>
+  {% assign description = page.description | default: page.summary | default: site.description %}
+  <meta name="description" content="{{ description | escape }}">
+  <meta name="theme-color" content="#eaf3fb">
+  <meta property="og:title" content="{{ page.title | default: site.title | escape }}">
+  <meta property="og:description" content="{{ description | escape }}">
+  <meta property="og:type" content="{% if page.layout == 'post' %}article{% else %}website{% endif %}">
+  {% if site.url and site.url != empty %}<link rel="canonical" href="{{ page.url | absolute_url }}"><meta property="og:url" content="{{ page.url | absolute_url }}">{% endif %}
+  {% if site.data.profile.preview_mode or page.example %}<meta name="robots" content="noindex, nofollow">{% endif %}
+  <link rel="icon" href="{{ '/assets/favicon.svg' | relative_url }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ '/assets/css/site.css' | relative_url }}">
+  <link rel="alternate" type="application/atom+xml" title="{{ site.data.profile.name | escape }} — Blog" href="{{ '/feed.xml' | relative_url }}">
+  <script src="{{ '/assets/js/site.js' | relative_url }}" defer></script>
+</head>
+<body>
+  {% include header.html %}
+  <main id="main" tabindex="-1">{{ content }}</main>
+  {% include footer.html %}
+</body>
+</html>

@@ -1,0 +1,10 @@
+---
+layout: default
+---
+<div class="wrap page-shell cv-page">
+  <header class="page-heading"><p class="eyebrow">Experience & background</p><h1>{{ page.title | escape }}</h1><p class="page-deck">{{ site.data.profile.name | escape }}<br>{{ site.data.profile.affiliation | escape }}</p>
+    {% if page.pdf and page.pdf != empty %}<a class="button" href="{{ page.pdf | relative_url }}" download>Download CV <span>PDF ↓</span></a>{% else %}<p class="pending-note">CV PDF forthcoming — your document has not been added yet.</p>{% endif %}
+    {% if page.updated and page.updated != empty %}<p class="small-note">Updated {{ page.updated | date: '%B %Y' }}</p>{% endif %}
+  </header>
+  <div class="prose cv-content">{% include content.html body=content %}</div>
+</div>

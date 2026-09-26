@@ -1,0 +1,12 @@
+---
+layout: default
+title: Talks & seminars
+section: talks
+permalink: /talks/
+description: "Selected seminars and grand rounds, with slides and recordings."
+---
+<div class="wrap page-shell">
+  <header class="page-heading"><p class="eyebrow">Ideas in conversation</p><h1>Talks & seminars<span class="accent">.</span></h1><p class="page-deck">Selected seminars and grand rounds, with slides and recordings.</p></header>
+  {% assign today = 'now' | date: '%Y%m%d' | plus: 0 %}{% assign talks = site.talks | where: 'published', true | sort: 'event_date' | reverse %}
+  {% for talk in talks %}<article class="talk-row"><div class="talk-date">{% if talk.example %}<span class="example-label">Example entry</span><span>[Date]</span>{% else %}<time datetime="{{ talk.event_date | date: '%Y-%m-%d' }}"><span>{{ talk.event_date | date: '%d %b' }}</span><span>{{ talk.event_date | date: '%Y' }}</span></time>{% assign talk_day = talk.event_date | date: '%Y%m%d' | plus: 0 %}{% if talk_day >= today %}<span class="upcoming-label">Upcoming</span>{% endif %}{% endif %}</div><div><p class="eyebrow">{{ talk.kind | escape }}</p><h2><a href="{{ talk.url | relative_url }}">{{ talk.title | escape }} <span class="text-arrow" aria-hidden="true">↗</span></a></h2><p class="venue">{{ talk.venue | escape }}</p><p>{{ talk.summary | escape }}</p><div class="resource-links">{% if talk.slides and talk.slides != empty %}{% assign slides_format = talk.slides | split: '.' | last | downcase %}<a class="text-link" href="{{ talk.slides | relative_url }}"{% if slides_format == 'pptx' %} download{% endif %}>{% if slides_format == 'pptx' %}PowerPoint ↓{% else %}Slides (PDF) ↗{% endif %}</a>{% endif %}{% if talk.recording and talk.recording != empty %}<a class="text-link" href="{{ talk.recording | escape }}">Recording ↗</a>{% endif %}</div></div></article>{% else %}<p class="empty-state">Talks and seminars will appear here.</p>{% endfor %}
+</div>

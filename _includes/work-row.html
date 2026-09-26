@@ -1,0 +1,4 @@
+<article class="work-row" data-entry data-kind="{{ include.item.kind | downcase | escape }}" data-search="{{ include.item.title | append: ' ' | append: include.item.summary | append: ' ' | append: include.item.kind | escape }}">
+  <div class="row-meta"><span>{{ include.item.kind | escape }}</span>{% if include.item.example %}<span class="example-label">Example entry</span>{% elsif include.item.year %}<span>{{ include.item.year }}</span>{% endif %}</div>
+  <div>{% if include.item.study and include.item.study != empty %}<p class="work-study">{{ include.item.study | escape }}</p>{% endif %}<h3><a href="{{ include.item.url | relative_url }}">{{ include.item.title | escape }} <span class="text-arrow" aria-hidden="true">↗</span></a></h3><p>{{ include.item.summary | escape }}</p>{% if include.item.venue and include.item.venue != empty %}<p class="venue">{{ include.item.venue | escape }}</p>{% endif %}</div>
+</article>

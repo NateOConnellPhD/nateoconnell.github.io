@@ -1,0 +1,11 @@
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header wrap">
+  <a class="wordmark" href="{{ '/' | relative_url }}"><img class="site-logo" src="{{ '/assets/images/normal-helix-logo.svg' | relative_url }}" alt="" width="420" height="184"><span>{{ site.data.profile.name | escape }}</span></a>
+  <nav class="site-nav" aria-label="Main navigation">
+    {% assign nav_urls = '/about/|/research/|/talks/|/cv/|/blog/' | split: '|' %}
+    {% assign nav_names = 'About|Research|Talks|CV|Blog' | split: '|' %}
+    {% assign nav_sections = 'about|research|talks|cv|blog' | split: '|' %}
+    {% for nav_url in nav_urls %}<a href="{{ nav_url | relative_url }}"{% if page.section == nav_sections[forloop.index0] %} aria-current="page"{% endif %}>{{ nav_names[forloop.index0] }}</a>{% endfor %}
+  </nav>
+</header>
+{% if site.data.profile.preview_mode %}<div class="preview-note wrap"><span class="status-dot" aria-hidden="true"></span> Website preview <span class="preview-detail">— in preparation.</span></div>{% endif %}

@@ -1,0 +1,10 @@
+---
+layout: default
+---
+<article class="wrap article-shell">
+  <a class="back-link" href="{{ '/research/' | relative_url }}"><span aria-hidden="true">←</span> All research & work</a>
+  <header class="article-heading"><p class="eyebrow">{{ page.kind | escape }}{% if page.example %} · Example entry{% endif %}</p><h1>{{ page.title | escape }}</h1><p class="page-deck">{{ page.summary | escape }}</p><p class="small-note">{{ page.authors | escape }}{% if page.venue and page.venue != empty %}<br>{{ page.venue | escape }}{% endif %}{% unless page.example %}{% if page.year %} · {{ page.year }}{% endif %}{% endunless %}</p>
+    <div class="resource-links">{% if page.link and page.link != empty %}<a class="button" href="{{ page.link | escape }}">View {{ page.kind | downcase | escape }} <span aria-hidden="true">↗</span></a>{% endif %}{% if page.pdf and page.pdf != empty %}<a class="text-link" href="{{ page.pdf | relative_url }}">Download PDF ↓</a>{% endif %}{% if page.code and page.code != empty %}<a class="text-link" href="{{ page.code | escape }}">Code ↗</a>{% endif %}</div>
+  </header>
+  <div class="prose article-body">{% include content.html body=content %}</div>
+</article>

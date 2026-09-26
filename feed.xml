@@ -1,0 +1,17 @@
+---
+layout: null
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>{{ site.data.profile.name | append: ' — Residual Thoughts' | xml_escape }}</title>
+  <link href="{{ '/feed.xml' | absolute_url | xml_escape }}" rel="self"/>
+  <link href="{{ '/blog/' | absolute_url | xml_escape }}"/>
+  <id>{{ '/blog/' | absolute_url | xml_escape }}</id>
+  <updated>{{ site.time | date_to_xmlschema }}</updated>
+  <author><name>{{ site.data.profile.name | xml_escape }}</name></author>
+  {% for post in site.posts limit: 30 %}{% unless post.example %}<entry>
+    <title>{{ post.title | xml_escape }}</title><link href="{{ post.url | absolute_url | xml_escape }}"/>
+    <id>{{ post.url | absolute_url | xml_escape }}</id><updated>{{ post.date | date_to_xmlschema }}</updated>
+    <summary>{{ post.description | xml_escape }}</summary>
+  </entry>{% endunless %}{% endfor %}
+</feed>

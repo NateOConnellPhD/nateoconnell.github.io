@@ -1,0 +1,10 @@
+---
+layout: default
+---
+<article class="wrap article-shell">
+  <a class="back-link" href="{{ '/talks/' | relative_url }}"><span aria-hidden="true">←</span> All talks & seminars</a>
+  <header class="article-heading"><p class="eyebrow">{{ page.kind | escape }}{% if page.example %} · Example entry{% endif %}</p><h1>{{ page.title | escape }}</h1><p class="page-deck">{{ page.summary | escape }}</p><p class="small-note">{% if page.example %}[Talk date]{% else %}<time datetime="{{ page.event_date | date: '%Y-%m-%d' }}">{{ page.event_date | date: '%d %B %Y' }}</time>{% endif %} · {{ page.venue | escape }}</p>
+    <div class="resource-links">{% if page.slides and page.slides != empty %}{% assign slides_format = page.slides | split: '.' | last | downcase %}<a class="button" href="{{ page.slides | relative_url }}"{% if slides_format == 'pptx' %} download{% endif %}>{% if slides_format == 'pptx' %}Download PowerPoint <span aria-hidden="true">↓</span>{% else %}View slides (PDF) <span aria-hidden="true">↗</span>{% endif %}</a>{% endif %}{% if page.recording and page.recording != empty %}<a class="text-link" href="{{ page.recording | escape }}">Watch recording ↗</a>{% endif %}{% if page.event_url and page.event_url != empty %}<a class="text-link" href="{{ page.event_url | escape }}">Event details ↗</a>{% endif %}</div>
+  </header>
+  <div class="prose article-body">{% include content.html body=content %}</div>
+</article>

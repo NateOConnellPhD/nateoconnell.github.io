@@ -1,0 +1,11 @@
+---
+layout: default
+---
+<div class="wrap page-shell">
+  <header class="page-heading"><p class="eyebrow">A little background</p><h1>{{ page.title | escape }}</h1><p class="page-deck">{{ site.data.profile.role | escape }}<br>{{ site.data.profile.affiliation | escape }}</p></header>
+  <div class="about-grid">
+    <div class="prose">{% include content.html body=content %}</div>
+    <aside class="about-aside">{% if site.data.profile.portrait and site.data.profile.portrait != empty %}<img class="portrait" src="{{ site.data.profile.portrait | relative_url }}" alt="{{ site.data.profile.portrait_alt | escape }}" width="400" height="480">{% else %}<div class="portrait-placeholder"><span aria-hidden="true">◎</span><p>[Your portrait]</p></div>{% endif %}<p class="small-note">{{ site.data.profile.affiliation | escape }}</p><a class="text-link" href="{{ '/cv/' | relative_url }}">View curriculum vitae <span aria-hidden="true">↗</span></a></aside>
+  </div>
+  <section class="section-block"><div class="section-heading"><h2>Research interests</h2></div><div class="interests-grid">{% for interest in site.data.profile.interests %}<div><span class="index-number">0{{ forloop.index }}</span><h3>{{ interest.name | escape }}</h3><p>{{ interest.description | escape }}</p></div>{% endfor %}</div></section>
+</div>

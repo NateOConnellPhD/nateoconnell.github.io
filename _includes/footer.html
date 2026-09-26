@@ -1,0 +1,9 @@
+<footer class="site-footer wrap">
+  <div><a class="footer-name" href="{{ '/' | relative_url }}">{{ site.data.profile.name | escape }}</a><p>Research, writing, and things in between.</p></div>
+  <div class="footer-links">
+    {% if site.data.profile.email and site.data.profile.email != empty %}<a href="mailto:{{ site.data.profile.email | escape }}">Email <span aria-hidden="true">↗</span></a>{% endif %}
+    {% for link in site.data.profile.links %}{% if link.url and link.url != empty %}<a href="{{ link.url | escape }}"{% if link.personal != false %} rel="me"{% endif %}>{{ link.label | escape }} <span aria-hidden="true">↗</span></a>{% endif %}{% endfor %}
+    <a href="{{ '/feed.xml' | relative_url }}">RSS <span aria-hidden="true">↗</span></a>
+  </div>
+  <p class="colophon">© {{ 'now' | date: '%Y' }} {{ site.data.profile.name | escape }}</p>
+</footer>

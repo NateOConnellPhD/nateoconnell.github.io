@@ -1,0 +1,11 @@
+.codex/
+.codex-tmp/
+[Cc]ontext_not_for_upload/
+.bundle/
+vendor/
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+.DS_Store
+*.log
