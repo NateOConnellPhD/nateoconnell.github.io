@@ -1,6 +1,6 @@
 # Personal research website
 
-A locally developed Jekyll website for GitHub Pages, with Pages CMS for browser-based editing. A solid pale blue background, serif typography, dark blue text, and green accents; no remote fonts, analytics, or frontend dependencies.
+A locally developed Jekyll website for GitHub Pages, with Pages CMS for browser-based editing. A solid pale blue background, serif typography, dark blue text, and blue accents; no remote fonts, analytics, or frontend dependencies.
 
 ## Current status
 

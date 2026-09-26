@@ -29,7 +29,7 @@ strand = lambda do |column|
   end.join(' ')
 end
 
-# Keep the paired-base palette from the R design; use blue and green for strands.
+# Keep the paired-base palette from the R design; use the site's blues for strands.
 pairs = [['#cd6600', '#8b0000'], ['#8b0000', '#cd6600'],
          ['#00008b', '#006400'], ['#006400', '#00008b']]
 random = Random.new(42)
@@ -49,7 +49,7 @@ svg = <<~SVG
       #{rungs}
     </g>
     <g stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="#{strand.call(1)}" stroke="#408264"/>
+      <path d="#{strand.call(1)}" stroke="#66b4d8"/>
       <path d="#{strand.call(2)}" stroke="#245a82"/>
     </g>
     <g stroke="#245a82" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
@@ -60,7 +60,7 @@ svg = <<~SVG
       <circle cx="186" cy="150" r="4.5"/>
       <circle cx="254" cy="150" r="4.5"/>
     </g>
-    <g fill="#408264" stroke="#245a82" stroke-width="1.5">
+    <g fill="#66b4d8" stroke="#245a82" stroke-width="1.5">
       <circle cx="164" cy="187" r="4"/>
       <circle cx="208" cy="187" r="4"/>
       <circle cx="232" cy="187" r="4"/>
