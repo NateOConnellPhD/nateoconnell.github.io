@@ -1,8 +1,8 @@
 /* A small, self-contained editorial theme. No remote fonts or trackers. */
-:root{--paper:#eaf3fb;--green-paper:#e6f2e8;--ink:#203349;--muted:#4d6373;--blue:#245a82;--green:#246247;--line:#bfd4cf;--tint:#dcebf7;--green-tint:#d6e9dc;--serif:Georgia,'Times New Roman',serif;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+:root{--paper:#eaf3fb;--ink:#203349;--muted:#4d6373;--blue:#245a82;--green:#246247;--line:#bfd4cf;--tint:#dcebf7;--green-tint:#d6e9dc;--serif:Georgia,'Times New Roman',serif;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-padding-top:30px}
-body{margin:0;background:linear-gradient(90deg,var(--paper),var(--green-paper));color:var(--ink);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
 ::selection{background:#c6dff2;color:#173e5d}
 a{color:var(--blue);text-underline-offset:.23em;text-decoration-thickness:1px}
 a:hover{text-decoration-thickness:2px}
