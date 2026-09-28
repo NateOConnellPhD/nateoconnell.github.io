@@ -11,7 +11,7 @@ description: "Nathaniel O’Connell’s research in machine learning, statistica
       <p class="hero-role">{{ site.data.profile.role | escape }}</p>
       <p class="hero-affiliation">{% if site.data.profile.department and site.data.profile.department != empty %}{{ site.data.profile.department | escape }}<br>{% endif %}{% if site.data.profile.division and site.data.profile.division != empty %}{{ site.data.profile.division | escape }}<br>{% endif %}{{ site.data.profile.affiliation | escape }}</p>
       <p class="hero-intro">{{ site.data.profile.introduction | escape }}</p>
-      <div class="hero-links"><a class="button" href="{{ '/research/' | relative_url }}">Explore my work <span aria-hidden="true">↗</span></a><a class="text-link" href="{{ '/about/' | relative_url }}">A little about me <span aria-hidden="true">→</span></a><a class="text-link" href="{{ '/cv/' | relative_url }}">Curriculum vitae <span aria-hidden="true">↗</span></a></div>
+      <div class="hero-links"><a class="button" href="{{ '/research/' | relative_url }}">Explore my work <span aria-hidden="true">↗</span></a><a class="button button-outline" href="https://www.souplabstats.com/">SOUP Lab <span aria-hidden="true">↗</span></a><a class="text-link" href="{{ '/about/' | relative_url }}">A little about me <span aria-hidden="true">→</span></a><a class="text-link" href="{{ '/cv/' | relative_url }}">Curriculum vitae <span aria-hidden="true">↗</span></a></div>
     </div>
     {% if portrait != empty %}<div class="hero-portrait"><img src="{{ portrait | relative_url }}" alt="{{ site.data.profile.portrait_alt | escape }}" width="895" height="1158" fetchpriority="high" decoding="async"></div>{% endif %}
   </section>
@@ -21,5 +21,11 @@ description: "Nathaniel O’Connell’s research in machine learning, statistica
   <section class="notebook section-block" aria-labelledby="notebook-heading"><div class="section-heading"><div><p class="eyebrow">02 — Blog</p><h2 id="notebook-heading">Out-of-Bag Thoughts</h2></div><a class="text-link" href="{{ '/blog/' | relative_url }}">All writing <span aria-hidden="true">→</span></a></div><p class="section-intro">{{ site.data.home.blog_intro | escape }}</p>
     {% for post in site.posts limit: 3 %}{% include post-row.html item=post %}{% else %}<p class="empty-state">The first post is on its way.</p>{% endfor %}
   </section>
-  <section class="contact-section"><p class="eyebrow">Keep in touch</p><h2>{{ site.data.home.contact_heading | escape }}</h2><p>{{ site.data.home.contact_text | escape }}</p>{% if site.data.profile.email and site.data.profile.email != empty %}<a class="text-link" href="mailto:{{ site.data.profile.email | escape }}">{{ site.data.profile.email | escape }} <span aria-hidden="true">↗</span></a>{% else %}<p class="small-note">[Your contact email]</p>{% endif %}</section>
+  <section class="contact-section">
+    <p class="eyebrow">Keep in touch</p><h2>{{ site.data.home.contact_heading | escape }}</h2><p>{{ site.data.home.contact_text | escape }}</p>
+    <div class="resource-links">
+      {% if site.data.profile.email and site.data.profile.email != empty %}<a class="text-link" href="mailto:{{ site.data.profile.email | escape }}">{{ site.data.profile.email | escape }} <span aria-hidden="true">↗</span></a>{% else %}<p class="small-note">[Your contact email]</p>{% endif %}
+      <a class="button" href="https://www.souplabstats.com/">Visit SOUP Lab <span aria-hidden="true">↗</span></a>
+    </div>
+  </section>
 </div>
