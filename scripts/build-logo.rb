@@ -2,7 +2,7 @@
 # Adapt Nathaniel O'Connell's R double-helix normal-distribution design to SVG.
 # The original R files and reference images stay in the private context folder.
 # Geometry: dnorm(x, 0, 0.9) +/- 0.04 * sin(10 * x), sampled at 200 points.
-# Output: one public vector asset, under 30 KB; no dependencies or caches.
+# Output: header logo and favicon SVGs, under 40 KB total; no dependencies or caches.
 
 require 'fileutils'
 
@@ -73,3 +73,40 @@ output = File.expand_path('../assets/images/normal-helix-logo.svg', __dir__)
 FileUtils.mkdir_p(File.dirname(output))
 File.write(output, svg)
 puts "Wrote #{output} (#{svg.bytesize} bytes)"
+
+# A square favicon keeps the same normal-density helix, with fewer twists and
+# thicker strands so the design remains legible at 16–32 pixels.
+favicon_points = 97.times.map do |i|
+  x = -3.0 + 6.0 * i / 96.0
+  density = Math.exp(-0.5 * ((x - mean) / sd)**2) / (sd * Math.sqrt(2 * Math::PI))
+  offset = 0.055 * Math.sin(4.0 * x)
+  [4.0 + 56.0 * i / 96.0, 49.0 - 84.0 * (density + offset),
+   49.0 - 84.0 * (density - offset)]
+end
+favicon_strand = lambda do |column|
+  favicon_points.each_with_index.map do |point, i|
+    "#{i.zero? ? 'M' : 'L'}#{coordinate.call(point[0])},#{coordinate.call(point[column])}"
+  end.join(' ')
+end
+favicon_rungs = favicon_points.each_slice(8).map do |sample|
+  x, first, second = sample.first
+  %(<path d="M#{coordinate.call(x)},#{coordinate.call(first)} V#{coordinate.call(second)}"/>)
+end.join("\n    ")
+
+favicon = <<~SVG
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+    <title>Double-helix normal distribution</title>
+    <rect width="64" height="64" rx="12" fill="#eaf3fb"/>
+    <g stroke="#245a82" stroke-width="1.5" opacity="0.5">
+      #{favicon_rungs}
+    </g>
+    <g stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="#{favicon_strand.call(1)}" stroke="#66b4d8"/>
+      <path d="#{favicon_strand.call(2)}" stroke="#245a82"/>
+    </g>
+  </svg>
+SVG
+
+favicon_output = File.expand_path('../assets/favicon.svg', __dir__)
+File.write(favicon_output, favicon)
+puts "Wrote #{favicon_output} (#{favicon.bytesize} bytes)"
