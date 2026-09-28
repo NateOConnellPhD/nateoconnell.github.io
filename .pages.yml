@@ -144,7 +144,7 @@ content:
       - {name: research_intro, label: Homepage research introduction, type: text}
       - {name: blog_intro, label: Blog introduction, type: text}
       - {name: contact_heading, label: Contact heading, type: string}
-      - {name: contact_text, label: Contact introduction, type: text}
+      - {name: contact_text, label: Contact introduction, type: rich-text, options: {format: markdown, media: images, switcher: true, rename: random}}
 
   - name: research_page
     label: Research introductions

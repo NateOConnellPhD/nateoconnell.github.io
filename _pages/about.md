@@ -19,10 +19,6 @@ My professional service includes grant review for the NIH, Department of Defense
 
 On **Out-of-Bag Thoughts**, I write about technical ideas and other things I explore out of curiosity.
 
-## Students and mentorship
-
-I encourage students interested in machine learning, statistical inference, or adaptive trial design to reach out. Although our department does not have a graduate program of its own, I welcome opportunities to mentor students in other programs, including through research collaborations and service on dissertation committees. If your interests overlap with mine, please [email me](mailto:nathaniel.oconnell@wfusm.edu) with a brief introduction and a little about the questions you would like to explore.
-
 ## Beyond the research
 
 Outside work, I enjoy time with my wife, our two kids, and our dog, Enzo. I used to long distances [run competitively](https://www.savannahtribune.com/articles/georgian-wins-inaugural-rock-n-roll-marathon/) and still enjoy it, though I’ve gotten more into weightlifting in recent years. Related, I've developed my own weightlifting app, **Platebook**, that uses Bayesian models to track and estimate strength, fatigue, and recovery dynamics, along with a "smart" lifting program generator that builds a recovery optimal weekly workout plan within a user's parameters. I’ll share the app (for free) and its methods here when they’re ready.

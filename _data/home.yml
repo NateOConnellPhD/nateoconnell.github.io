@@ -3,4 +3,9 @@ heading: "Nathaniel O’Connell, PhD"
 research_intro: "My growing focus on methods and theory comes from years of collaborative biomedical research. In developing machine learning and prediction models, I kept running into questions about how much confidence to place in predictions, estimates of model performance, and the variables a model selects. I often couldn’t find satisfactory answers, particularly ones that helped me make decisions in practice. Those questions stayed with me, and much of my current research is an effort to answer them. Going forward, I plan to spend more of my time on this work."
 blog_intro: "Technical posts and things I explore just for fun."
 contact_heading: "Get in touch"
-contact_text: "I welcome conversations about research and collaboration. Students interested in my work are encouraged to get in touch about research mentorship and dissertation committee involvement."
+contact_text: |
+  I welcome conversations about research and collaboration.
+
+  ### Students and mentorship
+
+  I encourage students interested in machine learning, statistical inference, or adaptive trial design to reach out. Although our department does not have a graduate program of its own, I welcome opportunities to mentor students in other programs, including through research collaborations and service on dissertation committees. If your interests overlap with mine, please [email me](mailto:nathaniel.oconnell@wfusm.edu) with a brief introduction and a little about the questions you would like to explore.
