@@ -11,8 +11,8 @@ preview_mode: false
 interests:
   - name: "Uncertainty in machine learning"
     description: "Statistical theory and methods for quantifying uncertainty in prediction models and their performance, with particular attention to random forests and the dependence created by reusing data."
-  - name: "Cross-validation and model stability"
-    description: "How resampling designs affect performance estimates, how to estimate their uncertainty, and how tuning choices influence the reproducibility of fitted coefficients and selected variables."
+  - name: "Cross-validation"
+    description: "How resampling designs affect performance estimates and how to estimate their uncertainty."
   - name: "Bayesian adaptive trial design"
     description: "Bayesian methods for designing clinical trials that adapt as evidence accumulates, with a particular interest in dose finding and dose optimization."
 links:
