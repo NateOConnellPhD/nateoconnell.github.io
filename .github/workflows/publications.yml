@@ -1,0 +1,47 @@
+name: Update publications
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 9 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update-publications.py'
+      - 'scripts/publications-config.json'
+      - '.github/workflows/publications.yml'
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: update-publications
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.repository == 'NateOConnellPhD/nateoconnell.github.io' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Fetch publication metadata
+        env:
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+        run: python3 -B scripts/update-publications.py
+      - name: Commit the refreshed list
+        run: |
+          git add -- _data/publications.json
+          if ! git diff --cached --quiet; then
+            git diff --cached --check
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Refresh OpenAlex publications'
+            git push origin HEAD:main
+          fi
+      # A GITHUB_TOKEN push does not trigger a Pages build; request it explicitly.
+      - name: Refresh GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"

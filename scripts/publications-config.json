@@ -1,0 +1,6 @@
+{
+  "author_names": ["Nathaniel S. O’Connell", "Nathaniel Sean O’Connell", "Nathaniel O’Connell"],
+  "identity_dois": ["10.1093/bib/bbaf096", "10.1186/s12874-025-02548-8", "10.1200/JCO.23.00377"],
+  "excluded_ids": [],
+  "excluded_title_patterns": ["lasso.*stabil", "stabil.*lasso"]
+}

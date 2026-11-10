@@ -143,6 +143,10 @@ h3{font-size:1.65rem;line-height:1.28;letter-spacing:-.025em}
 .blog-toolbar input{min-width:310px}
 .blog-toolbar select{min-width:170px}
 .blog-toolbar input::placeholder{color:var(--muted)}
+.publications-toolbar label{display:flex;flex-direction:column;gap:6px;font-size:.8rem;flex:1;min-width:0}
+.publication-row h2{font-size:1.62rem;margin:0 0 10px;overflow-wrap:anywhere}
+.publication-row h2 a{color:var(--ink);text-decoration:none}
+.publication-row h2 a:hover{color:var(--blue);text-decoration:underline}
 .empty-state{color:var(--muted);padding:24px 0;font-size:.9rem}
 .talk-row{display:grid;grid-template-columns:180px 1fr;gap:34px;padding:34px 0;border-top:1px solid var(--line)}
 .talk-row:last-child{border-bottom:1px solid var(--line)}

@@ -1,0 +1,35 @@
+---
+layout: default
+title: Publications
+section: research
+permalink: /publications/
+description: "Publications by Nathaniel O’Connell, sortable by publication date and citation count."
+---
+<div class="wrap page-shell">
+  <header class="page-heading">
+    <p class="eyebrow">Papers & contributions</p><h1>Publications<span class="accent">.</span></h1>
+    {% assign scholar = site.data.profile.links | where: 'label', 'Google Scholar' | first %}
+    <div class="resource-links"><a class="text-link" href="{{ '/research/' | relative_url }}">Research & work <span aria-hidden="true">←</span></a>{% if scholar.url %}<a class="text-link" href="{{ scholar.url | escape }}">Google Scholar <span aria-hidden="true">↗</span></a>{% endif %}</div>
+    {% if site.data.publications.items.size > 0 %}<p class="small-note">Publication records and citation counts from <a href="{{ site.data.publications.author_url | escape }}">OpenAlex</a>, updated {{ site.data.publications.updated | date: '%B %-d, %Y' }}. Coverage and citation counts differ from Google Scholar.</p>{% endif %}
+  </header>
+  {% if site.data.publications.items.size > 0 %}
+  <section data-publications aria-label="Publication list">
+    <div class="filter-toolbar blog-toolbar publications-toolbar" data-publication-controls hidden>
+      <label>Search papers<input type="search" data-publication-search placeholder="Title, author, or journal"></label>
+      <label>Sort by<select data-publication-sort><option value="newest">Newest first</option><option value="citations">Most cited</option><option value="oldest">Oldest first</option></select></label>
+    </div>
+    <p class="small-note" data-publication-count role="status" aria-live="polite">{{ site.data.publications.items.size }} publications</p>
+    <div data-publication-entries>
+      {% for item in site.data.publications.items %}
+      <article class="work-row publication-row" data-publication data-date="{{ item.date | escape }}" data-citations="{{ item.citations }}">
+        <div class="row-meta"><span>{{ item.year }}</span><span>{{ item.citations }} {% if item.citations == 1 %}citation{% else %}citations{% endif %}</span></div>
+        <div><h2><a href="{{ item.url | escape }}">{{ item.title | escape }} <span class="text-arrow" aria-hidden="true">↗</span></a></h2><p>{{ item.authors | escape }}</p>{% if item.venue != empty %}<p class="venue">{{ item.venue | escape }}</p>{% endif %}</div>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="empty-state" data-publication-empty hidden>No publications match your search.</p>
+  </section>
+  {% else %}
+  <p class="page-deck">The publication list is being connected. My papers are available on Google Scholar above.</p>
+  {% endif %}
+</div>

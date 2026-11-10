@@ -37,3 +37,30 @@ document.querySelectorAll('[data-filter-list]').forEach((list) => {
   list.querySelector('[data-filter-controls]').hidden = false;
   update();
 });
+
+document.querySelectorAll('[data-publications]').forEach((list) => {
+  const container = list.querySelector('[data-publication-entries]');
+  const entries = [...container.querySelectorAll('[data-publication]')];
+  const search = list.querySelector('[data-publication-search]');
+  const sort = list.querySelector('[data-publication-sort]');
+  const update = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    const ordered = [...entries].sort((a, b) => {
+      const dateOrder = b.dataset.date.localeCompare(a.dataset.date);
+      if (sort.value === 'citations') return Number(b.dataset.citations) - Number(a.dataset.citations) || dateOrder;
+      return sort.value === 'oldest' ? -dateOrder : dateOrder;
+    });
+    let count = 0;
+    ordered.forEach((entry) => {
+      entry.hidden = !entry.textContent.toLocaleLowerCase().includes(query);
+      if (!entry.hidden) count += 1;
+      container.appendChild(entry);
+    });
+    list.querySelector('[data-publication-count]').textContent = `${count} ${count === 1 ? 'publication' : 'publications'}`;
+    list.querySelector('[data-publication-empty]').hidden = count !== 0;
+  };
+  search.addEventListener('input', update);
+  sort.addEventListener('change', update);
+  list.querySelector('[data-publication-controls]').hidden = false;
+  update();
+});
