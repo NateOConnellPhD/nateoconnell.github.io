@@ -16,6 +16,8 @@ interests:
   - name: "Bayesian adaptive trial design"
     description: "Bayesian methods for designing clinical trials that adapt as evidence accumulates, with a particular interest in dose finding and dose optimization."
 links:
+  - label: Google Scholar
+    url: "https://scholar.google.com/citations?user=Pk2GPmIAAAAJ&hl=en"
   - label: GitHub
     url: "https://github.com/NateOConnellPhD"
   - label: LinkedIn
