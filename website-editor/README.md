@@ -67,7 +67,15 @@ node --test test/content.test.js
 
 The security checks use mocked services; they do not contact GitHub/OpenAI or write files. Content checks read only editable website source files, use mocked publication calls, and generate no site output. Live credentials and a connected deployment are required to verify OAuth, Vercel routing, GitHub permissions, real API responses, and Pages deployment end to end.
 
-Implementation review, November 10, 2026: 16 targeted security/publishing checks passed. JavaScript syntax was checked. Installing the YAML dependency and running the content/browser review require the user's pending approval under the project working protocol. No live login, API call, publication, or actual-phone clipboard test has been performed. No task-owned generated files were created during these checks.
+Implementation review, November 10, 2026:
+
+- Previously completed: 16 targeted security/publishing checks passed, and JavaScript syntax was checked.
+- After approval for the dependency and local review, all 24 existing editable documents passed the editor's field/body validation. This compatibility check used the installed system Ruby YAML parser to read the source, then passed the fields and body to the editor's actual `validateDocument` function. It did not test the editor's YAML parser or serialization.
+- The pinned `yaml@2.9.1` download was blocked because `registry.npmjs.org` is outside the session's network allowlist. The three YAML-dependent content tests remain unrun.
+- Desktop/mobile-width browser review could not start: the browser tool's Node runtime was denied access to `/System/Library/OpenSSL/openssl.cnf`. The bundled Playwright runtime was also unreadable under the current filesystem permissions. No visual or clipboard behavior has been verified.
+- No live login, paid API call, publication, or actual-phone clipboard test has been performed. No site content was changed during this review. The empty task-owned `.codex-tmp/editor-review` directory was removed; no disposable output remains.
+
+The review approval is already granted. Resume the YAML and browser checks once the required dependency and browser runtime are accessible; do not treat these environment blocks as passing tests.
 
 ## Design references
 
