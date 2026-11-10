@@ -1,0 +1,8 @@
+{
+  "name": "nate-website-editor",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "24.x" },
+  "scripts": { "test:security": "node --test test/security.test.js", "test:content": "node --test test/content.test.js" },
+  "dependencies": { "yaml": "2.9.1" }
+}
