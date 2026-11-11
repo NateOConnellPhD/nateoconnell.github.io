@@ -12,7 +12,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
   let streamCursor = null, streamResponse = null, liveConnected = false;
-  let directAbort = null;
+  let directAbort = null, deleting = false;
   const running = () => current?.chat.run && !['completed', 'failed', 'cancelled'].includes(current.chat.run.status);
   const needsProgress = () => running() || current?.chat.run?.cleanupPending;
   const fileDirty = () => filePath && !fileBinary && $('file-source').value !== fileOriginal;
@@ -130,6 +130,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   }
   function stopStream() { clearTimeout(streamTimer); streamTimer = null; liveConnected = false; streamAbort?.abort(); streamAbort = null; }
   async function connectStream() {
+    if (deleting) return;
     if (directAbort || current?.chat.run?.transport === 'foreground') return;
     if (!active || document.hidden || !running() || !(current?.chat.run.responseId || current?.chat.run.sessionId) || streamAbort || streamTimer) return;
     const id = current.chat.id, key = outputKey, responseId = streamResponse, abort = new AbortController(); streamAbort = abort;
@@ -158,7 +159,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   function showPreview() { $('workspace-preview').src = `/api/workspace/preview?id=${encodeURIComponent(current.chat.id)}&path=${encodeURIComponent($('workspace-preview-pages').value)}`; }
   function schedulePoll() {
     clearTimeout(timer);
-    if (directAbort) return;
+    if (directAbort || deleting) return;
     if (needsProgress() && active && !document.hidden) timer = setTimeout(checkProgress,
       ['ready', 'tools'].includes(current?.chat.run?.stage) ? 0 : liveConnected ? 30000 : 2000);
   }
@@ -175,6 +176,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     } finally { if (directAbort === abort) directAbort = null; availability(); }
   }
   async function checkProgress() {
+    if (deleting) return;
     if (polling || directAbort || !current) { schedulePoll(); return; }
     const id = current.chat.id, key = current.chat.run?.key; polling = true;
     try { const result = await streamAction('chat/poll', { id }); if (current?.chat.id === id && current.chat.run?.key === key) show(result); }
@@ -257,18 +259,18 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     view.attachment(); view.resize(); view.jump();
   }
   async function deleteConversation(id) {
-    if (inFlight) return;
+    if (inFlight || directAbort) return;
     const isCurrent = id === current?.chat.id;
-    inFlight = true; availability();
+    inFlight = true; deleting = true; clearTimeout(timer); stopStream(); availability();
     try {
-      const target = isCurrent ? current : await api(`chat?id=${encodeURIComponent(id)}`);
+      const target = await api(`chat?id=${encodeURIComponent(id)}`);
       const task = target.chat.run;
-      if (task && !['completed', 'failed', 'cancelled'].includes(task.status)) throw new Error('Open this chat, stop the response, and check its progress before deleting it.');
-      if (task?.cleanupPending || task?.lookupPending) throw new Error('Open this chat and use Check progress to finish remote cleanup before deleting it.');
+      if (task && !['completed', 'failed', 'cancelled'].includes(task.status)) throw new Error('This response is still running. Open the chat and select Stop before deleting it.');
       const count = target.chat.changes.length;
       const pending = count ? ` This also discards ${count} unpublished file ${count === 1 ? 'change' : 'changes'}.` : '';
       const unsaved = isCurrent && (fileDirty() || $('chat-prompt').value.trim() || $('chat-reference').files.length) ? ' Your unsaved file edit, message, or attachment will also be discarded.' : '';
       if (!confirm(`Delete “${target.chat.title}” and its saved conversation and preview?${pending}${unsaved} Your published website will stay as it is.`)) return;
+      notice('Deleting chat…');
       await api('chat/delete', { id, revision: target.revision });
       if (isCurrent) {
         show(null); $('chat-prompt').value = ''; $('chat-reference').value = '';
@@ -276,7 +278,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
         view.attachment(); view.resize();
       }
       await refresh(); notice('Chat deleted.');
-    } finally { inFlight = false; availability(); }
+    } finally { inFlight = false; deleting = false; availability(); schedulePoll(); connectStream(); }
     $('chat-new').focus();
   }
   $('chat-form').addEventListener('submit', event => { event.preventDefault(); send(); });

@@ -9,6 +9,7 @@ import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, 
 import { startChat, pollChat, stopChat } from '../lib/repository-chat.js';
 import { streamChat } from '../lib/chat-stream.js';
 import { liveChat } from '../lib/live-chat.js';
+import { cleanupDeletedChat } from '../lib/chat-cleanup.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
 function redirect(location, values = []) {
@@ -105,7 +106,7 @@ export async function handle(request) {
         : pollChat(github, config, validId(data.id), flow), request.signal, config);
     }
     if (route === 'chat/new') return json(await createChat(github));
-    if (route === 'chat/delete') return json(await deleteChat(github, data.id, data.revision));
+    if (route === 'chat/delete') return json(await deleteChat(github, data.id, data.revision, chat => cleanupDeletedChat(config, chat)));
     if (route === 'chat/send') return json(await startChat(github, config, data));
     if (route === 'chat/poll') return json(await pollChat(github, config, validId(data.id)));
     if (route === 'chat/stop') return json(await stopChat(github, config, validId(data.id)));

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { sitePath, websiteSnapshot, applySiteProposal, createChat, saveChat, loadChat, deleteChat, prepareChatPublish, validateSiteChanges } from '../lib/site-chat.js';
 import { configuration, blobSha, SITE, seal } from '../lib/security.js';
 import { handle } from '../api/index.js';
+import { cleanupDeletedChat } from '../lib/chat-cleanup.js';
+import { GitHub } from '../lib/github.js';
 
 const env = { APP_ORIGIN: 'https://editor.example.com', GITHUB_CLIENT_ID: 'test-client', GITHUB_CLIENT_SECRET: 'test-secret', ALLOWED_GITHUB_USER_ID: '123', SESSION_SECRET: 'ab'.repeat(32), DRAFT_REPOSITORY: 'NateOConnellPhD/editor-private' };
 const config = configuration(env);
@@ -171,4 +173,112 @@ test('chat deletion requires sign-in and CSRF before accessing private storage',
     assert.equal((await handle(request(`__Host-site-editor=${token}`, 'wrong'))).status, 403);
     assert.equal(calls, 0);
   } finally { globalThis.fetch = transport; for (const [key, value] of Object.entries(savedEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+});
+
+test('chat/delete finishes legacy and Responses cleanup without progress or model requests', async t => {
+  const settings = { ...env, OPENAI_API_KEY: 'test-key' };
+  const previous = Object.fromEntries(Object.keys(settings).map(key => [key, process.env[key]]));
+  Object.assign(process.env, settings);
+  t.after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  const fake = privateStore(), calls = [];
+  for (const method of ['head', 'read', 'readJson', 'commit']) t.mock.method(GitHub.prototype, method, fake[method]);
+  t.mock.method(GitHub.prototype, 'privateRepo', async () => ({}));
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(options.method, 'DELETE', 'deletion must not submit or resume model work');
+    calls.push(new URL(url).pathname);
+    return new Response(null, { status: 204 });
+  });
+  const token = seal({ id: 123, token: 'test-token', csrf: 'csrf' }, 'session', config);
+  for (const run of [
+    { status: 'failed', cleanupPending: true, sessionId: 'sess_old' },
+    { backend: 'repository', status: 'completed', cleanupPending: true, responseId: 'resp_latest', responseIds: ['resp_first', 'resp_latest'] },
+    { backend: 'responses', status: 'cancelled', cleanupPending: true, responseId: 'resp_workspace', containerId: 'cntr_old' }
+  ]) {
+    const created = await createChat(fake); created.chat.run = run;
+    const saved = await saveChat(fake, created.chat, created.revision);
+    fake.files.set(`chats/previews/${created.chat.id}.json`, '{"pages":[]}');
+    const response = await handle(new Request(`${config.origin}/api/chat/delete`, {
+      method: 'POST', headers: { Cookie: `__Host-site-editor=${token}`, Origin: config.origin, 'X-CSRF-Token': 'csrf', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: created.chat.id, revision: saved.revision })
+    }));
+    assert.equal(response.status, 200); assert.deepEqual(await response.json(), { deleted: created.chat.id });
+    assert.equal(fake.files.has(`chats/${created.chat.id}.json`), false);
+    assert.equal(fake.files.has(`chats/previews/${created.chat.id}.json`), false);
+  }
+  assert.deepEqual(calls.sort(), ['/v1/agents/sessions/sess_old', '/v1/responses/resp_first', '/v1/responses/resp_latest', '/v1/responses/resp_workspace', '/v1/containers/cntr_old'].sort());
+});
+
+test('deletion locates only this chat request and never resumes an interrupted legacy submission', async t => {
+  const fake = privateStore(), created = await createChat(fake), calls = [];
+  created.chat.run = { status: 'failed', lookupPending: true, key: 'request_123' };
+  const saved = await saveChat(fake, created.chat, created.revision);
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    const parsed = new URL(url); calls.push([options.method, parsed.pathname]);
+    if (options.method === 'GET') {
+      assert.equal(parsed.searchParams.get('metadata[editor_chat]'), created.chat.id);
+      assert.equal(parsed.searchParams.get('metadata[request]'), 'request_123');
+      return Response.json({ data: [
+        { id: 'sess_found', metadata: { editor_chat: created.chat.id, request: 'request_123' } },
+        { id: 'sess_other_chat', metadata: { editor_chat: 'other', request: 'request_123' } },
+        { id: 'sess_other_request', metadata: { editor_chat: created.chat.id, request: 'other' } }
+      ] });
+    }
+    assert.equal(options.method, 'DELETE');
+    return Response.json({ deleted: true });
+  });
+  await deleteChat(fake, created.chat.id, saved.revision, chat => cleanupDeletedChat({ apiKey: 'test' }, chat));
+  assert.deepEqual(calls, [['GET', '/v1/agents/sessions'], ['DELETE', '/v1/agents/sessions/sess_found']]);
+  assert.equal(fake.files.has(`chats/${created.chat.id}.json`), false);
+});
+
+test('deletion preserves a chat on cleanup failure and retries already removed resources safely', async t => {
+  const fake = privateStore(), created = await createChat(fake);
+  created.chat.run = { backend: 'responses', status: 'failed', cleanupPending: true, responseId: 'resp_old', containerId: 'cntr_old' };
+  const saved = await saveChat(fake, created.chat, created.revision), before = new Map(fake.files);
+  let retry = false; const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(options.method, 'DELETE'); calls.push(url);
+    if (url.endsWith('/cntr_old') && !retry) return Response.json({ error: { message: 'Temporary provider failure' } }, { status: 503 });
+    return new Response(null, { status: retry ? 404 : 204 });
+  });
+  const cleanup = chat => cleanupDeletedChat({ apiKey: 'test' }, chat);
+  await assert.rejects(deleteChat(fake, created.chat.id, saved.revision, cleanup), /try Delete again/);
+  assert.deepEqual(fake.files, before);
+  retry = true;
+  await deleteChat(fake, created.chat.id, saved.revision, cleanup);
+  assert.equal(calls.length, 4); assert.equal(fake.files.has(`chats/${created.chat.id}.json`), false);
+});
+
+test('deletion tolerates missing legacy sessions and empty cleanup markers', async t => {
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(options.method, 'DELETE');
+    return new Response(null, { status: 404 });
+  });
+  for (const run of [{ status: 'failed', cleanupPending: true, sessionId: 'sess_expired' }, { status: 'failed', cleanupPending: true }]) {
+    const fake = privateStore(), created = await createChat(fake); created.chat.run = run;
+    const saved = await saveChat(fake, created.chat, created.revision);
+    await deleteChat(fake, created.chat.id, saved.revision, chat => cleanupDeletedChat({ apiKey: run.sessionId ? 'test' : '' }, chat));
+    assert.equal(fake.files.has(`chats/${created.chat.id}.json`), false);
+  }
+});
+
+test('deletion leaves newer chat edits intact if they arrive during remote cleanup', async () => {
+  const fake = privateStore(), created = await createChat(fake);
+  created.chat.run = { status: 'failed', cleanupPending: true, responseId: 'resp_old' };
+  const saved = await saveChat(fake, created.chat, created.revision);
+  await assert.rejects(deleteChat(fake, created.chat.id, saved.revision, async () => {
+    saved.chat.messages.push({ role: 'user', content: 'Keep this newer message' });
+    await saveChat(fake, saved.chat, saved.revision);
+  }), /changed during cleanup/);
+  assert.equal((await loadChat(fake, created.chat.id)).chat.messages.at(-1).content, 'Keep this newer message');
+});
+
+test('deletion refuses active or stale chats before touching remote resources', async () => {
+  const fake = privateStore(), created = await createChat(fake);
+  created.chat.run = { status: 'in_progress', cleanupPending: true };
+  const saved = await saveChat(fake, created.chat, created.revision);
+  let calls = 0; const cleanup = async () => { calls++; };
+  await assert.rejects(deleteChat(fake, created.chat.id, created.revision, cleanup), /changed/);
+  await assert.rejects(deleteChat(fake, created.chat.id, saved.revision, cleanup), /Stop the running response/);
+  assert.equal(calls, 0);
 });

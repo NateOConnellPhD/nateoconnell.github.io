@@ -153,15 +153,25 @@ export async function saveChat(github, chat, expected, extra = [], claimRequest 
 export async function createChat(github) {
   return saveChat(github, { id: randomUUID(), title: 'New site chat', messages: [], changes: [] }, null);
 }
-export async function deleteChat(github, id, expected) {
-  const repo = github.config.drafts, path = chatPath(id), head = await github.head(repo);
+export async function deleteChat(github, id, expected, cleanup) {
+  const repo = github.config.drafts, path = chatPath(id);
+  let head = await github.head(repo);
   const file = await github.read(repo, path, head, true);
   if (!file) throw new HttpError(404, 'This conversation was already deleted. Refresh the chat history.');
   if (file.sha !== expected) throw new HttpError(409, 'This conversation changed. Reopen it before deleting it.');
   const chat = checkChat(JSON.parse(file.buffer.toString()));
   if (chat.id !== id) throw new HttpError(400, 'Invalid saved conversation.');
-  if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop this response and check its progress before deleting the chat.');
-  if (chat.run?.cleanupPending || chat.run?.lookupPending) throw new HttpError(409, 'Open this chat and use Check progress to finish remote cleanup before deleting it.');
+  if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop the running response before deleting this chat.');
+  if (chat.run?.cleanupPending || chat.run?.lookupPending) {
+    if (!cleanup) throw new HttpError(409, 'Remote cleanup is required before deleting this chat.');
+    await cleanup(chat);
+    // Cleanup may take time. Use the latest private head, but never discard
+    // newer chat changes made in another tab while cleanup was in progress.
+    head = await github.head(repo);
+    const latest = await github.read(repo, path, head, true);
+    if (!latest) return { deleted: id };
+    if (latest.sha !== expected) throw new HttpError(409, 'This conversation changed during cleanup. Review it and try Delete again.');
+  }
   const previewPath = `chats/previews/${id}.json`;
   const [index, preview] = await Promise.all([
     github.readJson(repo, 'chats/index.json', head, { chats: [] }),
