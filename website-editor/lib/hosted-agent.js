@@ -189,6 +189,7 @@ export async function pollWorkspace(github, config, id) {
   }
   return finishWorkspace(github, config, chat, loaded.revision, extra);
 }
+export { instructions };
 const cancelRemote = (config, run) => agentRequest(config, `/sessions/${identifier(run.sessionId)}/events`, 'POST', { events: [{ type: 'agent.session.input.cancel' }] }, `${run.key}-cancel`);
 export async function cancelWorkspace(github, config, id) {
   const loaded = await loadChat(github, id); const run = loaded.chat.run;

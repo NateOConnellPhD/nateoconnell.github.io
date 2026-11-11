@@ -19,25 +19,25 @@ Every proposal stays in the private draft repository. Review the complete set of
 ## Cloud execution, privacy, and limits
 
 - GitHub sign-in is restricted server-side to your numeric account ID. All private operations require the configured private repository to remain private, non-forked, and owned by NateOConnellPhD. Mutations require same-origin requests and a CSRF token.
-- Whole-project work uses the **OpenAI Agents API**, with an OpenAI-hosted sandbox, network access, and no subagents. The API key and GitHub token remain on the Vercel server, outside the sandbox. DNS and external-account settings are not controlled by this application.
+- New whole-project requests use the **OpenAI Responses API with hosted shell**, with a real Linux container and no subagents. Ordinary conversation requires no shell call or file export. Source inspection and edits use the hosted terminal. The API key and GitHub token remain on the Vercel server, outside the container. DNS and external-account settings are not controlled by this application. Existing Agents-backed requests retain their old recovery and cleanup path; sending a new message uses Responses.
 - Public source, pending changes, conversation history, and an explicitly attached PDF are sent to OpenAI. Local private context folders, credentials, Git internals, caches, and generated build output are excluded. The agent can edit website code, configuration, workflows, the publication feed, scripts, and this editor; it is not restricted to content fields.
 - Conversations and source proposals are saved under `chats/` in the private repository. Built preview bundles are saved there too. Git history retains earlier saved versions. A reference PDF is provided only to its cloud task, not copied into either GitHub repository or automatically replayed on follow-ups.
 - Live replies use a filtered event stream, reconnecting within Vercel's function duration limit. The browser also retrieves saved assistant messages and checks task status every five seconds while visible. Stream interruption does not resubmit the user's message. Reopen the saved conversation or select **Check progress** after closing the browser or losing the connection. Only user-facing assistant output is forwarded; reasoning, tool arguments, credentials and raw events are excluded.
-- The server imports source changes only from the completed main turn's exported result. It saves the final conversational answer and validated changes before requesting session deletion. If the task fails, available assistant text and the returned error code/session/turn IDs are saved before cleanup. **Error details** exposes those identifiers for diagnosis. Checking an already failed request retrieves its saved outcome; sending another message starts a fresh request with the prior conversation and proposed changes. Cleanup failures remain recorded and can be retried. Closing the browser does not cancel the task or confirm cleanup; use **Stop response** to request cancellation.
+- The server imports source changes only from a completed response's exported result. It saves the final conversational answer and validated changes before requesting response and container deletion. If the task fails, available assistant text and the returned error code/response/request IDs are saved before cleanup. **Error details** exposes those identifiers for diagnosis. Checking an already failed request retrieves its saved outcome; sending another message starts a fresh request with the prior conversation and proposed changes. Cleanup failures remain recorded and can be retried. Closing the browser does not cancel the task or confirm cleanup; use **Stop response** to request cancellation. An uncertain creation is not automatically retried: check the OpenAI request before resubmitting. Containers are configured to expire after 20 minutes of inactivity.
 - The source exporter preserves existing executable files and rejects symlinks rather than following them. Publication retains unrelated repository files and never force-pushes history. Malformed returned changes do not replace earlier private proposals.
-- API model and hosted-container usage is billed to the OpenAI organization behind the key. Available credits may cover it; this app does not establish credit eligibility. The daily request cap counts task starts and writing-assistant requests, including failed attempts. It is **not a dollar or token budget** for an agent task.
-- Current transport limits are 800 text files / 1.5 MB of source, 500 KB per text file, 200 pending file changes, 1 MB per changed binary/upload, 1.6 MB of pending changes, 1.8 MB per conversation, and 80 messages. Reference PDFs are limited to 1.5 MB and must also fit the combined cloud request. Existing public assets may be larger: the bootstrap accepts up to 50 MB per asset and 150 MB total. Large existing assets can be deleted or viewed in the manual editor; moving/replacing one over 1 MB requires a different upload path. Limits fail explicitly; the editor does not silently omit oversized source.
+- API model and hosted-container usage is billed to the OpenAI organization behind the key. Available credits may cover it; this app does not establish credit eligibility. New Responses requests have a 32,000 output-token ceiling and a 40 built-in-tool-call ceiling. The daily request cap counts task starts and writing-assistant requests, including failed attempts. It is **not a dollar budget**.
+- Current transport limits are 800 text files / 1.5 MB of source, 500 KB per text file, 200 pending file changes, 1 MB per changed binary/upload, 1.6 MB of pending changes, 1.8 MB per conversation, and 80 messages. Reference PDFs are limited to 1.5 MB. Existing public assets may be larger: the new workspace represents them as empty placeholders and preserves unchanged placeholders on export. Pending uploads contain their actual bytes. Inspecting an existing binary requires retrieving its pinned public version through enabled shell networking. Large existing assets can be deleted or viewed in the manual editor; moving/replacing one over 1 MB requires a different upload path. Limits fail explicitly; the editor does not silently omit oversized source.
 - Built preview bundles contain at most 12 pages and 1.5 MB. Generated cloud build output is instructed to stay under 500 MB. These are application checks/instructions, not an operating-system disk quota.
 
-The old single-document writing assistant uses Responses with `store: false`. Hosted-agent sessions use the Agents API session/artifact lifecycle instead; do not assume `store: false` applies to them. API data handling follows the organization's applicable policies. This editor does not save drafts in browser localStorage or a service-worker cache.
+The single-document writing assistant uses Responses with `store: false`. Whole-site chat uses `background: true`, `stream: true`, and `store: true` so a Vercel request or browser disconnect does not lose the task. Polling retrieves its saved state; streaming reconnects using an event cursor. The editor requests deletion after saving the outcome privately. If the browser stays closed, import and explicit cleanup wait until the conversation is reopened; an expired container's unsaved file edits may no longer be recoverable. API data handling follows the organization's applicable policies. This editor does not save drafts in browser localStorage or a service-worker cache.
 
 ## Configure the existing deployment
 
 If the previous editor already signs in, keep its existing Vercel project, private repository, GitHub App, and secrets.
 
 1. Push the new source to the website repository. Vercel's editor project should deploy from `main`, with **Root Directory: website-editor**, **Framework: Other**, Node.js 24, and the checked-in `vercel.json`. The existing pinned `yaml@2.9.1` dependency installs during deployment. No SDK dependency was added for the cloud agent.
-2. Keep `OPENAI_API_KEY` set in Vercel Production. A restricted API key must permit **Agents read/write** (`api.agents.read`, `api.agents.write`) and **Responses write** (`api.responses.write`). The organization must have access to the selected model and Agents API. Redeploy after changing environment variables.
-3. Whole-project tasks default to `gpt-6-astra`. Set `OPENAI_AGENT_MODEL` if choosing a different supported Agents model. `OPENAI_MODEL` still controls only the individual-document writing assistant.
+2. Keep `OPENAI_API_KEY` set in Vercel Production. A restricted API key needs access to create, read, cancel and delete **Responses**, and create, upload/list/download files and delete **Containers**. Keep Agents access only while recovering or cleaning up older requests. The organization must have access to the selected model and hosted shell. Redeploy after changing environment variables.
+3. Whole-project tasks default to `gpt-6-astra`. Set `OPENAI_AGENT_MODEL` if choosing another model that supports Responses and hosted shell. `OPENAI_MODEL` still controls only the individual-document writing assistant. Leave `OPENAI_SHELL_ALLOWED_DOMAINS` empty for ordinary chat/source editing, or configure it as described below for dependency downloads and previews.
 4. To publish changes under `.github/workflows/`, add **Workflows: Read and write** to the GitHub App's repository permissions and approve the updated installation permissions. Keep **Contents: Read and write**, **Pages: Read and write**, and **Metadata: Read-only**. Continue installing it only on the website and private draft repositories.
 5. Run the connected review below before relying on the cloud workflow. Local mocked checks do not establish that the deployed API key, sandbox, Vercel routing, or GitHub permissions work.
 
@@ -60,10 +60,17 @@ For a fresh installation, create `NateOConnellPhD/nateoconnell-editor-private` a
 | `DRAFT_REPOSITORY` | `NateOConnellPhD/nateoconnell-editor-private`. |
 | `OPENAI_API_KEY` | Server-only project key for the intended OpenAI organization. Manual editing does not require it. |
 | `OPENAI_AGENT_MODEL` | Whole-project agent; defaults to `gpt-6-astra`. |
+| `OPENAI_SHELL_ALLOWED_DOMAINS` | Optional comma-separated hostnames. Empty disables outbound shell networking. Hosts must also be allowed by the OpenAI organization. |
 | `OPENAI_MODEL` | Individual-document assistant; defaults to `gpt-5.4-mini`. |
 | `MAX_DAILY_AI_REQUESTS` | Defaults to 40; range 1–100. Shared request counter resets by UTC date. |
 
 Keep secrets in Vercel environment variables. Do not expose them to the browser, source repository, or untrusted Vercel preview deployments.
+
+### Network access for builds and existing binary assets
+
+Hosted shell includes Python, Node and Ruby, but this editor does not assume Jekyll or its gems are installed. A build that needs dependencies requires both the OpenAI organization's shell network allowlist and `OPENAI_SHELL_ALLOWED_DOMAINS` in Vercel. For this Jekyll site, begin with `rubygems.org,index.rubygems.org` for gems and `raw.githubusercontent.com` for existing public binaries, allowing those same hosts in the OpenAI dashboard. If a dependency uses a different host, inspect the reported failure before adding it. Requests that list hosts outside the organization's allowlist are rejected. Redeploy after changing the Vercel variable.
+
+Without that configuration, chat and source editing still run in the container; dependency-dependent previews are reported as unavailable rather than shown as successful builds. Public web search is a separate tool. See the [hosted shell network requirements](https://developers.openai.com/api/docs/guides/tools-shell#network-access).
 
 ## Connected review
 
@@ -78,21 +85,15 @@ The original private cross-validation blog draft has not been copied into this w
 
 ## Local validation
 
-If a chat message was saved but the editor reported a failure immediately after sending, deploy the fix for empty event acknowledgements and reopen that conversation using **Check progress**. The Agents API accepts message and cancellation events with an empty HTTP 202 response, which must not be parsed as JSON. The saved session and idempotency key let the editor recover the original task without creating another session. Acceptance alone does not mean the task has completed. See the [event submission contract](https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/sessions/subresources/events/methods/create).
+The November 11 connection diagnosis showed successful direct Responses inference with the same key/model that failed during a minimal Agents turn. That establishes a working direct model connection, not successful execution of the new hosted-shell workflow. New messages now use Responses; **Check progress** on an old failed request still shows its saved failure.
 
 Focused checks with mocked GitHub/OpenAI services:
 
 ```sh
-node --test test/site-chat.test.js test/hosted-agent.test.js test/chat-stream.test.js
+node --test test/response-workspace.test.js test/chat-stream.test.js
 ```
 
-These JavaScript checks do not use credentials, call paid services, build the site, or produce disk output. They exercise project access boundaries, multi-file edits, private persistence, conflict detection, reviewed publication, cloud-task submission/recovery/cancellation, artifact selection, and cleanup. Run `python3 -B test/workspace_test.py` for the runtime exporter: it uses small isolated fixtures under the project's `.codex-tmp/`, mocks network downloads, and removes its fixtures afterward.
-
-The existing YAML-dependent content checks require the pinned dependency. It was unavailable in the local sandbox during this change. No live Agents call, Jekyll build, browser/mobile review, or publication has been performed for this upgrade. Those remain connected validation, not passing local tests.
-
-Local results, November 11, 2026: 18 mocked JavaScript checks and 4 bootstrap/exporter checks passed. Seven changed JavaScript modules parsed, referenced static HTML IDs were present, and the preview policy had no conflicting global CSP rule. Export-test fixtures were removed and their absence verified. No local dependency installation was performed.
-
-The conversation update adds focused checks for live event delivery before completion, stream cancellation, message recovery, retaining failed-request details, ordinary questions with no source edits, and follow-up context. These checks use controlled service responses. A deployed conversation, browser/mobile behavior, and the cause of the previously reported cloud task failure have not been verified by these checks.
+These JavaScript checks do not use credentials, call paid services, build the site, or produce disk output. They cover Responses submission, ordinary conversation, multi-file imports, preserved proposals on failure, private persistence, streaming and reconnect cursors, cancellation, uncertain creation and cleanup. Run `python3 -B test/workspace_test.py` for the runtime exporter: it uses small isolated fixtures under `.codex-tmp/responses-editor-review/`, mocks network downloads, and removes its fixtures afterward. Tests with HTML fixtures do not establish YAML dependency availability in the local sandbox. Deployed chat, hosted-shell execution, Jekyll builds, browser/mobile behavior and publication require connected validation.
 
 ## Isolating a failed model connection
 
@@ -108,6 +109,7 @@ If even the no-sandbox turn fails, `--responses` makes one direct Responses API 
 
 ## API references
 
+- [Responses hosted shell and containers](https://developers.openai.com/api/docs/guides/tools-shell), [background execution and reconnects](https://developers.openai.com/api/docs/guides/background), and [container file uploads](https://developers.openai.com/api/reference/resources/containers/subresources/files/methods/create)
 - [OpenAI Agents sessions](https://developers.openai.com/api/docs/guides/agents-api/sessions), [hosted environments](https://developers.openai.com/api/docs/guides/agents-api/environments/openai-hosted), and [files/artifacts](https://developers.openai.com/api/docs/guides/agents-api/environments/files)
 - [Agent-session listing and recovery metadata](https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/sessions/methods/list)
 - [Conversation events](https://developers.openai.com/api/docs/guides/agents-api/sessions/events), [saved conversation items](https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/sessions/subresources/items/methods/list), and [failure details](https://developers.openai.com/api/docs/guides/agents-api/errors)

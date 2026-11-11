@@ -19,9 +19,11 @@ def blob(value):
 
 class WorkspaceChecks(unittest.TestCase):
     def setUp(self):
-        self.parent = PROJECT / '.codex-tmp'
+        self.temp_root = PROJECT / '.codex-tmp'
+        self.created_root = not self.temp_root.exists()
+        self.parent = self.temp_root / 'responses-editor-review'
         self.created_parent = not self.parent.exists()
-        self.parent.mkdir(exist_ok=True)
+        self.parent.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(prefix='workspace-export-check-', dir=self.parent)
         self.workspace = pathlib.Path(self.temp.name)
         self.module = types.ModuleType('workspace_under_test')
@@ -39,6 +41,8 @@ class WorkspaceChecks(unittest.TestCase):
         self.assertFalse(self.workspace.exists())
         if self.created_parent:
             self.parent.rmdir()
+        if self.created_root:
+            self.temp_root.rmdir()
 
     def prepare(self):
         self.module.INPUT.write_text(json.dumps(self.data))
@@ -90,6 +94,34 @@ class WorkspaceChecks(unittest.TestCase):
         path.symlink_to(self.module.INPUT)
         with self.assertRaisesRegex(ValueError, 'Symlinks cannot be exported'):
             self.result()
+
+    def test_lazy_assets_preserve_public_files_without_network(self):
+        self.data['lazy_binaries'] = True
+        self.data['binaries'] = {'assets/image.png': {'sha': blob(b'original'), 'mode': '100644'}}
+        with patch.object(self.module.urllib.request, 'urlopen', side_effect=AssertionError('Unexpected download')):
+            self.prepare()
+        self.assertEqual((self.module.ROOT / 'assets/image.png').read_bytes(), b'')
+        self.assertNotIn('assets/image.png', self.result())
+        (self.module.ROOT / 'assets/image.png').unlink()
+        self.assertIsNone(self.result()['assets/image.png']['content'])
+
+    def test_pending_binary_uploads_keep_actual_bytes_in_lazy_workspace(self):
+        value = b'\x89PNG\0replacement'
+        self.data['lazy_binaries'] = True
+        self.data['binaries'] = {'assets/image.png': {'sha': blob(b'original'), 'mode': '100644'}}
+        self.data['pending'] = [{'path': 'assets/image.png', 'after': base64.b64encode(value).decode(), 'encoding': 'base64'}]
+        self.prepare()
+        self.assertEqual((self.module.ROOT / 'assets/image.png').read_bytes(), value)
+        self.assertEqual(base64.b64decode(self.result()['assets/image.png']['content']), value)
+
+    def test_hosted_shell_root_argument_uses_that_workspace(self):
+        (self.workspace / 'project-input.json').write_text(json.dumps(self.data))
+        scope = {'__name__': '__main__'}
+        with patch('sys.argv', ['workspace.py', 'prepare', str(self.workspace)]):
+            exec(compile(SOURCE.read_text(), str(SOURCE), 'exec'), scope)
+        with patch('sys.argv', ['workspace.py', 'export', str(self.workspace)]):
+            exec(compile(SOURCE.read_text(), str(SOURCE), 'exec'), scope)
+        self.assertTrue((self.workspace / 'outputs/review.json').is_file())
 
 
 if __name__ == '__main__':

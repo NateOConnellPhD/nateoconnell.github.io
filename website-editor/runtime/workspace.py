@@ -27,7 +27,7 @@ def allowed(path):
 
 def prepare():
     data = json.loads(INPUT.read_text())
-    ROOT.mkdir(exist_ok=True)
+    ROOT.mkdir(parents=True, exist_ok=True)
     for name, text in data['working'].items():
         if not allowed(name):
             raise ValueError('Invalid workspace input path')
@@ -40,6 +40,13 @@ def prepare():
     for name, entry in data.get('binaries', {}).items():
         if not allowed(name):
             raise ValueError('Invalid binary path')
+        if data.get('lazy_binaries'):
+            # Keep large public assets represented without blocking ordinary
+            # chat on network access. Export preserves untouched placeholders.
+            path = ROOT / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'')
+            continue
         url = 'https://raw.githubusercontent.com/' + data['repository'] + '/' + data['revision'] + '/' + urllib.parse.quote(name)
         with urllib.request.urlopen(url, timeout=30) as response:
             value = response.read(50 * 1024 * 1024 + 1)
@@ -85,7 +92,9 @@ def export():
         value = path.read_bytes()
         binary = data.get('binaries', {}).get(name)
         sha = hashlib.sha1(b'blob ' + str(len(value)).encode() + b'\0' + value).hexdigest()
-        if binary and sha == binary['sha']:
+        pending = next((change for change in data.get('pending', []) if change['path'] == name), None)
+        placeholder = binary and data.get('lazy_binaries') and not value and pending is None
+        if binary and (sha == binary['sha'] or placeholder):
             current[name] = {'unchanged': True}
             continue
         try:
@@ -117,4 +126,7 @@ def export():
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 2:
+        WORKSPACE = pathlib.Path(sys.argv[2])
+        ROOT, INPUT, OUTPUT = WORKSPACE / 'project', WORKSPACE / 'project-input.json', WORKSPACE / 'outputs'
     {'prepare': prepare, 'export': export}[sys.argv[1]]()

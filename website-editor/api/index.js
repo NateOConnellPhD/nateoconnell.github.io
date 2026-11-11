@@ -6,7 +6,7 @@ import { parseSource, validateDocument } from '../lib/content.js';
 import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
 import { createChat, loadChat, saveChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
-import { startWorkspace, pollWorkspace, cancelWorkspace } from '../lib/hosted-agent.js';
+import { startWorkspace, pollWorkspace, cancelWorkspace } from '../lib/response-workspace.js';
 import { streamChat } from '../lib/chat-stream.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
@@ -66,7 +66,7 @@ export async function handle(request) {
     if (request.method === 'GET') {
       if (route === 'chat/events') {
         const { chat } = await loadChat(github, validId(url.searchParams.get('id')));
-        return await streamChat(config, chat.run, request.signal);
+        return await streamChat(config, chat.run, request.signal, undefined, new URL(request.url).searchParams.get('after'));
       }
       if (route === 'workspace/tree') {
         const tree = await github.tree(SITE, await github.head(SITE));

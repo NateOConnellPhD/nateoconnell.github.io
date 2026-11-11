@@ -122,3 +122,27 @@ test('unexpected server errors have a traceable reference without exposing priva
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
 });
+
+test('Responses streams resume from a cursor and expose replies without shell or reasoning payloads', async () => {
+  const events = [
+    { type: 'response.reasoning_summary_text.delta', delta: 'hidden', sequence_number: 12 },
+    { type: 'response.output_item.done', item: { type: 'shell_call', action: { commands: ['private command'] } }, sequence_number: 13 },
+    { type: 'response.output_text.delta', item_id: 'msg1', content_index: 0, delta: 'I can update those papers.', sequence_number: 14 },
+    { type: 'response.output_item.done', item: message('msg1', 'I can update those papers.'), sequence_number: 15 },
+    { type: 'response.completed', sequence_number: 16 }
+  ];
+  const response = await streamChat({ apiKey: 'test-secret' }, { backend: 'responses', responseId: 'resp_test', status: 'in_progress' }, new AbortController().signal, async (url, options) => {
+    assert.ok(url.endsWith('/responses/resp_test?stream=true&starting_after=11'));
+    assert.equal(options.headers['OpenAI-Beta'], undefined);
+    return new Response(new ReadableStream({ start(c) { events.forEach(event => c.enqueue(encode(event))); c.close(); } }));
+  }, '11');
+  const received = []; for await (const event of readEvents(response.body)) received.push(event);
+  assert.deepEqual(received.slice(1, 3), [{ kind: 'cursor', cursor: 12 }, { kind: 'cursor', cursor: 13 }]);
+  assert.equal(received[3].text, 'I can update those papers.');
+  assert.deepEqual(received.at(-1), { kind: 'settle', cursor: 16 });
+  assert.equal(/hidden|private command|test-secret/.test(JSON.stringify(received)), false);
+});
+
+test('a malformed reconnect cursor is rejected before any upstream request', async () => {
+  await assert.rejects(streamChat({}, { backend: 'responses', responseId: 'resp_test', status: 'in_progress' }, new AbortController().signal, () => { throw new Error('Must not call'); }, '1&another=value'), /Invalid stream cursor/);
+});

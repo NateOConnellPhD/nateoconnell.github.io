@@ -11,6 +11,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   const view = createChatView();
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
+  let streamCursor = null;
   const running = () => current?.chat.run && !['completed', 'failed', 'cancelled'].includes(current.chat.run.status);
   const fileDirty = () => filePath && !fileBinary && $('file-source').value !== fileOriginal;
   const leaveFile = () => !fileDirty() || confirm('Discard the unsaved file edit?');
@@ -46,7 +47,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     current = result; review = null;
     const chat = result?.chat;
     const key = chat?.run?.key || null;
-    if (key !== outputKey || !running()) { stopStream(); output = new ChatOutput(); outputKey = key; }
+    if (key !== outputKey || !running()) { stopStream(); output = new ChatOutput(); outputKey = key; streamCursor = null; }
     if (running()) output.snapshot(result.liveMessages);
     $('chat-title').textContent = chat?.messages.length ? chat.title : 'Website chat';
     for (const button of $('chat-history').querySelectorAll('button')) button.setAttribute('aria-current', String(button.dataset.chatId === chat?.id));
@@ -114,14 +115,15 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   }
   function stopStream() { clearTimeout(streamTimer); streamTimer = null; streamAbort?.abort(); streamAbort = null; }
   async function connectStream() {
-    if (!active || document.hidden || !running() || !current?.chat.run.sessionId || streamAbort || streamTimer) return;
+    if (!active || document.hidden || !running() || !(current?.chat.run.responseId || current?.chat.run.sessionId) || streamAbort || streamTimer) return;
     const id = current.chat.id, key = outputKey, abort = new AbortController(); streamAbort = abort;
     try {
-      const response = await fetch(`/api/chat/events?id=${encodeURIComponent(id)}`, { credentials: 'same-origin', cache: 'no-store', signal: abort.signal });
+      const response = await fetch(`/api/chat/events?id=${encodeURIComponent(id)}${streamCursor === null ? '' : `&after=${streamCursor}`}`, { credentials: 'same-origin', cache: 'no-store', signal: abort.signal });
       if (response.status === 204) { await checkProgress(); return; }
       if (!response.ok || !response.body) throw new Error('Live connection unavailable');
       for await (const event of readEvents(response.body)) {
         if (current?.chat.id !== id || outputKey !== key || abort.signal.aborted) break;
+        if (Number.isSafeInteger(event.cursor)) streamCursor = event.cursor;
         if (event.kind === 'text' || event.kind === 'message') { output.event(event); renderLive(); }
         else if (event.kind === 'status') $('chat-status').textContent = event.text;
         else if (event.kind === 'settle') { await checkProgress(); break; }

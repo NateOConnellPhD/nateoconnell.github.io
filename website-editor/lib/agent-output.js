@@ -36,3 +36,19 @@ export function visibleEvent(event) {
   if (type === 'agent.session.turn.in_progress') return { kind: 'status', text: 'The assistant is working on your message…' };
   return null;
 }
+
+export function visibleResponseEvent(event) {
+  const type = event.type;
+  if (['response.output_text.delta', 'response.output_text.done'].includes(type)) {
+    const replace = type.endsWith('.done'), text = replace ? event.text : event.delta;
+    if (typeof text !== 'string' || typeof event.item_id !== 'string' || !Number.isInteger(event.content_index)) return null;
+    return { kind: 'text', id: event.item_id, part: event.content_index, text: text.slice(0, 20000), replace };
+  }
+  if (type === 'response.output_item.done') {
+    const message = assistantMessages(event.item ? [event.item] : [])[0];
+    if (message) return { kind: 'message', ...message };
+  }
+  if (['response.completed', 'response.failed', 'response.incomplete', 'error'].includes(type)) return { kind: 'settle' };
+  if (type === 'response.in_progress') return { kind: 'status', text: 'The assistant is working on your message…' };
+  return null;
+}
