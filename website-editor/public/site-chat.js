@@ -7,20 +7,22 @@ const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 const base64 = file => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Could not read the file.')); reader.readAsDataURL(file); });
 
-export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPublished, onWorkingFiles }) {
+export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvailable, onPublished, onWorkingFiles }) {
   const view = createChatView();
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
   let streamCursor = null, streamResponse = null, liveConnected = false;
+  let directAbort = null;
   const running = () => current?.chat.run && !['completed', 'failed', 'cancelled'].includes(current.chat.run.status);
   const needsProgress = () => running() || current?.chat.run?.cleanupPending;
   const fileDirty = () => filePath && !fileBinary && $('file-source').value !== fileOriginal;
   const leaveFile = () => !fileDirty() || confirm('Discard the unsaved file edit?');
   function resetFile() { filePath = null; fileBinary = false; binaryContent = null; fileOriginal = ''; $('workspace-file-panel').hidden = true; }
   function availability() {
-    $('chat-send').disabled = !aiAvailable() || inFlight || Boolean(needsProgress());
-    for (const id of ['chat-new', 'workspace-new-file', 'workspace-upload-button']) $(id).disabled = inFlight;
-    for (const button of $('chat-history').querySelectorAll('button')) button.disabled = inFlight;
+    const busy = inFlight || Boolean(directAbort);
+    $('chat-send').disabled = !aiAvailable() || busy || Boolean(needsProgress());
+    for (const id of ['chat-new', 'workspace-new-file', 'workspace-upload-button']) $(id).disabled = busy;
+    for (const button of $('chat-history').querySelectorAll('button')) button.disabled = busy;
     $('chat-review').disabled = !current?.chat.changes.length || Boolean(running());
     $('chat-discard').disabled = !current?.chat.changes.length || Boolean(running());
     $('chat-stop').hidden = !running();
@@ -128,6 +130,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   }
   function stopStream() { clearTimeout(streamTimer); streamTimer = null; liveConnected = false; streamAbort?.abort(); streamAbort = null; }
   async function connectStream() {
+    if (directAbort || current?.chat.run?.transport === 'foreground') return;
     if (!active || document.hidden || !running() || !(current?.chat.run.responseId || current?.chat.run.sessionId) || streamAbort || streamTimer) return;
     const id = current.chat.id, key = outputKey, responseId = streamResponse, abort = new AbortController(); streamAbort = abort;
     try {
@@ -155,12 +158,26 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   function showPreview() { $('workspace-preview').src = `/api/workspace/preview?id=${encodeURIComponent(current.chat.id)}&path=${encodeURIComponent($('workspace-preview-pages').value)}`; }
   function schedulePoll() {
     clearTimeout(timer);
-    if (needsProgress() && active && !document.hidden) timer = setTimeout(checkProgress, liveConnected ? 30000 : 2000);
+    if (directAbort) return;
+    if (needsProgress() && active && !document.hidden) timer = setTimeout(checkProgress,
+      ['ready', 'tools'].includes(current?.chat.run?.stage) ? 0 : liveConnected ? 30000 : 2000);
+  }
+  async function streamAction(route, data) {
+    const abort = new AbortController(); directAbort = abort;
+    clearTimeout(timer); stopStream(); availability();
+    try {
+      return await apiStream(route, data, event => {
+        if (directAbort !== abort || current?.chat.id !== data.id) return;
+        if (event.kind === 'state') show(event.result);
+        else if (event.kind === 'text' || event.kind === 'message') { output.event(event); renderLive(); $('chat-status').textContent = ''; }
+        else if (event.kind === 'status') $('chat-status').textContent = event.text;
+      }, abort.signal);
+    } finally { if (directAbort === abort) directAbort = null; availability(); }
   }
   async function checkProgress() {
-    if (polling || !current) { schedulePoll(); return; }
+    if (polling || directAbort || !current) { schedulePoll(); return; }
     const id = current.chat.id, key = current.chat.run?.key; polling = true;
-    try { const result = await api('chat/poll', { id }); if (current?.chat.id === id && current.chat.run?.key === key) show(result); }
+    try { const result = await streamAction('chat/poll', { id }); if (current?.chat.id === id && current.chat.run?.key === key) show(result); }
     catch (error) { if (current?.chat.id === id) $('chat-status').textContent = error.message + ' Reconnecting automatically…'; }
     finally { polling = false; schedulePoll(); }
   }
@@ -188,8 +205,8 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     try {
       if (file) attachment = { base64: await base64(file) };
       if (fileDirty()) { await saveFiles([{ path: filePath, content: $('file-source').value, reason: 'Saved before the chat request' }]); fileOriginal = $('file-source').value; }
-      if (!current) { show(await api('chat/new', {})); await refresh(); }
-      const result = await api('chat/send', { id: current.chat.id, revision: current.revision, prompt, attachment });
+      if (!current) show({ chat: { id: crypto.randomUUID(), title: 'New site chat', messages: [], changes: [] }, revision: null });
+      const result = await streamAction('chat/send', { id: current.chat.id, revision: current.revision, prompt, attachment });
       sending = null; show(result);
       if ($('chat-reference').files[0] === file) $('chat-reference').value = '';
       view.attachment();
@@ -200,9 +217,10 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
       if (current) { try { show(await api(`chat?id=${encodeURIComponent(current.chat.id)}`)); } catch { /* Keep the last confirmed saved state. */ } }
       const accepted = current?.chat.run?.prompt === prompt && current.chat.run.started >= started;
       if (!accepted && !$('chat-prompt').value) $('chat-prompt').value = prompt;
+      if (!accepted && current?.revision === null) show(null);
       notice(error.message, true);
     }
-    finally { inFlight = false; sending = null; renderMessages(); availability(); view.resize(); $('chat-prompt').focus(); }
+    finally { inFlight = false; sending = null; renderMessages(); availability(); schedulePoll(); connectStream(); view.resize(); $('chat-prompt').focus(); }
   }
   function renderChange(change) {
     const section = node('section', undefined, 'chat-change');
@@ -262,7 +280,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     $('chat-new').focus();
   }
   $('chat-form').addEventListener('submit', event => { event.preventDefault(); send(); });
-  $('chat-stop').addEventListener('click', () => run(async () => { show(await api('chat/stop', { id: current.chat.id })); }));
+  $('chat-stop').addEventListener('click', () => run(async () => { directAbort?.abort(); show(await api('chat/stop', { id: current.chat.id })); }));
   $('chat-check').addEventListener('click', checkProgress);
   $('workspace-preview-pages').addEventListener('change', showPreview);
   $('chat-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !$('chat-send').disabled) { event.preventDefault(); $('chat-form').requestSubmit(); } });

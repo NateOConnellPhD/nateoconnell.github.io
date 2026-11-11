@@ -4,6 +4,8 @@ import { startChat, pollChat, stopChat } from '../lib/repository-chat.js';
 import { RepositoryTools } from '../lib/repository-tools.js';
 import { saveChat, loadChat, websiteSnapshot } from '../lib/site-chat.js';
 import { configuration, blobSha, SITE, HttpError } from '../lib/security.js';
+import { liveChat } from '../lib/live-chat.js';
+import { liveRequest } from '../public/live-request.js';
 
 const config = { ...configuration({ APP_ORIGIN: 'https://editor.example', GITHUB_CLIENT_ID: 'client', GITHUB_CLIENT_SECRET: 'secret',
   ALLOWED_GITHUB_USER_ID: '1', SESSION_SECRET: 'ab'.repeat(32), DRAFT_REPOSITORY: 'NateOConnellPhD/private' }), apiKey: 'test-key' };
@@ -43,6 +45,158 @@ function provider(outputs, usage = { input_tokens: 100, input_tokens_details: { 
     return Response.json({});
   } };
 }
+
+function foregroundProvider(outputs, pause) {
+  const requests = []; let created = 0;
+  return { requests, fetch: async (url, options) => {
+    const body = options.body && JSON.parse(options.body);
+    requests.push({ url, method: options.method, body });
+    if (options.method === 'DELETE') return Response.json({});
+    assert.equal(url, 'https://api.openai.com/v1/responses');
+    assert.equal(options.method, 'POST');
+    assert.equal(body.background, false);
+    assert.equal(body.stream, true);
+    const number = created++, id = 'resp_' + number, output = outputs[number];
+    const encoder = new TextEncoder();
+    return new Response(new ReadableStream({
+      async start(controller) {
+        let closed = false;
+        const abort = () => { if (!closed) { closed = true; controller.error(new Error('Disconnected')); } };
+        options.signal.addEventListener('abort', abort, { once: true });
+        const emit = value => { if (!closed) controller.enqueue(encoder.encode('data: ' + JSON.stringify(value) + '\n\n')); };
+        emit({ type: 'response.created', response: { id, status: 'in_progress' } });
+        if (output[0]?.type === 'message') emit({ type: 'response.output_text.delta', item_id: 'msg', content_index: 0, delta: 'Connected' });
+        await pause?.();
+        emit({ type: 'response.completed', response: { id, status: 'completed', output, usage: { input_tokens: 20, output_tokens: 4 } } });
+        options.signal.removeEventListener('abort', abort);
+        if (!closed) { closed = true; controller.close(); }
+      }
+    }), { headers: { 'Content-Type': 'text/event-stream' } });
+  } };
+}
+
+test('a short reply streams through its original POST before completion, without polling or a workspace', async () => {
+  const fake = store(), first = await initial(fake);
+  let complete, firstToken;
+  const gate = new Promise(resolve => { complete = resolve; });
+  const received = new Promise(resolve => { firstToken = resolve; });
+  const remote = foregroundProvider([[message('Connected — what would you like to change?')]], () => gate);
+  const originalFetch = globalThis.fetch; globalThis.fetch = remote.fetch;
+  try {
+    const signal = new AbortController().signal;
+    const response = liveChat(flow => startChat(fake, config, { id, revision: first.revision, prompt: 'testing' }, flow), signal, config);
+    const result = liveRequest('chat/send', { prompt: 'testing' }, 'csrf', event => { if (event.kind === 'text') firstToken(event.text); }, signal,
+      async (url, options) => { assert.equal(options.headers.Accept, 'text/event-stream'); return response; });
+    assert.equal(await received, 'Connected');
+    assert.equal((await loadChat(fake, id)).chat.run.status, 'in_progress');
+    await Promise.all([pollChat(fake, config, id), pollChat(fake, config, id)]);
+    assert.equal(remote.requests.length, 1, 'another tab cannot poll/submit into a live turn');
+    assert.deepEqual(fake.reads, []);
+    complete();
+    const saved = await result;
+    assert.equal(saved.chat.run.status, 'completed');
+    assert.equal(saved.chat.messages.at(-1).content, 'Connected — what would you like to change?');
+    assert.equal(saved.chat.usage.model_requests, 1);
+    assert.equal(saved.chat.usage.containers, 0);
+    assert.ok(remote.requests.every(request => request.method !== 'GET'));
+  } finally { complete(); globalThis.fetch = originalFetch; }
+});
+
+test('foreground file tools checkpoint their output and continue with one new streamed call', async () => {
+  const fake = store(), first = await initial(fake), events = [];
+  const flow = { signal: new AbortController().signal, deadline: Date.now() + 85000, emit: event => events.push(event.kind) };
+  const remote = foregroundProvider([[call('read_files', { paths: ['index.html'] })], [message('The homepage uses featured research.')]]);
+  const originalFetch = globalThis.fetch; globalThis.fetch = remote.fetch;
+  try {
+    let saved = await startChat(fake, config, { id, revision: first.revision, prompt: 'Read the homepage.' }, flow);
+    assert.equal(saved.chat.run.stage, 'ready');
+    assert.deepEqual(fake.reads, ['TREE', 'index.html']);
+    saved = await pollChat(fake, config, id, flow);
+    assert.equal(saved.chat.run.status, 'completed');
+    const calls = remote.requests.filter(request => request.method === 'POST');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].body.previous_response_id, 'resp_0');
+    assert.equal(JSON.parse(calls[1].body.input[0].output).files[0].path, 'index.html');
+    assert.ok(events.includes('text'));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('disconnecting a foreground stream preserves the conversation and never repeats creation', async () => {
+  const fake = store(), first = await initial(fake), abort = new AbortController();
+  let release, received;
+  const gate = new Promise(resolve => { release = resolve; });
+  const token = new Promise(resolve => { received = resolve; });
+  const remote = foregroundProvider([[message('Unfinished')]], () => gate);
+  const originalFetch = globalThis.fetch; globalThis.fetch = remote.fetch;
+  try {
+    const result = startChat(fake, config, { id, revision: first.revision, prompt: 'testing' }, {
+      signal: abort.signal, deadline: Date.now() + 85000, emit: event => { if (event.kind === 'text') received(); }
+    });
+    await token; abort.abort();
+    const saved = await result;
+    assert.equal(saved.chat.run.status, 'cancelled');
+    assert.equal(saved.chat.messages[0].content, 'testing');
+    assert.equal(saved.chat.run.cleanupPending, false);
+    assert.equal(remote.requests.filter(request => request.method === 'POST').length, 1);
+    assert.ok(remote.requests.every(request => !request.url.includes('/cancel')));
+  } finally { release(); globalThis.fetch = originalFetch; }
+});
+
+test('a lost foreground checkpoint acknowledgement does not break the live reply', async () => {
+  const fake = store(), first = await initial(fake), write = fake.writePrivate;
+  let lost = false;
+  fake.writePrivate = async (...args) => { await write(...args); if (!lost && JSON.parse(args[1]).run?.stage === 'waiting') { lost = true; throw new Error('Lost acknowledgement'); } };
+  const remote = foregroundProvider([[message('Connected')]]);
+  const originalFetch = globalThis.fetch; globalThis.fetch = remote.fetch;
+  try {
+    const saved = await startChat(fake, config, { id, revision: first.revision, prompt: 'testing' }, {
+      signal: new AbortController().signal, deadline: Date.now() + 85000, emit() {}
+    });
+    assert.equal(lost, true);
+    assert.equal(saved.chat.run.status, 'completed');
+    assert.equal(saved.chat.messages.at(-1).content, 'Connected');
+    assert.equal(remote.requests.filter(request => request.method === 'POST').length, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('a broken live stream is reported without retrying the paid request', async () => {
+  let calls = 0;
+  await assert.rejects(liveRequest('chat/send', {}, 'csrf', () => {}, new AbortController().signal, async () => {
+    calls++; return new Response('data: {"kind":"connected"}\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  }), /no paid request will be repeated/);
+  assert.equal(calls, 1);
+});
+
+test('a first message creates its conversation atomically, without an empty-chat commit', async () => {
+  const fake = store(), remote = foregroundProvider([[message('Connected')]]);
+  const originalFetch = globalThis.fetch; globalThis.fetch = remote.fetch;
+  try {
+    const saved = await startChat(fake, config, { id, revision: null, prompt: 'testing' }, {
+      signal: new AbortController().signal, deadline: Date.now() + 85000, emit() {}
+    });
+    assert.equal(saved.chat.run.status, 'completed');
+    const initialChat = JSON.parse(fake.commits[0].find(file => file.path === `chats/${id}.json`).content);
+    assert.equal(initialChat.messages[0].content, 'testing');
+    assert.ok(fake.commits[0].some(file => file.path === 'usage.json'));
+    await assert.rejects(startChat(fake, config, { id, revision: null, prompt: 'overwrite?' }), /changed/);
+    assert.equal(remote.requests.filter(request => request.method === 'POST').length, 1);
+    assert.equal((await loadChat(fake, id)).chat.messages.at(-1).content, 'Connected');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('an expired foreground owner recovers a completed response without another model call', async () => {
+  const fake = store(), first = await initial(fake), remote = provider([[message('Recovered reply')]]);
+  const originalFetch = globalThis.fetch; globalThis.fetch = remote.fetch;
+  try {
+    const saved = await startChat(fake, config, { id, revision: first.revision, prompt: 'testing' });
+    saved.chat.run.transport = 'foreground'; saved.chat.run.leaseUntil = Date.now() - 1;
+    await saveChat(fake, saved.chat, saved.revision);
+    const recovered = await pollChat(fake, config, id);
+    assert.equal(recovered.chat.run.status, 'completed');
+    assert.equal(recovered.chat.messages.at(-1).content, 'Recovered reply');
+    assert.equal(remote.requests.filter(request => request.method === 'POST').length, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('a homepage question starts without source hydration, then reads only requested files and records usage', async () => {
   const fake = store(), first = await initial(fake);

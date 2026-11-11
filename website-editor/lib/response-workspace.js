@@ -19,11 +19,11 @@ const identifier = value => {
 const redact = (value, config) => String(value).replaceAll(config.apiKey || '\0', '[redacted]').replace(/sk-[A-Za-z0-9_.-]+/g, '[redacted]').slice(0, 2000);
 const progress = (github, chat, revision) => github.writePrivate ? checkpointChat(github, chat, revision) : saveChat(github, chat, revision);
 
-export async function responseRequest(config, path, method = 'GET', body, transport = fetch) {
+export async function responseRequest(config, path, method = 'GET', body, transport = fetch, signal) {
   let response;
   const multipart = body instanceof FormData;
   try {
-    response = await transport(ROOT + path, { method, redirect: 'error', signal: AbortSignal.timeout(25000),
+    response = await transport(ROOT + path, { method, redirect: 'error', signal: signal || AbortSignal.timeout(25000),
       headers: { Authorization: `Bearer ${config.apiKey}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }) },
       ...(body === undefined ? {} : { body: multipart ? body : JSON.stringify(body) }) });
   } catch { throw new HttpError(504, 'OpenAI did not respond. Your conversation and earlier changes are saved.'); }

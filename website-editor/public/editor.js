@@ -1,6 +1,7 @@
 import { schemas } from './schema.js';
 import { markdown, linkTarget } from './markdown.js';
 import { createSiteChat } from './site-chat.js';
+import { liveRequest } from './live-request.js';
 
 const $ = id => document.getElementById(id);
 const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'files', drafts: [], files: [], projectFiles: [], pendingFiles: [], proposal: null, review: null, images: new Map() };
@@ -232,7 +233,7 @@ async function publish() {
   await refreshLists();
 }
 
-const siteChat = createSiteChat({ api, run, notice, leaveDraft, aiAvailable: () => Boolean(state.auth?.ai), onPublished: refreshLists, onWorkingFiles: changes => { state.pendingFiles = changes; renderList(); } });
+const siteChat = createSiteChat({ api, apiStream: (route, data, onEvent, signal) => liveRequest(route, data, state.auth?.csrf || '', onEvent, signal), run, notice, leaveDraft, aiAvailable: () => Boolean(state.auth?.ai), onPublished: refreshLists, onWorkingFiles: changes => { state.pendingFiles = changes; renderList(); } });
 $('body').addEventListener('input', () => { state.draft.document.body = $('body').value; dirty(); });
 $('save').addEventListener('click', () => run(save, 'Saving privately…'));
 $('review').addEventListener('click', () => run(review, 'Preparing review…'));

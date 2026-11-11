@@ -8,6 +8,7 @@ import { suggest, pdfAttachment } from '../lib/assistant.js';
 import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
 import { startChat, pollChat, stopChat } from '../lib/repository-chat.js';
 import { streamChat } from '../lib/chat-stream.js';
+import { liveChat } from '../lib/live-chat.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
 function redirect(location, values = []) {
@@ -99,6 +100,10 @@ export async function handle(request) {
       throw new HttpError(404, 'Unknown editor action.');
     }
     const data = await readJson(request);
+    if (['chat/send', 'chat/poll'].includes(route) && request.headers.get('accept')?.includes('text/event-stream')) {
+      return liveChat(flow => route === 'chat/send' ? startChat(github, config, data, flow)
+        : pollChat(github, config, validId(data.id), flow), request.signal, config);
+    }
     if (route === 'chat/new') return json(await createChat(github));
     if (route === 'chat/delete') return json(await deleteChat(github, data.id, data.revision));
     if (route === 'chat/send') return json(await startChat(github, config, data));

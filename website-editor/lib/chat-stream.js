@@ -4,6 +4,7 @@ import { readEvents } from '../public/event-stream.js';
 
 export async function streamChat(config, run, signal, transport = fetch, after = null, expected = null) {
   const responses = ['responses', 'repository'].includes(run?.backend), id = responses ? run?.responseId : run?.sessionId;
+  if (run?.transport === 'foreground') return new Response(null, { status: 204 });
   // Another tab may have advanced the tool loop. Its new response has a new
   // cursor sequence; have this client reload state before opening that stream.
   if (expected && expected !== id) return new Response(null, { status: 204 });
