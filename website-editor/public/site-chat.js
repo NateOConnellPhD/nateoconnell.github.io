@@ -183,7 +183,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   }
   async function activate() {
     if (!(await leaveDraft())) return false;
-    active = true; $('site-chat').hidden = false; $('document').hidden = true; $('welcome').hidden = true;
+    active = true; $('site-chat').hidden = false; $('document').hidden = true;
     $('app').classList.add('chat-mode'); view.conversations(false);
     $('site-chat-nav').setAttribute('aria-pressed', 'true');
     await refresh(); availability(); schedulePoll(); connectStream(); view.resize(); return true;

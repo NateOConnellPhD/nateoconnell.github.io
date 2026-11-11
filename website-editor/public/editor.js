@@ -93,7 +93,7 @@ function showDraft(result) {
   siteChat.hide();
   $('app').classList.remove('conversations-open'); $('chat-menu').setAttribute('aria-expanded', 'false');
   state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.proposal = null; state.review = null; state.images.clear();
-  $('welcome').hidden = true; $('document').hidden = false; $('suggestion').hidden = true;
+  $('document').hidden = false; $('suggestion').hidden = true;
   $('prompt').value = ''; $('reference').value = ''; $('ai-status').textContent = '';
   $('document-kind').textContent = schemas[state.draft.document.kind].label;
   $('restore').hidden = !state.draft.publishedCommit || !Object.hasOwn(state.draft, 'previousSource');
@@ -250,7 +250,7 @@ $('filter').addEventListener('input', renderList);
 for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
 function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; $('new-dialog').showModal(); }
 $('new').addEventListener('click', newDialog);
-for (const id of ['start-post', 'create-post']) $(id).addEventListener('click', () => { $('new-kind').value = 'post'; newDialog(); });
+$('create-post').addEventListener('click', () => { $('new-kind').value = 'post'; newDialog(); });
 $('open-drafts').addEventListener('click', () => { $('drafts-tab').click(); $('project-open').click(); });
 $('new-title').addEventListener('input', () => { $('new-slug').value = $('new-title').value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); });
 $('new-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
@@ -286,14 +286,26 @@ $('format-bar').addEventListener('click', event => {
 $('logout').addEventListener('click', () => run(async () => { if (!(await leaveDraft())) return; await api('logout', {}); location.assign('/'); }));
 window.addEventListener('beforeunload', event => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 's' && state.draft) { event.preventDefault(); run(save, 'Saving privately…'); } });
+let initializing = false;
 async function initialize() {
+  if (initializing) return;
+  initializing = true;
+  $('startup-status').textContent = 'Opening your editor…'; $('startup-retry').hidden = true;
   if (new URL(location.href).searchParams.get('error') === 'account') notice('This editor is restricted to Nate’s GitHub account.', true);
   try {
-    state.auth = await api('session'); $('login').hidden = true; $('app').hidden = false; $('logout').hidden = false;
+    state.auth = await api('session');
     $('ask').disabled = !state.auth.ai;
+    // Prepare the intended view while the app is hidden. Settle both reads
+    // before offering a retry so an older initialization cannot change it.
+    const results = await Promise.allSettled([siteChat.activate(), refreshLists()]);
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed) throw failed.reason;
+    $('startup').hidden = true; $('app').hidden = false; $('logout').hidden = false;
     if (!state.auth.ai) notice('The editor is connected. Add an OpenAI key in hosting settings to enable GPT; manual editing is available.');
-    await refreshLists();
-    await siteChat.activate();
-  } catch (error) { if (error.status !== 401) notice(error.message, true); }
+  } catch (error) {
+    if (error.status === 401) { state.auth = null; $('startup').hidden = true; $('login').hidden = false; }
+    else { $('startup-status').textContent = error.message; $('startup-retry').hidden = false; }
+  } finally { initializing = false; }
 }
+$('startup-retry').addEventListener('click', initialize);
 initialize();
