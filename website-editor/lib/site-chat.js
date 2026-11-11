@@ -36,7 +36,7 @@ export async function websiteSnapshot(github, changes = [], ref = null) {
   for (let i = 0; i < entries.length; i += 6) {
     const batch = await Promise.all(entries.slice(i, i + 6).map(async entry => {
       if (entry.size > MAX_FILE) throw new HttpError(413, `The file ${entry.path} is too large for site chat.`);
-      const file = await github.read(SITE, entry.path, head);
+      const file = github.blob ? await github.blob(SITE, entry.sha) : await github.read(SITE, entry.path, head);
       return [entry.path, { sha: file.sha, mode: entry.mode, content: sourceText(file.buffer.toString('utf8')) }];
     }));
     for (const [path, file] of batch) { bytes += Buffer.byteLength(file.content); files.set(path, file); }
@@ -124,6 +124,12 @@ export async function loadChat(github, id) {
   const chat = checkChat(JSON.parse(file.buffer.toString()));
   if (chat.id !== id) throw new HttpError(400, 'Invalid saved conversation.');
   return { chat, revision: file.sha };
+}
+export async function checkpointChat(github, chat, expected) {
+  checkChat(chat);
+  const content = JSON.stringify(chat) + '\n';
+  await github.writePrivate(chatPath(chat.id), content, expected);
+  return { chat, revision: blobSha(content) };
 }
 export async function saveChat(github, chat, expected, extra = []) {
   checkChat(chat);
