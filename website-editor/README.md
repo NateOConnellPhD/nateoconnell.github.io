@@ -98,6 +98,8 @@ The conversation update adds focused checks for live event delivery before compl
 
 `scripts/check-agent.mjs` is an optional live diagnostic, never run by the editor or test suite. Run it explicitly with the same `OPENAI_API_KEY` and, if customized, `OPENAI_AGENT_MODEL` as Vercel. It makes one small billed model request without uploading the website or any conversation. It prints request/session/turn IDs and returned errors, then requests session deletion. It writes no local files and requires no downloaded packages.
 
+For an authentication rejection, run `node scripts/check-agent.mjs --auth-only` from `website-editor/` first. This mode only reads `/v1/models` and `/v1/agents/sessions?limit=1`, reporting status, request IDs, and errors without printing account data. It never creates a session or runs a model. Models and Agents permissions are separate, so a failed models check alone does not establish that the key is invalid. Successful read access does not establish permission to create sessions or run inference.
+
 The default has no sandbox. If that succeeds, `--hosted` checks an empty hosted sandbox without this website's package installs, assets, or preparation script; that check also incurs sandbox usage. A successful probe establishes only that specific path, not that the editor works. A failed cleanup is reported with the session ID; do not ignore it. Keep the API key out of chat and shell history.
 
 ## API references
