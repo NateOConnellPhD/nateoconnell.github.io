@@ -1,5 +1,5 @@
 import { HttpError } from './security.js';
-import { schemas, kindForPath } from '../public/schema.js';
+import { schemas, kindForPath, contentPath } from '../public/schema.js';
 
 const sizeLimit = 100000;
 export function safeText(value) {
@@ -92,7 +92,7 @@ export async function serialize(document, original = '', publish = false) {
 export function newPath(kind, slug, date) {
   const schema = schemas[kind];
   if (!schema?.folder || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug || '') || slug.length > 100 || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new HttpError(400, 'Choose a title slug and a valid date.');
-  return `${schema.folder}/${kind === 'research' ? '' : date + '-'}${slug}.md`;
+  return contentPath(kind, slug, date);
 }
 export function imageUpload(data) {
   if (!data || typeof data.base64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(data.base64)) throw new HttpError(400, 'Invalid image upload.');

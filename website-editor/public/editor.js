@@ -1,11 +1,11 @@
-import { schemas } from './schema.js';
+import { schemas, contentPath } from './schema.js';
 import { markdown, linkTarget } from './markdown.js';
 import { createSiteChat } from './site-chat.js';
 import { liveRequest } from './live-request.js';
 import { renderDiff } from './diff.js';
 
 const $ = id => document.getElementById(id);
-const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'files', drafts: [], files: [], projectFiles: [], pendingFiles: [], proposal: null, review: null, images: new Map() };
+const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'content', drafts: [], files: [], projectFiles: [], pendingFiles: [], proposal: null, review: null, images: new Map() };
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 function notice(message, error = false, link) {
   const node = $('notice'); node.replaceChildren(document.createTextNode(message)); node.classList.toggle('error', error); node.hidden = false;
@@ -42,6 +42,14 @@ async function refreshLists() {
 }
 function renderList() {
   const container = $('file-list'); container.replaceChildren();
+  const descriptions = {
+    content: 'Edit your existing pages, posts, research and talks using content forms. Changes are saved as private writing drafts before publishing.',
+    drafts: 'Resume content you saved in the writing editor. These drafts are separate from the proposed changes saved in each chat.',
+    files: 'Browse all source files and media. Use this for layouts, code, images and PDFs. Edits join the current chat’s proposed changes.'
+  };
+  $('library-description').textContent = descriptions[state.list];
+  $('content-actions').hidden = state.list === 'files'; $('source-actions').hidden = state.list !== 'files';
+  $('filter').placeholder = state.list === 'files' ? 'Find a source file or upload…' : state.list === 'drafts' ? 'Find a saved draft…' : 'Find a page, post, research entry or talk…';
   const query = $('filter').value.toLocaleLowerCase();
   if (state.list === 'files') {
     const root = { folders: new Map(), files: [] };
@@ -75,9 +83,12 @@ function renderList() {
     if (state.list === 'content' && item.kind !== lastGroup) { container.append(element('h3', schemas[item.kind].label, 'content-group')); lastGroup = item.kind; }
     const button = element('button', title);
     button.classList.toggle('active', item.id === state.draft?.id);
-    button.append(element('span', state.list === 'drafts' ? `Private draft · ${new Date(item.updated).toLocaleDateString()}` : schemas[item.kind].label));
+    const pending = state.pendingFiles.some(change => change.path === item.path);
+    button.append(element('span', state.list === 'drafts' ? `Saved ${new Date(item.updated).toLocaleDateString()}` : pending ? 'Proposed changes in current chat · opens source editor' : schemas[item.kind].label));
+    button.append(element('span', item.path, 'content-path'));
     button.addEventListener('click', () => run(async () => {
-      if (!(await leaveDraft())) return;
+      if (state.list === 'content' && pending) { await siteChat.openFile(item.path); return; }
+      if (!siteChat.leaveFile() || !(await leaveDraft())) return;
       showDraft(state.list === 'drafts' ? await api(`draft?id=${encodeURIComponent(item.id)}`) : await api('open', { path: item.path }));
       await refreshLists();
     }, 'Opening…'));
@@ -97,6 +108,7 @@ function showDraft(result) {
   $('document').hidden = false; $('suggestion').hidden = true;
   $('prompt').value = ''; $('reference').value = ''; $('ai-status').textContent = '';
   $('document-kind').textContent = schemas[state.draft.document.kind].label;
+  $('document-destination').textContent = `${state.draft.sourceSha ? 'Updates' : 'Creates'} ${state.draft.document.path} when you publish. Until then, this is a private draft.`;
   $('restore').hidden = !state.draft.publishedCommit || !Object.hasOwn(state.draft, 'previousSource');
   renderFields(); setView('write'); updateSaveState();
 }
@@ -248,14 +260,15 @@ $('discard').addEventListener('click', clearProposal);
 $('write-tab').addEventListener('click', () => setView('write'));
 $('preview-tab').addEventListener('click', () => setView('preview'));
 $('filter').addEventListener('input', renderList);
-for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
-function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; $('new-dialog').showModal(); }
+for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; $('filter').value = ''; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
+function newDestination() { $('new-destination').textContent = 'Website destination: ' + contentPath($('new-kind').value, $('new-slug').value || 'your-title', $('new-date').value || 'YYYY-MM-DD'); }
+function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; newDestination(); $('new-dialog').showModal(); }
 $('new').addEventListener('click', newDialog);
-$('create-post').addEventListener('click', () => { $('new-kind').value = 'post'; newDialog(); });
-$('open-drafts').addEventListener('click', () => { $('drafts-tab').click(); $('project-open').click(); });
-$('new-title').addEventListener('input', () => { $('new-slug').value = $('new-title').value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); });
+$('create-post').addEventListener('click', newDialog);
+for (const id of ['new-kind', 'new-date', 'new-slug']) $(id).addEventListener('input', newDestination);
+$('new-title').addEventListener('input', () => { $('new-slug').value = $('new-title').value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); newDestination(); });
 $('new-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
-  if (!(await leaveDraft())) return;
+  if (!siteChat.leaveFile() || !(await leaveDraft())) return;
   const result = await api('open', { kind: $('new-kind').value, slug: $('new-slug').value, date: $('new-date').value });
   result.draft.document.fields.title = $('new-title').value;
   showDraft(result); dirty(); await save(); $('new-dialog').close(); await refreshLists();

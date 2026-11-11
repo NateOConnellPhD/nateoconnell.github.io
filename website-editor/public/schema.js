@@ -43,6 +43,9 @@ export function kindForPath(path) {
   }
   return null;
 }
+export function contentPath(kind, slug, date) {
+  return `${schemas[kind].folder}/${kind === 'research' ? '' : date + '-'}${slug}.md`;
+}
 export const initialFields = (kind, date) => ({
   ...(schemas[kind]?.fields.published ? { published: true } : {}),
   ...(kind === 'post' ? { date, tags: [] } : {}),

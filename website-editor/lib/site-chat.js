@@ -75,6 +75,20 @@ export function applySiteProposal(changes, proposal, snapshot) {
   if (result.length > MAX_CHANGES || Buffer.byteLength(JSON.stringify(result)) > 1600000) throw new HttpError(413, 'This update is too large. Split it into smaller changes.');
   return result;
 }
+export function workingFileSha(snapshot, changes, path) {
+  const pending = changes.find(change => change.path === path);
+  return pending ? pending.after === null ? null : blobSha(changeBytes(pending))
+    : snapshot.files.get(path)?.sha || snapshot.binaries?.get(path)?.sha || null;
+}
+export function checkFileExpectations(edits, snapshot, changes) {
+  for (const edit of edits) {
+    if (!Object.hasOwn(edit, 'expectedSha')) continue;
+    if (edit.expectedSha !== null && !/^[a-f0-9]{40}$/.test(edit.expectedSha || '')) throw new HttpError(400, 'Invalid file version. Reopen the file before saving.');
+    if (workingFileSha(snapshot, changes, edit.path) !== edit.expectedSha) throw new HttpError(409,
+      edit.expectedSha === null ? `${edit.path} already exists. Choose another destination or explicitly replace it.`
+        : `${edit.path} changed since you opened it. Reopen the file or review the upload destination again; nothing was overwritten.`);
+  }
+}
 async function yamlValue(text) {
   const { parseDocument } = await import('yaml');
   const doc = parseDocument(text, { schema: 'core', uniqueKeys: true, customTags: [] });

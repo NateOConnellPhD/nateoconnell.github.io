@@ -5,7 +5,7 @@ import { schemas, kindForPath } from '../public/schema.js';
 import { parseSource, validateDocument } from '../lib/content.js';
 import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
-import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
+import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish, workingFileSha, checkFileExpectations } from '../lib/site-chat.js';
 import { startChat, pollChat, stopChat } from '../lib/repository-chat.js';
 import { streamChat } from '../lib/chat-stream.js';
 import { liveChat } from '../lib/live-chat.js';
@@ -114,14 +114,20 @@ export async function handle(request) {
       if (!sitePath(data.path)) throw new HttpError(403, 'This path is outside the website project.');
       const saved = data.id ? await loadChat(github, validId(data.id)) : null;
       const pending = saved?.chat.changes.find(file => file.path === data.path);
-      if (pending) return json({ path: data.path, exists: pending.after !== null, content: pending.after, binary: pending.encoding === 'base64', deleted: pending.after === null, base64: pending.encoding === 'base64' ? pending.after : undefined });
+      if (pending) return json({ path: data.path, exists: pending.after !== null, sha: workingFileSha(null, saved.chat.changes, data.path), content: pending.after, binary: pending.encoding === 'base64', deleted: pending.after === null, base64: pending.encoding === 'base64' ? pending.after : undefined });
       let file;
       try { file = await github.read(SITE, data.path, 'main', true); }
-      catch (error) { if (error.status !== 413) throw error; return json({ path: data.path, exists: true, binary: true, url: `https://github.com/${SITE}/blob/main/${data.path.split('/').map(encodeURIComponent).join('/')}` }); }
-      if (!file) return json({ path: data.path, exists: false, content: '' });
+      catch (error) {
+        if (error.status !== 413) throw error;
+        const tree = await github.tree(SITE, await github.head(SITE));
+        const entry = tree.entries.find(item => item.path === data.path && item.type === 'blob');
+        if (!entry) throw error;
+        return json({ path: data.path, exists: true, sha: entry.sha, binary: true, url: `https://github.com/${SITE}/blob/main/${data.path.split('/').map(encodeURIComponent).join('/')}` });
+      }
+      if (!file) return json({ path: data.path, exists: false, sha: null, content: '' });
       const content = file.buffer.toString('utf8');
-      if (file.buffer.includes(0) || !Buffer.from(content).equals(file.buffer)) return json({ path: data.path, exists: true, binary: true, base64: file.buffer.length <= 1024 * 1024 ? file.buffer.toString('base64') : null, url: `https://github.com/${SITE}/blob/main/${data.path.split('/').map(encodeURIComponent).join('/')}` });
-      return json({ path: data.path, exists: true, content });
+      if (file.buffer.includes(0) || !Buffer.from(content).equals(file.buffer)) return json({ path: data.path, exists: true, sha: file.sha, binary: true, base64: file.buffer.length <= 1024 * 1024 ? file.buffer.toString('base64') : null, url: `https://github.com/${SITE}/blob/main/${data.path.split('/').map(encodeURIComponent).join('/')}` });
+      return json({ path: data.path, exists: true, sha: file.sha, content });
     }
     if (route === 'workspace/edit') {
       const { chat, revision } = await loadChat(github, validId(data.id));
@@ -129,10 +135,13 @@ export async function handle(request) {
       if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop or finish the active cloud task before editing files directly.');
       if (!Array.isArray(data.edits) || data.edits.length > 200) throw new HttpError(400, 'Provide up to 200 file edits.');
       const snapshot = await websiteSnapshot(github, chat.changes, null, data.edits.map(file => file?.path));
+      checkFileExpectations(data.edits, snapshot, chat.changes);
       chat.changes = applySiteProposal(chat.changes, { message: 'Manual file edit', edits: data.edits }, snapshot);
       chat.preview = null;
+      if (chat.title === 'New site chat' && data.edits.length) chat.title = `File edits: ${data.edits[0].path}`.slice(0, 100);
       chat.messages.push({ role: 'system', content: `You edited ${data.edits.map(file => file.path).join(', ')} directly in the workspace.` });
-      return json(await saveChat(github, chat, revision));
+      const saved = await saveChat(github, chat, revision);
+      return json({ ...saved, edited: data.edits.map(edit => ({ path: edit.path, sha: workingFileSha(snapshot, chat.changes, edit.path) })) });
     }
     if (route === 'chat/discard') {
       const { chat, revision } = await loadChat(github, data.id);

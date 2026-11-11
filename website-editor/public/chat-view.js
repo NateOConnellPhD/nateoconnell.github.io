@@ -7,7 +7,7 @@ export function createChatView() {
     $('project-panel').hidden = !open;
     $('app').classList.toggle('project-open', open);
     for (const id of ['project-open', 'chat-project-open']) $(id).setAttribute('aria-expanded', String(open));
-    if (focus) (open ? $('project-close') : $('site-chat').hidden ? $('chat-menu') : $('chat-project-open')).focus();
+    if (focus) (open ? $('project-close') : $('site-chat').hidden ? $(window.innerWidth <= 700 ? 'chat-menu' : 'project-open') : $('chat-project-open')).focus();
   }
   function conversations(open) {
     if (open) project(false, false);

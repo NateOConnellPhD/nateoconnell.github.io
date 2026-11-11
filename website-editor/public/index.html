@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Website editor · Nate O’Connell</title><link rel="stylesheet" href="/editor.css"><link rel="stylesheet" href="/chat.css"><link rel="stylesheet" href="/diff.css"><script type="module" src="/editor.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Website editor · Nate O’Connell</title><link rel="stylesheet" href="/editor.css"><link rel="stylesheet" href="/chat.css"><link rel="stylesheet" href="/diff.css"><link rel="stylesheet" href="/manual-editor.css"><script type="module" src="/editor.js"></script></head>
 <body>
   <a class="skip" href="#workspace">Skip to editor</a>
   <header class="masthead"><button id="chat-menu" class="icon-button mobile-only" aria-label="Show conversations" aria-controls="conversation-sidebar" aria-expanded="false">☰</button><a class="brand" href="/"><img src="https://nateoconnell.com/assets/images/normal-helix-logo.svg" width="68" height="46" alt=""><span>Nate O’Connell<span class="brand-sub">Website editor</span></span></a><div class="header-links"><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a><button id="logout" class="quiet" hidden>Sign out</button></div></header>
@@ -10,16 +10,19 @@
   <main id="login" class="login-shell" hidden><p class="eyebrow">Your private workspace</p><h1>What would you like<br>to change?</h1><p>Describe an update to your website. Change highlighted papers, write a post, add a page, or work on the layout. Continue the conversation, review the changes, then publish when you’re ready.</p><a class="button primary" href="/api/auth/start">Sign in with GitHub <span aria-hidden="true">→</span></a><p class="small">Access is restricted to your account.</p><p class="small"><a href="https://github.com/NateOConnellPhD/nateoconnell.github.io/blob/main/website-editor/README.md" target="_blank" rel="noopener noreferrer">Editor setup guide ↗</a></p></main>
   <div id="app" class="app" hidden>
     <aside id="conversation-sidebar" class="conversation-sidebar" aria-label="Conversations">
-      <div class="conversation-nav"><button id="chat-new" class="nav-button">＋ New chat</button><button id="chat-sidebar-close" class="icon-button mobile-only" aria-label="Close conversations">×</button></div>
-      <button id="site-chat-nav" class="nav-button" aria-pressed="true">Website chat</button>
-      <button id="create-post" class="nav-button">＋ Create a blog post</button>
-      <button id="open-drafts" class="nav-button">My writing drafts</button>
-      <p class="nav-label">Conversations</p><nav id="chat-history" class="chat-history" aria-label="Saved conversations"></nav>
-      <div class="conversation-footer"><button id="project-open" class="nav-button" aria-controls="project-panel" aria-expanded="false">Files & changes <span aria-hidden="true">↗</span></button><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a></div>
+      <div class="sidebar-heading"><span>Workspace</span><button id="chat-sidebar-close" class="icon-button mobile-only" aria-label="Close navigation">×</button></div>
+      <nav aria-label="Editor navigation">
+        <button id="site-chat-nav" class="nav-button" aria-pressed="true">Chat</button>
+        <button id="project-open" class="nav-button" aria-controls="project-panel" aria-expanded="false">Edit website</button>
+        <button id="create-post" class="nav-button">＋ Add content</button>
+      </nav>
+      <div class="conversation-nav"><p class="nav-label">Conversations</p><button id="chat-new" class="quiet">＋ New chat</button></div>
+      <nav id="chat-history" class="chat-history" aria-label="Saved conversations"></nav>
+      <div class="conversation-footer"><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a></div>
     </aside>
     <main id="workspace" class="workspace" tabindex="-1">
       <section id="site-chat" class="site-chat" hidden>
-        <header class="chat-top"><h1 id="chat-title">Website chat</h1><button id="chat-project-open" class="quiet" aria-controls="project-panel" aria-expanded="false">Files & changes</button></header>
+        <header class="chat-top"><h1 id="chat-title">Website chat</h1><button id="chat-project-open" class="quiet" aria-controls="project-panel" aria-expanded="false">Edit website</button></header>
         <div id="chat-scroll" class="chat-scroll" tabindex="0" aria-label="Conversation">
           <div class="chat-transcript">
             <div id="chat-empty" class="chat-empty"><h2>What would you like to work on?</h2><p>Ask a question, talk through an idea, or change your website.</p><div class="chat-examples"><button data-chat-example="Which papers are currently highlighted on the homepage? I’d like to change that selection.">Choose highlighted papers</button><button data-chat-example="I’d like to write a blog post. Let’s talk through the idea first.">Work on a blog post</button><button data-chat-example="I want to change the homepage layout. Show me how it is organized now so we can work on it.">Change the homepage</button></div></div>
@@ -39,7 +42,7 @@
         </div>
       </section>
       <section id="document" hidden>
-        <div class="document-top"><div><p id="document-kind" class="eyebrow"></p><h1 id="document-title">Untitled</h1><p id="save-state" class="small" role="status"></p></div><div class="document-actions"><button id="save" class="button">Save draft</button><button id="review" class="button primary">Review & publish</button></div></div>
+        <div class="document-top"><div><p id="document-kind" class="eyebrow"></p><h1 id="document-title">Untitled</h1><p id="document-destination" class="destination-note"></p><p id="save-state" class="small" role="status"></p></div><div class="document-actions"><button id="save" class="button">Save draft</button><button id="review" class="button primary">Review & publish</button></div></div>
         <div class="editor-columns"><div class="writing-column">
           <div class="view-tabs"><button id="write-tab" aria-pressed="true">Write</button><button id="preview-tab" aria-pressed="false">Preview</button><button id="restore" class="quiet" hidden>Restore previous version</button></div>
           <div id="write-pane"><div id="fields" class="fields"></div><div id="body-area"><label for="body">Writing</label><div id="format-bar" class="format-bar" role="toolbar" aria-label="Text formatting"><button data-format="bold" aria-label="Bold"><strong>B</strong></button><button data-format="italic" aria-label="Italic"><em>I</em></button><button data-format="heading">Heading</button><button data-format="list">List</button><button data-format="quote">Quote</button><button data-format="link">Link</button><button data-format="math">Inline equation</button><button data-format="display-math">Display equation</button><button id="image-button">Add image</button></div><textarea id="body" class="body-editor" rows="20" placeholder="Write your post in Markdown…"></textarea><p class="small">Write in Markdown, including LaTeX equations. Use <code>$$x_i^2$$</code> within a sentence, or put <code>$$</code> on separate lines for a display equation, with blank lines before and after. The equation buttons insert these delimiters. Preview renders the equations. You can also paste an image here or use Add image.</p><input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></div>
@@ -48,16 +51,42 @@
         <aside class="assistant" aria-label="Writing assistant"><p class="eyebrow">A second pair of eyes</p><h2>Work on it with GPT</h2><p class="small">Ask for a specific change. You’ll see the suggestion before it changes your draft.</p><label for="prompt">What would you like to do?</label><textarea id="prompt" rows="6" placeholder="Help me explain this result with an everyday example. Keep my opening paragraph as it is."></textarea><label for="reference">Reference PDF for this request</label><input id="reference" type="file" accept="application/pdf"><p class="small">Optional, up to 1.5 MB. Sent to OpenAI when you ask; not added to your website.</p><button id="ask" class="button primary">Ask GPT</button><p id="ai-status" class="small" role="status"></p><section id="suggestion" class="suggestion" hidden><h3>Suggested edit</h3><p id="suggestion-message"></p><div id="suggestion-content"></div><div class="suggestion-actions"><button id="apply" class="button primary">Use this edit</button><button id="discard" class="button">Discard</button></div></section></aside>
         </div>
       </section>
+      <section id="workspace-file-panel" class="manual-source" hidden>
+        <div class="document-top"><div><p class="eyebrow">Source editor</p><h1 id="file-heading">Edit file</h1><p class="small">Changes join the current chat’s proposed changes. Review them before publishing.</p></div><div class="document-actions"><button id="file-save" class="button primary">Save changes</button><button id="file-review" class="button" disabled>Review & publish</button></div></div>
+        <label for="file-path">Website file</label><input id="file-path" readonly>
+        <div id="file-source-area"><label for="file-source">Source</label><textarea id="file-source" class="source-editor" rows="24" spellcheck="false"></textarea></div>
+        <p id="file-binary" hidden>This file is edited by uploading a replacement. <a id="file-binary-link" target="_blank" rel="noopener noreferrer">Open current file ↗</a></p>
+        <p id="file-state" class="small" role="status"></p>
+        <div class="file-secondary-actions"><button id="file-replace" class="button">Replace with upload</button><button id="file-rename" class="quiet">Move / rename</button><button id="file-delete" class="quiet">Delete file</button><button id="file-browse" class="quiet">Browse website</button></div>
+      </section>
     </main>
-    <aside id="project-panel" class="project-panel" aria-label="Files and proposed changes" hidden>
-      <div class="project-panel-heading"><h2>Files & changes</h2><button id="project-close" class="icon-button" aria-label="Close files and changes">×</button></div>
+    <aside id="project-panel" class="project-panel" aria-label="Website editor" hidden>
+      <div class="project-panel-heading"><h2>Edit website</h2><button id="project-close" class="icon-button" aria-label="Close website editor">×</button></div>
         <section id="chat-pending" class="chat-pending" hidden><h2 id="chat-count"></h2><ul id="chat-changes"></ul><div class="chat-actions"><button id="chat-review" class="button primary" disabled>Review & publish changes</button><button id="chat-discard" class="quiet" disabled>Discard pending changes</button></div></section>
-        <section id="workspace-file-panel" class="workspace-panel" hidden><div class="dialog-heading"><h2>File editor</h2></div><label for="file-path">Project path</label><input id="file-path" readonly><label for="file-source">Source</label><textarea id="file-source" class="source-editor" rows="22" spellcheck="false"></textarea><p id="file-binary" hidden>This is a media or binary file. <a id="file-binary-link" target="_blank" rel="noopener noreferrer">Open the current file ↗</a></p><div class="chat-actions"><button id="file-save" class="button primary">Save privately</button><button id="file-rename" class="button">Move / rename</button><button id="file-delete" class="quiet">Delete file</button></div><p id="file-state" class="small" role="status"></p></section>
+
         <section id="workspace-preview-panel" class="workspace-panel" hidden><h2>Built website preview</h2><label for="workspace-preview-pages">Page</label><select id="workspace-preview-pages"></select><iframe id="workspace-preview" title="Private built website preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe><p class="small">Private preview from the cloud build. Forms and external network requests are disabled inside this preview.</p></section>
-      <details id="project-files" open><summary>Website files</summary><div class="project-controls"><button id="workspace-new-file" class="button">＋ New file or page</button><button id="workspace-upload-button" class="button">Upload a file</button><input id="workspace-upload" type="file" hidden><button id="new" class="button">＋ New content draft</button><div class="list-tabs"><button id="files-tab" aria-pressed="true">Files</button><button id="content-tab" aria-pressed="false">Content</button><button id="drafts-tab" aria-pressed="false">Drafts</button></div><label class="sr-only" for="filter">Find a file or page</label><input id="filter" type="search" placeholder="Find a file or page…"><div id="file-list" class="file-list"></div></div></details>
+      <section id="project-files" aria-label="Website library">
+        <div class="list-tabs"><button id="content-tab" aria-pressed="true">Content</button><button id="drafts-tab" aria-pressed="false">Saved drafts</button><button id="files-tab" aria-pressed="false">Source & media</button></div>
+        <p id="library-description" class="small"></p>
+        <div id="content-actions" class="library-actions"><button id="new" class="button">＋ Add content</button></div>
+        <div id="source-actions" class="library-actions" hidden><button id="workspace-new-file" class="button">New source file</button><button id="workspace-upload-button" class="button">Upload image or file</button></div>
+        <label class="sr-only" for="filter">Search this library</label><input id="filter" type="search" placeholder="Find content…">
+        <div id="file-list" class="file-list"></div>
+      </section>
     </aside>
   </div>
-  <dialog id="new-dialog"><form id="new-form"><div class="dialog-heading"><h2>Start something new</h2><button type="button" data-close="new-dialog" aria-label="Close">×</button></div><label for="new-kind">Content type</label><select id="new-kind"><option value="post">Blog post</option><option value="research">Research entry</option><option value="talk">Talk</option></select><label for="new-title">Title</label><input id="new-title" required maxlength="200"><label for="new-date">Date</label><input id="new-date" type="date" required><label for="new-slug">Link name</label><input id="new-slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="100"><p class="small">Used in the file and post link. You can change the display title later.</p><button class="button primary" type="submit">Create private draft</button></form></dialog>
+  <dialog id="new-dialog"><form id="new-form"><div class="dialog-heading"><h2>Add content</h2><button type="button" data-close="new-dialog" aria-label="Close">×</button></div><label for="new-kind">Content type</label><select id="new-kind"><option value="post">Blog post</option><option value="research">Research entry</option><option value="talk">Talk</option></select><label for="new-title">Title</label><input id="new-title" required maxlength="200"><label for="new-date">Date</label><input id="new-date" type="date" required><label for="new-slug">Link name</label><input id="new-slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="100"><p class="small">Used in the file and post link. You can change the display title later.</p><p id="new-destination" class="destination-note" role="status"></p><p class="small">Starts as a private draft. An existing file will not be replaced.</p><button class="button primary" type="submit">Create private draft</button></form></dialog>
+  <dialog id="file-action-dialog"><form id="file-action-form">
+    <div class="dialog-heading"><h2 id="file-action-title">Add a file</h2><button type="button" data-close="file-action-dialog" aria-label="Close">×</button></div>
+    <div id="file-action-upload"><label for="file-action-upload-input">Choose a file (up to 1 MB)</label><input id="file-action-upload-input" type="file"></div>
+    <label for="file-action-path">Destination in your website</label><input id="file-action-path" required maxlength="240" placeholder="assets/files/my-document.pdf" spellcheck="false">
+    <p id="file-action-help" class="small"></p>
+    <p id="file-action-status" class="destination-note" role="status"></p>
+    <label id="file-action-replace-label" class="field-check" hidden><input id="file-action-replace" type="checkbox">Replace the file at this exact path</label>
+    <button id="file-action-submit" class="button primary" type="submit">Continue</button>
+    <p id="file-action-error" class="form-error" role="alert" hidden></p>
+    <p class="small">Nothing changes on the live website until you review and publish.</p>
+  </form></dialog>
   <dialog id="review-dialog" class="review-dialog"><div class="dialog-heading"><h2>Review your website update</h2><button data-close="review-dialog" aria-label="Close">×</button></div><p id="review-description"></p><div id="review-content" class="prose"></div><section aria-label="Exact file changes"><h3>Changes to publish</h3><ul id="review-paths"></ul><div id="review-diff"></div></section><div class="publish-actions"><button data-close="review-dialog" class="button">Keep editing</button><button id="publish" class="button primary">Publish website update</button></div><p class="small">Publishing makes these files public. The website updates after GitHub Pages finishes building.</p></dialog>
   <dialog id="chat-review-dialog" class="review-dialog"><div class="dialog-heading"><h2>Review changes across your website</h2><button data-close="chat-review-dialog" aria-label="Close">×</button></div><p>All changes below will be published together. You can keep refining them in the chat before publishing.</p><p class="small">Read the agent’s check results in the conversation and inspect any built preview. Every listed source file will be public, even if its page is hidden.</p><div id="chat-review-content"></div><div class="publish-actions"><button data-close="chat-review-dialog" class="button">Keep chatting</button><button id="chat-publish" class="button primary">Publish these changes</button></div></dialog>
 </body></html>

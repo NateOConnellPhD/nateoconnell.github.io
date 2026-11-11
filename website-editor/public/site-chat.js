@@ -3,6 +3,7 @@ import { readEvents } from './event-stream.js';
 import { ChatOutput } from './chat-output.js';
 import { createChatView } from './chat-view.js';
 import { renderDiff } from './diff.js';
+import { createFileActions } from './file-actions.js';
 
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
@@ -13,12 +14,12 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
   let streamCursor = null, streamResponse = null, liveConnected = false;
-  let directAbort = null, deleting = false;
+  let directAbort = null, deleting = false, fileOriginalSha = null;
   const running = () => current?.chat.run && !['completed', 'failed', 'cancelled'].includes(current.chat.run.status);
   const needsProgress = () => running() || current?.chat.run?.cleanupPending;
   const fileDirty = () => filePath && !fileBinary && $('file-source').value !== fileOriginal;
   const leaveFile = () => !fileDirty() || confirm('Discard the unsaved file edit?');
-  function resetFile() { filePath = null; fileBinary = false; binaryContent = null; fileOriginal = ''; $('workspace-file-panel').hidden = true; }
+  function resetFile() { filePath = null; fileBinary = false; binaryContent = null; fileOriginal = ''; fileOriginalSha = null; $('workspace-file-panel').hidden = true; }
   function availability() {
     const busy = inFlight || Boolean(directAbort);
     $('chat-send').disabled = !aiAvailable() || busy || Boolean(needsProgress());
@@ -30,6 +31,8 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     $('chat-send').hidden = Boolean(running());
     for (const id of ['file-save', 'file-delete', 'file-rename']) $(id).disabled = !filePath || inFlight || Boolean(running());
     $('file-save').disabled ||= fileBinary;
+    $('file-replace').disabled = !filePath || busy || Boolean(running());
+    $('file-review').disabled = !(current?.chat.changes.length || fileDirty()) || busy || Boolean(running());
     $('file-rename').disabled ||= fileBinary && !binaryContent;
     $('file-source').disabled = Boolean(running());
   }
@@ -185,13 +188,14 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     finally { polling = false; schedulePoll(); }
   }
   async function activate() {
-    if (!(await leaveDraft())) return false;
+    if (!leaveFile() || !(await leaveDraft())) return false;
+    resetFile();
     active = true; $('site-chat').hidden = false; $('document').hidden = true;
     $('app').classList.add('chat-mode'); view.conversations(false);
     $('site-chat-nav').setAttribute('aria-pressed', 'true');
     await refresh(); availability(); schedulePoll(); connectStream(); view.resize(); return true;
   }
-  function hide() { active = false; clearTimeout(timer); stopStream(); $('site-chat').hidden = true; $('site-chat-nav').setAttribute('aria-pressed', 'false'); $('app').classList.remove('chat-mode'); view.project(false, false); }
+  function hide() { active = false; clearTimeout(timer); stopStream(); resetFile(); $('site-chat').hidden = true; $('site-chat-nav').setAttribute('aria-pressed', 'false'); $('app').classList.remove('chat-mode'); view.project(false, false); }
   async function send() {
     if (inFlight || needsProgress()) return;
     const prompt = $('chat-prompt').value.trim();
@@ -242,13 +246,11 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   }
   $('site-chat-nav').addEventListener('click', () => run(activate));
   $('chat-new').addEventListener('click', () => run(async () => {
-    if (!leaveFile()) return;
     if ($('chat-prompt').value.trim() && !confirm('Discard the unsent message and start a new chat? Saved conversations are kept.')) return;
     if (!(await activate())) return;
     show(null); $('chat-prompt').value = ''; $('chat-reference').value = ''; view.attachment(); view.resize(); $('chat-prompt').focus();
   }));
   async function openConversation(id) {
-    if (!leaveFile()) return;
     if ($('chat-prompt').value.trim() && !confirm('Discard the unsent message and open this saved conversation?')) return;
     if (!(await activate())) return;
     show(await api(`chat?id=${encodeURIComponent(id)}`)); $('chat-prompt').value = ''; $('chat-reference').value = '';
@@ -287,11 +289,12 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     else if (active) { connectStream(); if (needsProgress()) checkProgress(); }
   });
   document.querySelectorAll('[data-chat-example]').forEach(button => button.addEventListener('click', () => { $('chat-prompt').value = button.dataset.chatExample; view.resize(); $('chat-prompt').focus(); }));
-  $('chat-review').addEventListener('click', () => run(async () => {
+  async function reviewChanges() {
     review = await api('chat/review', { id: current.chat.id, revision: current.revision });
     $('chat-review-content').replaceChildren(...review.changes.map(renderChange));
     $('chat-review-dialog').showModal();
-  }, 'Preparing site review…'));
+  }
+  $('chat-review').addEventListener('click', () => run(reviewChanges, 'Preparing site review…'));
   $('chat-publish').addEventListener('click', () => run(async () => {
     if (!review || !current) throw new Error('Review the changes again before publishing.');
     const result = await api('chat/publish', { id: current.chat.id, receipt: review.receipt });
@@ -305,52 +308,61 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     if (!confirm('Discard all pending changes in this conversation? Your live website stays as it is.')) return;
     show(await api('chat/discard', { id: current.chat.id, revision: current.revision })); resetFile(); await refresh();
   }));
-  async function openFile(path) {
-    if (!leaveFile()) return;
-    if (!(await activate())) return;
+  async function openFile(path, options = {}) {
+    if (!leaveFile() || !(await leaveDraft())) return false;
     const file = await api('workspace/file', { id: current?.chat.id, path });
+    if (options.create && file.exists) throw new Error('This file already exists. Choose a new path, or open the existing file from Source & media.');
+    hide(); $('document').hidden = true;
     filePath = path; fileBinary = Boolean(file.binary); binaryContent = file.base64 || null; fileOriginal = fileBinary ? '' : file.content || '';
+    fileOriginalSha = file.sha ?? null;
     $('workspace-file-panel').hidden = false; $('file-path').value = path; $('file-source').value = fileOriginal;
-    $('file-source').hidden = Boolean(file.binary); $('file-binary').hidden = !file.binary;
+    $('file-heading').textContent = path.split('/').pop();
+    $('file-source-area').hidden = Boolean(file.binary); $('file-binary').hidden = !file.binary;
     if (file.binary) { $('file-binary-link').href = file.url || `data:application/octet-stream;base64,${file.base64}`; $('file-binary-link').download = path.split('/').pop(); }
-    $('file-state').textContent = file.deleted ? 'Pending deletion. Save to restore it.' : 'Changes are private until you publish the workspace.';
-    view.project(true); $('workspace-file-panel').scrollIntoView({ block: 'start' });
-    availability();
+    $('file-state').textContent = file.deleted ? 'Pending deletion. Save to restore it.' : file.exists ? 'Editing an existing file. Save changes, then review and publish.' : `New file at ${path}. Save changes to add it to the current chat’s proposed changes.`;
+    view.conversations(false); $('file-heading').scrollIntoView({ block: 'start' });
+    availability(); return true;
   }
   async function saveFiles(edits) {
     if (!current) show(await api('chat/new', {}));
-    show(await api('workspace/edit', { id: current.chat.id, revision: current.revision, edits }));
+    const result = await api('workspace/edit', { id: current.chat.id, revision: current.revision, edits });
+    show(result);
     await refresh();
+    return result;
   }
-  $('file-save').addEventListener('click', () => run(async () => {
-    await saveFiles([{ path: filePath, content: $('file-source').value, reason: 'Edited directly' }]);
+  async function saveOpenFile() {
+    const saved = await saveFiles([{ path: filePath, content: $('file-source').value, expectedSha: fileOriginalSha, reason: 'Edited directly' }]);
+    fileOriginalSha = saved.edited.find(file => file.path === filePath).sha;
     fileOriginal = $('file-source').value; $('file-state').textContent = 'File changes saved privately.';
-  }));
+  }
+  $('file-save').addEventListener('click', () => run(saveOpenFile));
+  $('file-source').addEventListener('input', () => { $('file-state').textContent = fileDirty() ? 'Unsaved source changes.' : 'No unsaved source changes.'; availability(); });
   $('file-delete').addEventListener('click', () => run(async () => {
     if (!confirm(`Propose deleting ${filePath}? Nothing is deleted publicly until you publish.`)) return;
-    await saveFiles([{ path: filePath, content: null, reason: 'Deleted in the file editor' }]);
-    filePath = null; fileOriginal = ''; $('file-source').value = ''; $('workspace-file-panel').hidden = true; availability();
+    await saveFiles([{ path: filePath, content: null, expectedSha: fileOriginalSha, reason: 'Deleted in the file editor' }]);
+    resetFile(); await activate(); view.project(true); availability();
   }));
   $('file-rename').addEventListener('click', () => run(async () => {
     const destination = prompt('New project path (including the filename)', filePath); if (!destination || destination === filePath) return;
     const existing = await api('workspace/file', { id: current?.chat.id, path: destination });
     if (existing.exists) throw new Error('That destination already exists. Choose another path.');
-    await saveFiles([{ path: destination, content: fileBinary ? binaryContent : $('file-source').value, encoding: fileBinary ? 'base64' : 'utf8', reason: `Moved from ${filePath}` }, { path: filePath, content: null, reason: `Moved to ${destination}` }]);
+    const saved = await saveFiles([{ path: destination, expectedSha: null, content: fileBinary ? binaryContent : $('file-source').value, encoding: fileBinary ? 'base64' : 'utf8', reason: `Moved from ${filePath}` }, { path: filePath, expectedSha: fileOriginalSha, content: null, reason: `Moved to ${destination}` }]);
     filePath = destination; fileOriginal = $('file-source').value; $('file-path').value = destination;
+    fileOriginalSha = saved.edited.find(file => file.path === destination).sha; $('file-heading').textContent = destination.split('/').pop();
   }));
-  $('workspace-new-file').addEventListener('click', () => run(async () => {
-    const path = prompt('New file path within the website project', 'new-page.html'); if (path) await openFile(path);
-  }));
-  $('workspace-upload-button').addEventListener('click', () => $('workspace-upload').click());
-  $('workspace-upload').addEventListener('change', event => { const file = event.target.files[0]; if (!file) return; run(async () => {
-    if (file.size > 1024 * 1024) throw new Error('This upload supports files up to 1 MB. Existing larger files remain in the repository.');
-    const path = prompt('Save this file at which project path?', `assets/${file.type.startsWith('image/') ? 'images' : 'files'}/${file.name}`); if (!path) return;
-    const existing = await api('workspace/file', { id: current?.chat.id, path });
-    if (existing.exists && !confirm(`Replace ${path} in the private working changes?`)) return;
-    await saveFiles([{ path, content: await base64(file), encoding: 'base64', reason: 'Uploaded in the online workspace' }]);
-    await openFile(path); event.target.value = '';
-  }); });
+  const fileActions = createFileActions({ lookup: path => api('workspace/file', { id: current?.chat.id, path }), openFile,
+    saveUpload: async edit => {
+      if (!leaveFile() || !(await leaveDraft())) return false;
+      if (running()) throw new Error('Wait for the current response to finish before uploading.');
+      await saveFiles([edit]); resetFile(); await openFile(edit.path); return true;
+    }
+  });
+  $('workspace-new-file').addEventListener('click', () => fileActions.open('new'));
+  $('workspace-upload-button').addEventListener('click', () => fileActions.open('upload'));
+  $('file-replace').addEventListener('click', () => fileActions.open('replace', filePath));
+  $('file-review').addEventListener('click', () => run(async () => { if (fileDirty()) await saveOpenFile(); await reviewChanges(); }, 'Preparing file review…'));
+  $('file-browse').addEventListener('click', () => view.project(true));
   window.addEventListener('beforeunload', event => { if (inFlight || $('chat-prompt').value.trim() || filePath && !fileBinary && $('file-source').value !== fileOriginal) { event.preventDefault(); event.returnValue = ''; } });
   show(null);
-  return { activate, hide, refresh, availability, openFile, isActive: () => active };
+  return { activate, hide, refresh, availability, openFile, leaveFile, isActive: () => active };
 }
