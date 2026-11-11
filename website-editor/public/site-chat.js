@@ -1,12 +1,14 @@
 import { markdown } from './markdown.js';
 import { readEvents } from './event-stream.js';
 import { ChatOutput } from './chat-output.js';
+import { createChatView } from './chat-view.js';
 
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 const base64 = file => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Could not read the file.')); reader.readAsDataURL(file); });
 
 export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPublished, onWorkingFiles }) {
+  const view = createChatView();
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
   const running = () => current?.chat.run && !['completed', 'failed', 'cancelled'].includes(current.chat.run.status);
@@ -15,10 +17,12 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   function resetFile() { filePath = null; fileBinary = false; binaryContent = null; fileOriginal = ''; $('workspace-file-panel').hidden = true; }
   function availability() {
     $('chat-send').disabled = !aiAvailable() || inFlight || Boolean(running());
-    for (const id of ['chat-new', 'chat-history', 'workspace-new-file', 'workspace-upload-button']) $(id).disabled = inFlight;
+    for (const id of ['chat-new', 'workspace-new-file', 'workspace-upload-button']) $(id).disabled = inFlight;
+    for (const button of $('chat-history').querySelectorAll('button')) button.disabled = inFlight;
     $('chat-review').disabled = !current?.chat.changes.length || Boolean(running());
     $('chat-discard').disabled = !current?.chat.changes.length || Boolean(running());
     $('chat-stop').hidden = !running();
+    $('chat-send').hidden = Boolean(running());
     for (const id of ['file-save', 'file-delete', 'file-rename']) $(id).disabled = !filePath || inFlight || Boolean(running());
     $('file-save').disabled ||= fileBinary;
     $('file-rename').disabled ||= fileBinary && !binaryContent;
@@ -26,21 +30,26 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   }
   async function refresh() {
     const result = await api('chats');
-    const select = $('chat-history'); select.replaceChildren();
-    const placeholder = node('option', 'Open a saved conversation…'); placeholder.value = ''; select.append(placeholder);
+    const history = $('chat-history'); history.replaceChildren();
     for (const entry of result.chats) {
-      const option = node('option', `${entry.title}${entry.changes ? ` · ${entry.changes} pending` : ''}`); option.value = entry.id; select.append(option);
+      const button = node('button', entry.title); button.dataset.chatId = entry.id; button.title = entry.title;
+      button.setAttribute('aria-current', String(entry.id === current?.chat.id));
+      button.disabled = inFlight;
+      button.addEventListener('click', () => run(() => openConversation(entry.id)));
+      history.append(button);
     }
-    select.value = current?.chat.id || '';
+    if (!result.chats.length) history.append(node('p', 'Your conversations will appear here.', 'small'));
   }
   function show(result) {
+    const follow = view.nearBottom() || result?.chat.id !== current?.chat.id;
     if (current?.chat.id && result?.chat.id !== current.chat.id || running() && ['completed', 'failed', 'cancelled'].includes(result?.chat.run?.status)) resetFile();
     current = result; review = null;
     const chat = result?.chat;
     const key = chat?.run?.key || null;
     if (key !== outputKey || !running()) { stopStream(); output = new ChatOutput(); outputKey = key; }
     if (running()) output.snapshot(result.liveMessages);
-    $('chat-title').textContent = chat?.messages.length ? chat.title : 'What would you like to change?';
+    $('chat-title').textContent = chat?.messages.length ? chat.title : 'Website chat';
+    for (const button of $('chat-history').querySelectorAll('button')) button.setAttribute('aria-current', String(button.dataset.chatId === chat?.id));
     $('chat-empty').hidden = Boolean(chat?.messages.length);
     renderMessages();
     renderLive();
@@ -52,14 +61,17 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     }));
     $('chat-pending').hidden = !changes.length;
     $('chat-count').textContent = `${changes.length} proposed file ${changes.length === 1 ? 'change' : 'changes'}`;
-    $('chat-status').textContent = result?.cleanupWarning || (running() ? (result.outputWarning || result.activity || 'Connecting to the assistant…') : chat?.run?.error || (chat ? 'Saved. You can keep chatting.' : 'Ask a question or describe what you would like to change.'));
+    $('chat-changes-open').hidden = !changes.length;
+    $('chat-changes-open').textContent = `${changes.length} proposed ${changes.length === 1 ? 'change' : 'changes'} · Review`;
+    $('chat-status').textContent = result?.cleanupWarning || (running() ? (result.outputWarning || result.activity || 'Waiting for the assistant…') : '');
+    $('chat-status').dataset.working = String(Boolean(running()));
     const failure = chat?.run?.failure || (chat?.run?.error ? { message: chat.run.error, sessionId: chat.run.sessionId, status: chat.run.status } : null);
     $('chat-error-details').hidden = !failure;
     $('chat-error-data').textContent = failure ? JSON.stringify(failure, null, 2) : '';
     $('workspace-preview-panel').hidden = !chat?.preview;
     $('workspace-preview-pages').replaceChildren(...(chat?.preview?.pages || []).map(page => { const option = node('option', page.title || page.path); option.value = page.path; return option; }));
     if (chat?.preview) showPreview();
-    availability(); schedulePoll(); connectStream();
+    availability(); schedulePoll(); connectStream(); view.follow(follow);
   }
   function renderMessages() {
     const messages = [...(current?.chat.messages || [])];
@@ -73,13 +85,19 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
       item.append(node('p', { user: 'You', assistant: 'Website assistant', system: 'Update' }[message.role], 'eyebrow'));
       const content = node('div', undefined, 'chat-message-body');
       if (message.role === 'assistant') markdown(content, message.content);
-      else content.append(node('p', message.content));
+      else if (message.role === 'system' && message.content === current?.chat.run?.error) {
+        content.append(node('p', current.chat.run.status === 'cancelled' ? 'Response stopped. Your saved changes are still available.' : 'The assistant couldn’t complete this response. Your conversation and earlier changes are saved.'));
+        const details = node('button', 'View error details', 'quiet');
+        details.addEventListener('click', () => { $('chat-details').open = true; $('chat-error-details').open = true; $('chat-check').focus(); });
+        content.append(details);
+      } else content.append(node('p', message.content));
       item.append(content);
       if (message.attachment) item.append(node('p', 'Reference PDF was supplied for this message only.', 'small'));
       $('chat-messages').append(item);
     }
   }
   function renderLive() {
+    const follow = view.nearBottom();
     const container = $('chat-live'), messages = output.messages();
     const keep = new Set(messages.map(message => message.id));
     for (const child of [...container.children]) if (!keep.has(child.dataset.message)) child.remove();
@@ -92,6 +110,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
       if (container.children[index] !== row) container.insertBefore(row, container.children[index] || null);
       if (row.lastElementChild.textContent !== message.content) row.lastElementChild.textContent = message.content;
     }
+    view.follow(follow);
   }
   function stopStream() { clearTimeout(streamTimer); streamTimer = null; streamAbort?.abort(); streamAbort = null; }
   async function connectStream() {
@@ -132,10 +151,11 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   async function activate() {
     if (!(await leaveDraft())) return false;
     active = true; $('site-chat').hidden = false; $('document').hidden = true; $('welcome').hidden = true;
+    $('app').classList.add('chat-mode'); view.conversations(false);
     $('site-chat-nav').setAttribute('aria-pressed', 'true');
-    await refresh(); availability(); schedulePoll(); connectStream(); return true;
+    await refresh(); availability(); schedulePoll(); connectStream(); view.resize(); return true;
   }
-  function hide() { active = false; clearTimeout(timer); stopStream(); $('site-chat').hidden = true; $('site-chat-nav').setAttribute('aria-pressed', 'false'); }
+  function hide() { active = false; clearTimeout(timer); stopStream(); $('site-chat').hidden = true; $('site-chat-nav').setAttribute('aria-pressed', 'false'); $('app').classList.remove('chat-mode'); view.project(false, false); }
   async function send() {
     if (inFlight || running()) return;
     const prompt = $('chat-prompt').value.trim();
@@ -145,9 +165,10 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     const started = Date.now();
     inFlight = true; sending = { prompt, started };
     $('chat-prompt').value = ''; $('notice').hidden = true;
+    view.resize();
     renderMessages(); availability();
     $('chat-status').textContent = 'Sending your message…';
-    $('chat-messages').lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    view.jump();
     try {
       if (file) attachment = { base64: await base64(file) };
       if (fileDirty()) { await saveFiles([{ path: filePath, content: $('file-source').value, reason: 'Saved before the chat request' }]); fileOriginal = $('file-source').value; }
@@ -155,6 +176,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
       const result = await api('chat/send', { id: current.chat.id, revision: current.revision, prompt, attachment });
       sending = null; show(result);
       if ($('chat-reference').files[0] === file) $('chat-reference').value = '';
+      view.attachment();
       await refresh();
     } catch (error) {
       // A request can reach the server even when its response is lost. Reload
@@ -164,7 +186,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
       if (!accepted && !$('chat-prompt').value) $('chat-prompt').value = prompt;
       notice(error.message, true);
     }
-    finally { inFlight = false; sending = null; renderMessages(); availability(); $('chat-prompt').focus(); }
+    finally { inFlight = false; sending = null; renderMessages(); availability(); view.resize(); $('chat-prompt').focus(); }
   }
   function renderChange(change) {
     const section = node('section', undefined, 'chat-change');
@@ -190,14 +212,16 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   $('chat-new').addEventListener('click', () => run(async () => {
     if (!leaveFile()) return;
     if ($('chat-prompt').value.trim() && !confirm('Discard the unsent message and start a new chat? Saved conversations are kept.')) return;
-    show(null); $('chat-history').value = ''; $('chat-prompt').value = ''; $('chat-reference').value = ''; $('chat-prompt').focus();
+    if (!(await activate())) return;
+    show(null); $('chat-prompt').value = ''; $('chat-reference').value = ''; view.attachment(); view.resize(); $('chat-prompt').focus();
   }));
-  $('chat-history').addEventListener('change', () => run(async () => {
-    const id = $('chat-history').value; if (!id) return;
-    if (!leaveFile()) { $('chat-history').value = current?.chat.id || ''; return; }
-    if ($('chat-prompt').value.trim() && !confirm('Discard the unsent message and open this saved conversation?')) { $('chat-history').value = current?.chat.id || ''; return; }
+  async function openConversation(id) {
+    if (!leaveFile()) return;
+    if ($('chat-prompt').value.trim() && !confirm('Discard the unsent message and open this saved conversation?')) return;
+    if (!(await activate())) return;
     show(await api(`chat?id=${encodeURIComponent(id)}`)); $('chat-prompt').value = ''; $('chat-reference').value = '';
-  }));
+    view.attachment(); view.resize(); view.jump();
+  }
   $('chat-form').addEventListener('submit', event => { event.preventDefault(); send(); });
   $('chat-stop').addEventListener('click', () => run(async () => { show(await api('chat/stop', { id: current.chat.id })); $('chat-status').textContent = 'Stopping the cloud task…'; }));
   $('chat-check').addEventListener('click', checkProgress);
@@ -207,7 +231,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     if (document.hidden) { clearTimeout(timer); stopStream(); }
     else if (active) { connectStream(); if (running()) checkProgress(); }
   });
-  document.querySelectorAll('[data-chat-example]').forEach(button => button.addEventListener('click', () => { $('chat-prompt').value = button.dataset.chatExample; $('chat-prompt').focus(); }));
+  document.querySelectorAll('[data-chat-example]').forEach(button => button.addEventListener('click', () => { $('chat-prompt').value = button.dataset.chatExample; view.resize(); $('chat-prompt').focus(); }));
   $('chat-review').addEventListener('click', () => run(async () => {
     review = await api('chat/review', { id: current.chat.id, revision: current.revision });
     $('chat-review-content').replaceChildren(...review.changes.map(renderChange));
@@ -235,6 +259,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     $('file-source').hidden = Boolean(file.binary); $('file-binary').hidden = !file.binary;
     if (file.binary) { $('file-binary-link').href = file.url || `data:application/octet-stream;base64,${file.base64}`; $('file-binary-link').download = path.split('/').pop(); }
     $('file-state').textContent = file.deleted ? 'Pending deletion. Save to restore it.' : 'Changes are private until you publish the workspace.';
+    view.project(true); $('workspace-file-panel').scrollIntoView({ block: 'start' });
     availability();
   }
   async function saveFiles(edits) {
