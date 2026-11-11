@@ -55,7 +55,7 @@ export class GitHub {
       if (file.content !== null) sha = (await this.request(`${this.repo(repo)}/git/blobs`, 'POST', {
         content: Buffer.isBuffer(file.content) ? file.content.toString('base64') : Buffer.from(file.content).toString('base64'), encoding: 'base64'
       })).sha;
-      tree.push({ path: file.path, mode: '100644', type: 'blob', sha });
+      tree.push({ path: file.path, mode: file.mode === '100755' ? '100755' : '100644', type: 'blob', sha });
     }
     const created = await this.request(`${this.repo(repo)}/git/trees`, 'POST', { base_tree: parent.tree.sha, tree });
     const commit = await this.request(`${this.repo(repo)}/git/commits`, 'POST', { message, tree: created.sha, parents: [head] });

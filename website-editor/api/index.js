@@ -5,6 +5,8 @@ import { schemas, kindForPath } from '../public/schema.js';
 import { parseSource, validateDocument } from '../lib/content.js';
 import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
+import { createChat, loadChat, saveChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
+import { startWorkspace, pollWorkspace, cancelWorkspace } from '../lib/hosted-agent.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
 function redirect(location, values = []) {
@@ -51,7 +53,7 @@ export async function handle(request) {
       const user = await github.request('/user');
       if (String(user.id) !== config.ownerId) throw new HttpError(403, 'This account cannot use the editor.');
       await github.privateRepo();
-      return json({ login: user.login, csrf: current.csrf, ai: Boolean(config.apiKey), model: config.model, dailyLimit: config.daily, schemas });
+      return json({ login: user.login, csrf: current.csrf, ai: Boolean(config.apiKey), model: config.model, agentModel: config.agentModel, dailyLimit: config.daily, schemas });
     }
     if (request.method === 'POST') requireMutation(request, current, config);
     else if (request.method !== 'GET') throw new HttpError(405, 'Unsupported method.');
@@ -61,6 +63,21 @@ export async function handle(request) {
     // Fail closed if private storage is ever made public.
     await github.privateRepo();
     if (request.method === 'GET') {
+      if (route === 'workspace/tree') {
+        const tree = await github.tree(SITE, await github.head(SITE));
+        return json({ files: tree.entries.filter(item => item.type === 'blob' && ['100644', '100755'].includes(item.mode) && sitePath(item.path)).map(({ path, size }) => ({ path, size })) });
+      }
+      if (route === 'workspace/preview') {
+        const { chat } = await loadChat(github, validId(url.searchParams.get('id')));
+        if (!chat.preview) throw new HttpError(404, 'Build a preview in the chat first.');
+        const bundle = await github.readJson(config.drafts, `chats/previews/${chat.id}.json`);
+        const page = bundle?.pages?.find(item => item.path === url.searchParams.get('path'));
+        if (!page) throw new HttpError(404, 'Preview page not found.');
+        return new Response(page.html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow',
+          'Content-Security-Policy': "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https://nateoconnell.com; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" } });
+      }
+      if (route === 'chats') return json(await github.readJson(config.drafts, 'chats/index.json', 'main', { chats: [] }));
+      if (route === 'chat') return json(await loadChat(github, validId(url.searchParams.get('id'))));
       if (route === 'library') {
         const tree = await github.tree(SITE, await github.head(SITE));
         return json({ files: tree.entries.filter(item => item.type === 'blob' && item.mode === '100644' && kindForPath(item.path)).map(item => ({ path: item.path, kind: kindForPath(item.path) })) });
@@ -77,6 +94,65 @@ export async function handle(request) {
       throw new HttpError(404, 'Unknown editor action.');
     }
     const data = await readJson(request);
+    if (route === 'chat/new') return json(await createChat(github));
+    if (route === 'chat/send') return json(await startWorkspace(github, config, data));
+    if (route === 'chat/poll') return json(await pollWorkspace(github, config, validId(data.id)));
+    if (route === 'chat/stop') return json(await cancelWorkspace(github, config, validId(data.id)));
+    if (route === 'workspace/file') {
+      if (!sitePath(data.path)) throw new HttpError(403, 'This path is outside the website project.');
+      const saved = data.id ? await loadChat(github, validId(data.id)) : null;
+      const pending = saved?.chat.changes.find(file => file.path === data.path);
+      if (pending) return json({ path: data.path, exists: pending.after !== null, content: pending.after, binary: pending.encoding === 'base64', deleted: pending.after === null, base64: pending.encoding === 'base64' ? pending.after : undefined });
+      let file;
+      try { file = await github.read(SITE, data.path, 'main', true); }
+      catch (error) { if (error.status !== 413) throw error; return json({ path: data.path, exists: true, binary: true, url: `https://github.com/${SITE}/blob/main/${data.path.split('/').map(encodeURIComponent).join('/')}` }); }
+      if (!file) return json({ path: data.path, exists: false, content: '' });
+      const content = file.buffer.toString('utf8');
+      if (file.buffer.includes(0) || !Buffer.from(content).equals(file.buffer)) return json({ path: data.path, exists: true, binary: true, base64: file.buffer.length <= 1024 * 1024 ? file.buffer.toString('base64') : null, url: `https://github.com/${SITE}/blob/main/${data.path.split('/').map(encodeURIComponent).join('/')}` });
+      return json({ path: data.path, exists: true, content });
+    }
+    if (route === 'workspace/edit') {
+      const { chat, revision } = await loadChat(github, validId(data.id));
+      if (revision !== data.revision) throw new HttpError(409, 'This workspace changed. Reopen it before saving.');
+      if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop or finish the active cloud task before editing files directly.');
+      const snapshot = await websiteSnapshot(github, chat.changes);
+      chat.changes = applySiteProposal(chat.changes, { message: 'Manual file edit', edits: data.edits }, snapshot);
+      chat.preview = null;
+      chat.messages.push({ role: 'system', content: `You edited ${data.edits.map(file => file.path).join(', ')} directly in the workspace.` });
+      return json(await saveChat(github, chat, revision));
+    }
+    if (route === 'chat/discard') {
+      const { chat, revision } = await loadChat(github, data.id);
+      if (revision !== data.revision) throw new HttpError(409, 'This conversation changed. Reopen it first.');
+      if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop the running cloud task before discarding changes.');
+      chat.changes = [];
+      chat.preview = null;
+      chat.messages.push({ role: 'system', content: 'The user discarded all pending changes. Continue from the current public website.' });
+      return json(await saveChat(github, chat, revision));
+    }
+    if (route === 'chat/review') {
+      const { chat, revision } = await loadChat(github, data.id);
+      if (revision !== data.revision) throw new HttpError(409, 'This conversation changed. Reopen it before reviewing.');
+      if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Wait for the cloud task to finish before publishing.');
+      const plan = await prepareChatPublish(github, chat);
+      return json({ changes: plan.changes, receipt: seal({ id: chat.id, revision, head: plan.head, hash: plan.hash }, 'site-chat-review', config, 600) });
+    }
+    if (route === 'chat/publish') {
+      const receipt = unseal(data.receipt, 'site-chat-review', config);
+      if (!receipt || receipt.id !== data.id) throw new HttpError(409, 'Review the site changes before publishing.');
+      const { chat, revision } = await loadChat(github, data.id);
+      if (revision !== receipt.revision) throw new HttpError(409, 'The conversation changed after review. Review again.');
+      const plan = await prepareChatPublish(github, chat);
+      if (plan.head !== receipt.head || plan.hash !== receipt.hash) throw new HttpError(409, 'The website changed after review. Review again before publishing.');
+      const commit = await github.commit(SITE, plan.head, plan.files, `Site chat: ${chat.title.replace(/[\r\n]/g, ' ').slice(0, 100)}`);
+      chat.changes = [];
+      chat.messages.push({ role: 'system', content: `The user published the reviewed changes in commit ${commit}. GitHub Pages deployment has not been verified.` });
+      let saved = null, warning = '';
+      try { saved = await saveChat(github, chat, revision); } catch { warning = 'The website commit succeeded, but the conversation could not be updated. Start a new chat before making another edit.'; }
+      let buildRequested = false;
+      try { await github.request(`${github.repo(SITE)}/pages/builds`, 'POST'); buildRequested = true; } catch { warning += ' Check GitHub Pages for deployment status; the build request was not confirmed.'; }
+      return json({ commit, commitUrl: `https://github.com/${SITE}/commit/${commit}`, siteUrl: SITE_URL, buildRequested, warning, saved });
+    }
     if (route === 'open') return json(await openDraft(github, data));
     if (route === 'save') return json(await updateDraft(github, data));
     if (route === 'upload') return json(await addImage(github, data));

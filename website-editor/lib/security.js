@@ -29,7 +29,7 @@ export function configuration(env = process.env) {
   if (!Number.isInteger(daily) || daily < 1 || daily > 100) throw new HttpError(503, 'Daily AI request limit must be between 1 and 100.');
   return { origin: origin.origin, clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET,
     ownerId: env.ALLOWED_GITHUB_USER_ID, secret: env.SESSION_SECRET, drafts: env.DRAFT_REPOSITORY,
-    apiKey: env.OPENAI_API_KEY || '', model: env.OPENAI_MODEL || 'gpt-5.4-mini', daily };
+    apiKey: env.OPENAI_API_KEY || '', model: env.OPENAI_MODEL || 'gpt-5.4-mini', agentModel: env.OPENAI_AGENT_MODEL || 'gpt-6-astra', daily };
 }
 export function seal(payload, purpose, config, ttl = 3600) {
   const iv = randomBytes(12);

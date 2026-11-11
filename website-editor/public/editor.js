@@ -1,8 +1,9 @@
 import { schemas } from './schema.js';
 import { markdown, linkTarget } from './markdown.js';
+import { createSiteChat } from './site-chat.js';
 
 const $ = id => document.getElementById(id);
-const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'drafts', drafts: [], files: [], proposal: null, review: null, images: new Map() };
+const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'files', drafts: [], files: [], projectFiles: [], pendingFiles: [], proposal: null, review: null, images: new Map() };
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 function notice(message, error = false, link) {
   const node = $('notice'); node.replaceChildren(document.createTextNode(message)); node.classList.toggle('error', error); node.hidden = false;
@@ -25,7 +26,7 @@ async function run(action, message = 'Working…') {
   try { await action(); } catch (error) { notice(error.message, true); }
   finally {
     state.busy = false; disabled.forEach(([node, previous]) => { if (node.isConnected) node.disabled = previous; });
-    $('ask').disabled = !state.auth?.ai; updateSaveState();
+    $('ask').disabled = !state.auth?.ai; siteChat.availability(); updateSaveState();
   }
 }
 function updateSaveState() {
@@ -34,16 +35,42 @@ function updateSaveState() {
 }
 function dirty() { state.dirty = true; state.review = null; updateSaveState(); }
 async function refreshLists() {
-  const [drafts, files] = await Promise.all([api('drafts'), api('library')]);
-  state.drafts = drafts.drafts; state.files = files.files; renderList();
+  const [drafts, files, project] = await Promise.all([api('drafts'), api('library'), api('workspace/tree')]);
+  state.drafts = drafts.drafts; state.files = files.files; state.projectFiles = project.files; renderList();
 }
 function renderList() {
   const container = $('file-list'); container.replaceChildren();
   const query = $('filter').value.toLocaleLowerCase();
+  if (state.list === 'files') {
+    const root = { folders: new Map(), files: [] };
+    const workingFiles = new Map(state.projectFiles.map(item => [item.path, item]));
+    for (const change of state.pendingFiles) workingFiles.set(change.path, { path: change.path, pending: true, deleted: change.after === null });
+    for (const item of workingFiles.values()) {
+      if (!item.path.toLocaleLowerCase().includes(query)) continue;
+      let branch = root; const pieces = item.path.split('/');
+      for (const folder of pieces.slice(0, -1)) { if (!branch.folders.has(folder)) branch.folders.set(folder, { folders: new Map(), files: [] }); branch = branch.folders.get(folder); }
+      branch.files.push(item);
+    }
+    const labels = { _pages: 'Pages', _posts: 'Blog posts', _research: 'Research', _talks: 'Talks', _layouts: 'Page layouts', _includes: 'Shared components', _data: 'Site data', assets: 'Images, styles & scripts', 'website-editor': 'Editor application', '.github': 'GitHub configuration' };
+    function draw(branch, parent, depth = 0) {
+      for (const [name, child] of [...branch.folders].sort(([a], [b]) => a.localeCompare(b))) {
+        const details = element('details', undefined, 'project-folder'); details.open = Boolean(query) || depth === 0 && ['_pages', '_research'].includes(name);
+        details.append(element('summary', labels[name] || name)); draw(child, details, depth + 1); parent.append(details);
+      }
+      for (const item of branch.files.sort((a, b) => a.path.localeCompare(b.path))) {
+        const button = element('button', item.path.split('/').pop() + (item.deleted ? ' (delete)' : item.pending ? ' •' : '')); button.title = item.path;
+        button.addEventListener('click', () => run(() => siteChat.openFile(item.path), 'Opening project file…')); parent.append(button);
+      }
+    }
+    draw(root, container); return;
+  }
   const items = state.list === 'drafts' ? state.drafts : state.files;
-  for (const item of items) {
+  let lastGroup = null;
+  const ordered = state.list === 'content' ? [...items].sort((a, b) => (a.kind || '').localeCompare(b.kind || '') || a.path.localeCompare(b.path)) : items;
+  for (const item of ordered) {
     const title = item.title || (schemas[item.kind].path ? schemas[item.kind].label : item.path.split('/').pop().replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '').replaceAll('-', ' '));
     if (!`${title} ${item.path}`.toLocaleLowerCase().includes(query)) continue;
+    if (state.list === 'content' && item.kind !== lastGroup) { container.append(element('h3', schemas[item.kind].label, 'content-group')); lastGroup = item.kind; }
     const button = element('button', title);
     button.classList.toggle('active', item.id === state.draft?.id);
     button.append(element('span', state.list === 'drafts' ? `Private draft · ${new Date(item.updated).toLocaleDateString()}` : schemas[item.kind].label));
@@ -62,6 +89,7 @@ async function leaveDraft() {
   await save(); return true;
 }
 function showDraft(result) {
+  siteChat.hide();
   state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.proposal = null; state.review = null; state.images.clear();
   $('welcome').hidden = true; $('document').hidden = false; $('suggestion').hidden = true;
   $('prompt').value = ''; $('reference').value = ''; $('ai-status').textContent = '';
@@ -203,6 +231,7 @@ async function publish() {
   await refreshLists();
 }
 
+const siteChat = createSiteChat({ api, run, notice, leaveDraft, aiAvailable: () => Boolean(state.auth?.ai), onPublished: refreshLists, onWorkingFiles: changes => { state.pendingFiles = changes; renderList(); } });
 $('body').addEventListener('input', () => { state.draft.document.body = $('body').value; dirty(); });
 $('save').addEventListener('click', () => run(save, 'Saving privately…'));
 $('review').addEventListener('click', () => run(review, 'Preparing review…'));
@@ -216,7 +245,7 @@ $('discard').addEventListener('click', clearProposal);
 $('write-tab').addEventListener('click', () => setView('write'));
 $('preview-tab').addEventListener('click', () => setView('preview'));
 $('filter').addEventListener('input', renderList);
-for (const tab of ['drafts','content']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; $('drafts-tab').setAttribute('aria-pressed', String(tab === 'drafts')); $('content-tab').setAttribute('aria-pressed', String(tab === 'content')); renderList(); });
+for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
 function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; $('new-dialog').showModal(); }
 $('new').addEventListener('click', newDialog); $('start-post').addEventListener('click', () => { $('new-kind').value = 'post'; newDialog(); });
 $('new-title').addEventListener('input', () => { $('new-slug').value = $('new-title').value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); });
@@ -258,6 +287,7 @@ async function initialize() {
     $('ask').disabled = !state.auth.ai;
     if (!state.auth.ai) notice('The editor is connected. Add an OpenAI key in hosting settings to enable GPT; manual editing is available.');
     await refreshLists();
+    await siteChat.activate();
   } catch (error) { if (error.status !== 401) notice(error.message, true); }
 }
 initialize();
