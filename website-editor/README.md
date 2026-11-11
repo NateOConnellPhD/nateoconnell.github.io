@@ -104,6 +104,8 @@ For an authentication rejection, run `node scripts/check-agent.mjs --auth-only` 
 
 The default has no sandbox. If that succeeds, `--hosted` checks an empty hosted sandbox without this website's package installs, assets, or preparation script; that check also incurs sandbox usage. A successful probe establishes only that specific path, not that the editor works. A failed cleanup is reported with the session ID; do not ignore it. Keep the API key out of chat and shell history.
 
+If even the no-sandbox turn fails, `--responses` makes one direct Responses API request with the same model and key. It requests only the word `connected`, uses low reasoning effort with a 1,024-token output limit, and sets `store:false`. It creates no Agents session or sandbox, uploads no files, and does not retry automatically. This is a billed model call. A successful reply establishes direct inference access; it does not validate the editor or prove a permanent Agents outage. `--auth-only` always takes precedence over the model-check flags.
+
 ## API references
 
 - [OpenAI Agents sessions](https://developers.openai.com/api/docs/guides/agents-api/sessions), [hosted environments](https://developers.openai.com/api/docs/guides/agents-api/environments/openai-hosted), and [files/artifacts](https://developers.openai.com/api/docs/guides/agents-api/environments/files)

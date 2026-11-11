@@ -10,6 +10,7 @@ if (!key) {
 }
 const hosted = process.argv.includes('--hosted');
 const authOnly = process.argv.includes('--auth-only');
+const responsesOnly = process.argv.includes('--responses');
 const model = process.env.OPENAI_AGENT_MODEL || 'gpt-6-astra';
 const root = 'https://api.openai.com/v1/agents';
 const requestId = randomUUID(), deadline = AbortSignal.timeout(90000);
@@ -19,7 +20,7 @@ const log = value => console.log(safe(typeof value === 'string' ? value : JSON.s
 const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
 let sessionId, stream, settled = false, sawFailure = false, creationAttempted = false, creationRejected = false;
 async function request(path, method = 'GET', body, signal = deadline, apiRoot = root) {
-  const requestHeaders = apiRoot === root ? headers : { Authorization: headers.Authorization };
+  const requestHeaders = apiRoot === root ? headers : { Authorization: headers.Authorization, 'Content-Type': 'application/json' };
   const response = await fetch(apiRoot + path, { method, headers: requestHeaders, redirect: 'error', signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   log({ operation: `${method} ${new URL(apiRoot + path).pathname}`, status: response.status, requestId: response.headers.get('x-request-id') });
   if (!response.ok) {
@@ -77,8 +78,23 @@ async function checkModel() {
   }
   if (!settled) throw new Error('The stream ended without a final outcome.');
 }
+async function checkDirectResponse() {
+  log({ mode: 'direct Responses API comparison', model, modelRequests: 1, timeoutSeconds: 90 });
+  const response = await request('/responses', 'POST', {
+    model, input: 'Reply with exactly the word connected.', store: false,
+    max_output_tokens: 1024, reasoning: { effort: 'low' }
+  }, deadline, 'https://api.openai.com/v1');
+  const result = await response.json();
+  const reply = (result.output || []).filter(item => item.type === 'message' && item.role === 'assistant')
+    .flatMap(item => item.content || []).filter(part => part.type === 'output_text').map(part => part.text).join('');
+  process.exitCode = result.status === 'completed' && reply.trim() ? 0 : 1;
+  log({ outcome: process.exitCode ? 'failed' : 'completed', responseStatus: result.status, responseId: result.id,
+    reply: reply || undefined, error: result.error || undefined, incompleteDetails: result.incomplete_details || undefined });
+}
 try {
-  await (authOnly ? checkAuthentication() : checkModel());
+  if (authOnly) await checkAuthentication();
+  else if (responsesOnly) await checkDirectResponse();
+  else await checkModel();
 } catch (error) {
   process.exitCode = 1;
   creationRejected = creationAttempted && !sessionId && [400, 401, 403].includes(error.status);

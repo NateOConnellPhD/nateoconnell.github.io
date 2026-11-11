@@ -76,7 +76,7 @@ for (const statuses of [[200, 200], [200, 401], [403, 200]]) {
     try {
       process.env.OPENAI_API_KEY = 'sk-test-secret';
       // Auth-only must remain read-only even if --hosted is also supplied.
-      process.argv = ['node', 'check-agent.mjs', '--auth-only', '--hosted'];
+      process.argv = ['node', 'check-agent.mjs', '--auth-only', '--hosted', '--responses'];
       console.log = value => logs.push(value);
       globalThis.fetch = async (url, options) => {
         calls.push(url);
@@ -99,6 +99,49 @@ for (const statuses of [[200, 200], [200, 401], [403, 200]]) {
     } finally {
       globalThis.fetch = original.fetch; console.log = original.log; process.exitCode = original.exitCode; process.argv = original.argv;
       if (original.key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = original.key;
+    }
+  });
+}
+
+for (const scenario of ['completed', 'forbidden', 'incomplete']) {
+  test(`direct Responses comparison: ${scenario}`, async () => {
+    const original = { fetch, log: console.log, key: process.env.OPENAI_API_KEY, model: process.env.OPENAI_AGENT_MODEL, exitCode: process.exitCode, argv: process.argv };
+    const logs = [], calls = [];
+    try {
+      process.env.OPENAI_API_KEY = 'sk-test-secret';
+      process.env.OPENAI_AGENT_MODEL = 'gpt-6-astra';
+      process.argv = ['node', 'check-agent.mjs', '--responses'];
+      console.log = value => logs.push(value);
+      globalThis.fetch = async (url, options) => {
+        calls.push(url);
+        assert.equal(url, 'https://api.openai.com/v1/responses');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.redirect, 'error');
+        assert.equal(options.headers.Authorization, 'Bearer sk-test-secret');
+        assert.equal(options.headers['Content-Type'], 'application/json');
+        assert.equal(options.headers['OpenAI-Beta'], undefined);
+        assert.deepEqual(JSON.parse(options.body), {
+          model: 'gpt-6-astra', input: 'Reply with exactly the word connected.', store: false,
+          max_output_tokens: 1024, reasoning: { effort: 'low' }
+        });
+        if (scenario === 'forbidden') return Response.json({ error: { code: 'forbidden', message: 'Denied sk-test-secret' } }, { status: 403, headers: { 'x-request-id': 'req_responses' } });
+        return Response.json({ id: 'resp_probe', status: scenario, output: scenario === 'completed'
+          ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'connected' }] }]
+          : [], incomplete_details: scenario === 'incomplete' ? { reason: 'max_output_tokens' } : null }, { headers: { 'x-request-id': 'req_responses' } });
+      };
+      await import(`../scripts/check-agent.mjs?responses=${scenario}`);
+      assert.equal(calls.length, 1, 'No retry, Agents request, or workspace creation is allowed in this mode.');
+      assert.equal(process.exitCode, scenario === 'completed' ? 0 : 1);
+      assert.ok(logs.some(value => value.includes('req_responses')));
+      assert.equal(logs.join('\n').includes('sk-test-secret'), false);
+      assert.equal(logs.join('\n').includes('cleanup'), false);
+      if (scenario === 'completed') assert.ok(logs.some(value => value.includes('"reply":"connected"')));
+      if (scenario === 'incomplete') assert.ok(logs.some(value => value.includes('max_output_tokens')));
+    } finally {
+      globalThis.fetch = original.fetch; console.log = original.log; process.exitCode = original.exitCode; process.argv = original.argv;
+      for (const [name, value] of [['OPENAI_API_KEY', original.key], ['OPENAI_AGENT_MODEL', original.model]]) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
     }
   });
 }
