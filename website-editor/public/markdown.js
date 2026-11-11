@@ -1,5 +1,6 @@
 // A deliberately small, DOM-only Markdown preview. Source HTML is always text.
 // The actual website uses Jekyll/Kramdown for its final rendering.
+import { equation } from './math.js';
 export function linkTarget(value) {
   if (/^\/(?!\/)[^\s\\]*$/.test(value)) return `https://nateoconnell.com${value}`;
   try { const url = new URL(value); if (['https:', 'http:', 'mailto:'].includes(url.protocol)) return url.href; } catch { /* plain text */ }
@@ -7,11 +8,12 @@ export function linkTarget(value) {
 }
 export function inline(parent, text, imageResolver, depth = 0) {
   if (depth > 4) { parent.append(document.createTextNode(text)); return; }
-  const pattern = /(!?\[([^\]\n]*)\]\(([^\s)]+)\)|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|`([^`\n]+)`)/g;
+  const pattern = /(!?\[([^\]\n]*)\]\(([^\s)]+)\)|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|`([^`\n]+)`|\$\$([\s\S]+?)\$\$)/g;
   let last = 0;
   for (const match of text.matchAll(pattern)) {
     parent.append(document.createTextNode(text.slice(last, match.index)));
-    if (match[3]) {
+    if (match[7]) parent.append(equation(match[7]));
+    else if (match[3]) {
       const target = linkTarget(match[3]);
       if (match[0].startsWith('!')) {
         const img = document.createElement('img'); img.alt = match[2]; img.loading = 'lazy';
@@ -40,6 +42,15 @@ export function markdown(parent, text, imageResolver) {
       continue;
     }
     if (code !== null) { code.push(line); continue; }
+    // Kramdown uses $$ for both inline and block math. Protect the TeX from
+    // Markdown's emphasis/list rules before rendering it with KaTeX.
+    if (!paragraph.length && /^\$\$/.test(line)) {
+      const rest = lines.slice(i).join('\n').slice(2), end = rest.indexOf('$$');
+      if (end !== -1 && !rest.slice(end + 2).split('\n')[0].trim()) {
+        list = null; parent.append(equation(rest.slice(0, end).trim(), true));
+        i += rest.slice(0, end + 2).split('\n').length - 1; continue;
+      }
+    }
     if (!line.trim()) { flush(); list = null; continue; }
     if (/^\s*\|?\s*:?-{3,}/.test(lines[i + 1] || '') && line.includes('|')) {
       flush(); list = null; const table = document.createElement('table');

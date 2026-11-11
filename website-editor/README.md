@@ -129,3 +129,17 @@ If even the no-sandbox turn fails, `--responses` makes one direct Responses API 
 - [GitHub App user tokens and PKCE](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)
 - [Git tree updates](https://docs.github.com/en/rest/git/trees#create-a-tree) and [non-forced reference updates](https://docs.github.com/en/rest/git/refs#update-a-reference)
 - [Vercel Node functions](https://vercel.com/docs/functions/runtimes/node-js)
+
+## Write a post yourself
+
+Choose **Create a blog post** in the sidebar (on a phone, open the menu). **My writing drafts** reopens saved drafts. Write Markdown directly; saving and previewing do not call OpenAI. Equation buttons insert Kramdown’s LaTeX delimiters: `$$x_i^2$$` inside a sentence, or `$$` on separate lines with a blank line before and after the block. For example:
+
+```markdown
+The estimate is $$\hat{\theta}$$.
+
+$$
+\hat{\theta} = \frac{1}{n} \sum_{i=1}^{n} x_i
+$$
+```
+
+Preview and published posts render equations with pinned KaTeX 0.19.1 assets from jsDelivr, checked with subresource integrity. TeX remains in Markdown, and code blocks stay literal. The editor loads the renderer only when an equation is previewed; public posts load it only when their rendered content contains math. This supports mathematical TeX, not compiling an entire LaTeX document. Save privately, then review and publish when ready.

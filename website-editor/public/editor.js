@@ -90,6 +90,7 @@ async function leaveDraft() {
 }
 function showDraft(result) {
   siteChat.hide();
+  $('app').classList.remove('conversations-open'); $('chat-menu').setAttribute('aria-expanded', 'false');
   state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.proposal = null; state.review = null; state.images.clear();
   $('welcome').hidden = true; $('document').hidden = false; $('suggestion').hidden = true;
   $('prompt').value = ''; $('reference').value = ''; $('ai-status').textContent = '';
@@ -247,7 +248,9 @@ $('preview-tab').addEventListener('click', () => setView('preview'));
 $('filter').addEventListener('input', renderList);
 for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
 function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; $('new-dialog').showModal(); }
-$('new').addEventListener('click', newDialog); $('start-post').addEventListener('click', () => { $('new-kind').value = 'post'; newDialog(); });
+$('new').addEventListener('click', newDialog);
+for (const id of ['start-post', 'create-post']) $(id).addEventListener('click', () => { $('new-kind').value = 'post'; newDialog(); });
+$('open-drafts').addEventListener('click', () => { $('drafts-tab').click(); $('project-open').click(); });
 $('new-title').addEventListener('input', () => { $('new-slug').value = $('new-title').value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); });
 $('new-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
   if (!(await leaveDraft())) return;
@@ -265,6 +268,8 @@ $('image-file').addEventListener('change', event => { const file = event.target.
 $('body').addEventListener('paste', event => { const item = [...(event.clipboardData?.items || [])].find(item => item.kind === 'file' && item.type.startsWith('image/')); if (item) { event.preventDefault(); const file = item.getAsFile(); if (file) run(() => upload(file), 'Saving pasted image…'); } });
 $('format-bar').addEventListener('click', event => {
   const type = event.target.closest('[data-format]')?.dataset.format;
+  if (type === 'math') insertText('$$', '$$', 'x_i^2');
+  if (type === 'display-math') insertText('\n\n$$\n', '\n$$\n\n', '\\hat{\\theta} = \\frac{1}{n} \\sum_{i=1}^{n} x_i');
   if (type === 'bold') insertText('**', '**', 'bold text');
   if (type === 'italic') insertText('*', '*', 'italic text');
   if (type === 'heading') insertText('\n\n## ', '\n', 'Heading');
