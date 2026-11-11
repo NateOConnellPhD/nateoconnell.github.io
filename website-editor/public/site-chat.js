@@ -2,6 +2,7 @@ import { markdown } from './markdown.js';
 import { readEvents } from './event-stream.js';
 import { ChatOutput } from './chat-output.js';
 import { createChatView } from './chat-view.js';
+import { renderDiff } from './diff.js';
 
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
@@ -237,12 +238,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
       const preview = node('details'); preview.append(node('summary', 'Read proposed content'));
       const body = node('div', undefined, 'prose'); markdown(body, change.after.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '')); preview.append(body); section.append(preview);
     }
-    const details = node('details'); details.append(node('summary', 'See exact source changes'));
-    const columns = node('div', undefined, 'comparison');
-    for (const [label, source] of [['Current', change.before], ['Proposed', change.after]]) {
-      const column = node('section'); column.append(node('h3', label), node('pre', source ?? '(File does not exist)')); columns.append(column);
-    }
-    details.append(columns); section.append(details); return section;
+    section.append(renderDiff(change.before, change.after)); return section;
   }
   $('site-chat-nav').addEventListener('click', () => run(activate));
   $('chat-new').addEventListener('click', () => run(async () => {

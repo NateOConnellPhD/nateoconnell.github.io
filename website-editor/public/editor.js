@@ -2,6 +2,7 @@ import { schemas } from './schema.js';
 import { markdown, linkTarget } from './markdown.js';
 import { createSiteChat } from './site-chat.js';
 import { liveRequest } from './live-request.js';
+import { renderDiff } from './diff.js';
 
 const $ = id => document.getElementById(id);
 const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'files', drafts: [], files: [], projectFiles: [], pendingFiles: [], proposal: null, review: null, images: new Map() };
@@ -220,7 +221,7 @@ async function ask() {
 async function review() {
   await save(); state.review = await api('review', { id: state.draft.id, revision: state.revision });
   $('review-description').textContent = state.review.visible ? 'Review the content and exact changes below. Nothing goes public until you choose Publish.' : 'This update keeps the entry hidden on the website. Its source will still be in the public repository.';
-  $('review-before').textContent = state.review.before || '(New file)'; $('review-after').textContent = state.review.after;
+  $('review-diff').replaceChildren(renderDiff(state.review.before, state.review.after));
   $('review-paths').replaceChildren(...state.review.paths.map(path => element('li', path)));
   preview(state.draft.document, $('review-content')); $('review-dialog').showModal();
 }

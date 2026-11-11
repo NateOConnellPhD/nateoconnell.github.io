@@ -1,0 +1,15 @@
+.source-diff { margin: 18px 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.diff-legend { font: 500 .8rem/1.5 ui-sans-serif, system-ui, sans-serif; color: var(--muted); }
+.diff-body { border: 1px solid var(--line); border-radius: 6px; overflow: auto; max-height: 65vh; background: #fff; }
+.diff-line { display: grid; grid-template-columns: 3.5em 3.5em 1.5em minmax(0, 1fr); font-size: .8rem; line-height: 1.7; }
+.diff-gutter { text-align: right; padding-right: .5em; color: #576675; user-select: none; }
+.diff-line > code { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 8px; font: inherit; tab-size: 2; }
+.diff-remove { background: #ffebe9; color: #6e211c; }
+.diff-add { background: #dafbe1; color: #164b2b; }
+.diff-line del { background: #ffc1bb; text-decoration: none; }
+.diff-line ins { background: #a4e9b5; text-decoration: none; }
+.diff-eof { display: block; color: #576675; font-style: italic; font-size: .72rem; }
+.diff-context { background: #edf4fb; color: #456078; }
+.diff-context summary, .diff-block summary { padding: 8px 12px; font: 500 .75rem/1.6 ui-sans-serif, system-ui, sans-serif; }
+.diff-context pre, .diff-block pre { padding: 12px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+@media (max-width: 600px) { .diff-line { grid-template-columns: 2.5em 2.5em 1.2em minmax(0, 1fr); font-size: .75rem; } }
