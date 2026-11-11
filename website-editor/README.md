@@ -75,6 +75,8 @@ The original private cross-validation blog draft has not been copied into this w
 
 ## Local validation
 
+If a chat message was saved but the editor reported a failure immediately after sending, deploy the fix for empty event acknowledgements and reopen that conversation using **Check progress**. The Agents API accepts message and cancellation events with an empty HTTP 202 response, which must not be parsed as JSON. The saved session and idempotency key let the editor recover the original task without creating another session. Acceptance alone does not mean the task has completed. See the [event submission contract](https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/sessions/subresources/events/methods/create).
+
 Focused checks with mocked GitHub/OpenAI services:
 
 ```sh

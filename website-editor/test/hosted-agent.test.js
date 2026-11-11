@@ -18,7 +18,7 @@ function store() {
 }
 async function initial(fake, extra = {}) { return saveChat(fake, { id, title: 'New chat', messages: [], changes: [], ...extra }, null); }
 
-test('a hosted task saves its session before starting inference and keeps credentials outside the sandbox', async () => {
+test('a hosted task accepts an empty HTTP 202 after saving its session and keeps credentials outside the sandbox', async () => {
   const fake = store(), loaded = await initial(fake), originalFetch = globalThis.fetch; const calls = [];
   try {
     globalThis.fetch = async (url, options) => {
@@ -30,19 +30,23 @@ test('a hosted task saves its session before starting inference and keeps creden
         return Response.json({ id: 'sess_test', status: 'idle' });
       }
       assert.ok(JSON.parse(fake.files.get(`chats/${id}.json`)).run.sessionId === 'sess_test');
-      return Response.json({});
+      return new Response(null, { status: 202 });
     };
     const result = await startWorkspace(fake, config, { id, revision: loaded.revision, prompt: 'Add a teaching page and build it.' });
     assert.equal(result.chat.run.status, 'submitting'); assert.equal(calls.length, 2);
     assert.equal(calls[1].options.headers['Idempotency-Key'], result.chat.run.key);
     assert.equal(result.chat.changes.length, 0);
+    const stored = JSON.parse(fake.files.get(`chats/${id}.json`));
+    assert.equal(stored.messages[0].content, 'Add a teaching page and build it.');
+    assert.equal(stored.run.sessionId, 'sess_test');
+    assert.equal(stored.run.error, undefined);
   } finally { globalThis.fetch = originalFetch; }
 });
 test('polling a running task does not call it complete or apply partial results', async () => {
   const fake = store(); const loaded = await initial(fake, { run: { sessionId: 'sess_test', key: 'same-key', status: 'submitting', prompt: 'Edit', head: 'public-head' } });
   const originalFetch = globalThis.fetch; const calls = [];
   try {
-    globalThis.fetch = async (url, options) => { calls.push({ url, options }); if (url.includes('/events')) return Response.json({}); if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn_test', subagent_id: null, status: 'in_progress' }] }); return Response.json({ status: 'in_progress' }); };
+    globalThis.fetch = async (url, options) => { calls.push({ url, options }); if (url.includes('/events')) return new Response(null, { status: 202 }); if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn_test', subagent_id: null, status: 'in_progress' }] }); return Response.json({ status: 'in_progress' }); };
     const result = await pollWorkspace(fake, config, id);
     assert.equal(result.revision, loaded.revision); assert.equal(result.chat.changes.length, 0);
     assert.equal(calls[0].options.headers['Idempotency-Key'], 'same-key');
@@ -54,7 +58,7 @@ test('only an artifact from the completed main turn is imported, then the sandbo
   try {
     globalThis.fetch = async (url, options) => {
       if (options.method === 'DELETE') { deleted = true; return new Response(null, { status: 204 }); }
-      if (url.includes('/events')) return Response.json({});
+      if (url.includes('/events')) return new Response(null, { status: 202 });
       if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn_new', subagent_id: null, status: 'completed' }] });
       if (url.includes('/artifacts?')) return Response.json({ data: [
         { id: 'artifact_old', turn_id: 'turn_old', path: '/workspace/outputs/review.json', size_bytes: 100 },
@@ -72,7 +76,7 @@ test('failed remote work preserves previous pending changes and cancellation tar
   await initial(fake, { changes: pending, run: { sessionId: 'sess_test', key: 'key', status: 'submitting', prompt: 'Build', head: 'public-head' } });
   const originalFetch = globalThis.fetch; const requests = [];
   try {
-    globalThis.fetch = async (url, options) => { requests.push({ url, body: options.body && JSON.parse(options.body) }); if (options.method === 'DELETE') return new Response(null, { status: 204 }); if (url.includes('/events')) return Response.json({}); if (url.includes('/turns')) return Response.json({ data: [{ subagent_id: null, status: 'failed', error: { message: 'Build tools unavailable' } }] }); return Response.json({ status: 'idle' }); };
+    globalThis.fetch = async (url, options) => { requests.push({ url, body: options.body && JSON.parse(options.body) }); if (options.method === 'DELETE') return new Response(null, { status: 204 }); if (url.includes('/events')) return new Response(null, { status: 202 }); if (url.includes('/turns')) return Response.json({ data: [{ subagent_id: null, status: 'failed', error: { message: 'Build tools unavailable' } }] }); return Response.json({ status: 'idle' }); };
     await cancelWorkspace(fake, config, id);
     assert.ok(requests.some(item => item.body?.events[0].type === 'agent.session.input.cancel'));
     assert.equal(requests.filter(item => item.body?.events[0].type === 'agent.session.input.message').length, 1);
@@ -81,7 +85,9 @@ test('failed remote work preserves previous pending changes and cancellation tar
   } finally { globalThis.fetch = originalFetch; }
 });
 test('cloud access errors are actionable without leaking upstream credentials', async () => {
-  await assert.rejects(agentRequest(config, '/sessions', 'POST', {}, null, async () => Response.json({ error: 'fake-api-key' }, { status: 403 })), error => /Agents read\/write/.test(error.message) && !error.message.includes('fake-api-key'));
+  for (const path of ['/sessions', '/sessions/sess_test/events']) {
+    await assert.rejects(agentRequest(config, path, 'POST', {}, null, async () => Response.json({ error: 'fake-api-key' }, { status: 403 })), error => /Agents read\/write/.test(error.message) && !error.message.includes('fake-api-key'));
+  }
 });
 test('an interrupted start recovers its recorded request instead of creating another session', async () => {
   const fake = store(); await initial(fake, { run: { key: 'recover-key', status: 'starting', started: Date.now() - 180000, prompt: 'Edit', head: 'public-head' } });
@@ -90,7 +96,7 @@ test('an interrupted start recovers its recorded request instead of creating ano
     globalThis.fetch = async (url, options) => {
       calls.push({ url, options });
       if (url.includes('/sessions?')) return Response.json({ data: [{ id: 'sess_recovered', metadata: { editor_chat: id, request: 'recover-key' } }] });
-      assert.ok(url.endsWith('/sessions/sess_recovered/events')); return Response.json({});
+      assert.ok(url.endsWith('/sessions/sess_recovered/events')); return new Response(null, { status: 202 });
     };
     const result = await pollWorkspace(fake, config, id);
     assert.equal(result.chat.run.sessionId, 'sess_recovered');
@@ -117,7 +123,7 @@ test('a completed turn with no export preserves earlier working changes and requ
   try {
     globalThis.fetch = async (url, options) => {
       if (options.method === 'DELETE') return new Response(null, { status: 204 });
-      if (url.includes('/events')) return Response.json({});
+      if (url.includes('/events')) return new Response(null, { status: 202 });
       if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn_new', subagent_id: null, status: 'completed' }] });
       if (url.includes('/artifacts?')) return Response.json({ data: [] });
       return Response.json({ status: 'idle' });

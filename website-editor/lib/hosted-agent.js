@@ -14,7 +14,9 @@ export async function agentRequest(config, path, method = 'GET', body, key, tran
   }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); }
   catch { throw new HttpError(504, 'The cloud workspace did not respond. Reopen this conversation to check its state before retrying.'); }
   if (!response.ok) throw new HttpError(response.status, response.status === 403 || response.status === 401 ? 'OpenAI denied workspace access. The API key needs Agents read/write and Responses write access.' : response.status === 429 ? 'OpenAI reported a usage or credit limit.' : `The cloud workspace returned HTTP ${response.status}. Your saved website changes are intact.`);
-  if (response.status === 204) return {};
+  // Submitting messages and cancellations returns an empty 202 acknowledgement.
+  // It confirms acceptance; polling still determines whether the turn finished.
+  if (response.status === 204 || (response.status === 202 && method === 'POST' && /^\/sessions\/[^/]+\/events$/.test(path))) return {};
   return response.json();
 }
 const instructions = `You are Nate O'Connell's website coding agent. You have a real Linux workspace at /workspace/project. Work on the entire project, including content, pages, layouts, styling, navigation, data, scripts, configuration, and the editor itself. Read relevant source and call paths before changing it. The user wants full conversational control of this website, not a page-specific writing assistant. Create, move, edit, or delete files as requested. Do not invent personal details or rewrite unrelated prose. Preserve Nate's voice, his blue design, PhD credential, and hidden manuscripts unless he explicitly requests changes. Clinical trial design is not an afterthought. Never add identifying details/photos of his children. Private working changes are not published until the user reviews them in the editor.
