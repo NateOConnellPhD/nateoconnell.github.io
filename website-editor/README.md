@@ -94,6 +94,12 @@ Local results, November 11, 2026: 18 mocked JavaScript checks and 4 bootstrap/ex
 
 The conversation update adds focused checks for live event delivery before completion, stream cancellation, message recovery, retaining failed-request details, ordinary questions with no source edits, and follow-up context. These checks use controlled service responses. A deployed conversation, browser/mobile behavior, and the cause of the previously reported cloud task failure have not been verified by these checks.
 
+## Isolating a failed model connection
+
+`scripts/check-agent.mjs` is an optional live diagnostic, never run by the editor or test suite. Run it explicitly with the same `OPENAI_API_KEY` and, if customized, `OPENAI_AGENT_MODEL` as Vercel. It makes one small billed model request without uploading the website or any conversation. It prints request/session/turn IDs and returned errors, then requests session deletion. It writes no local files and requires no downloaded packages.
+
+The default has no sandbox. If that succeeds, `--hosted` checks an empty hosted sandbox without this website's package installs, assets, or preparation script; that check also incurs sandbox usage. A successful probe establishes only that specific path, not that the editor works. A failed cleanup is reported with the session ID; do not ignore it. Keep the API key out of chat and shell history.
+
 ## API references
 
 - [OpenAI Agents sessions](https://developers.openai.com/api/docs/guides/agents-api/sessions), [hosted environments](https://developers.openai.com/api/docs/guides/agents-api/environments/openai-hosted), and [files/artifacts](https://developers.openai.com/api/docs/guides/agents-api/environments/files)
