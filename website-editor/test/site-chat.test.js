@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sitePath, websiteSnapshot, applySiteProposal, createChat, saveChat, loadChat, prepareChatPublish, validateSiteChanges } from '../lib/site-chat.js';
+import { sitePath, websiteSnapshot, applySiteProposal, createChat, saveChat, loadChat, deleteChat, prepareChatPublish, validateSiteChanges } from '../lib/site-chat.js';
 import { configuration, blobSha, SITE, seal } from '../lib/security.js';
 import { handle } from '../api/index.js';
 
@@ -62,7 +62,7 @@ function privateStore() {
     head: async repo => { assert.equal(repo, config.drafts); return 'private-head'; },
     read: async (repo, path) => { assert.equal(repo, config.drafts); const text = files.get(path); return text === undefined ? null : { sha: blobSha(text), buffer: Buffer.from(text) }; },
     readJson: async (repo, path, ref, fallback) => files.has(path) ? JSON.parse(files.get(path)) : structuredClone(fallback),
-    commit: async (repo, head, changes) => { assert.equal(repo, config.drafts); writes.push(changes); for (const file of changes) files.set(file.path, file.content); return 'private-commit'; }
+    commit: async (repo, head, changes) => { assert.equal(repo, config.drafts); writes.push(changes); for (const file of changes) { if (file.content === null) files.delete(file.path); else files.set(file.path, file.content); } return 'private-commit'; }
   };
 }
 test('conversations persist only in private storage and reject a stale tab', async () => {
@@ -98,5 +98,77 @@ test('site-chat publication needs its own review receipt and rejects CSRF before
     assert.equal((await handle(request('wrong', 'forged'))).status, 403); assert.equal(calls.length, 0);
     const pageReceipt = seal({ id }, 'publish-review', config);
     assert.equal((await handle(request('csrf', pageReceipt))).status, 409); assert.deepEqual(calls, ['GET']);
+  } finally { globalThis.fetch = transport; for (const [key, value] of Object.entries(savedEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+});
+
+test('deleting a chat atomically removes its conversation and preview while preserving other chats and drafts', async () => {
+  const fake = privateStore(), first = await createChat(fake), other = await createChat(fake);
+  const previewPath = `chats/previews/${first.chat.id}.json`;
+  fake.files.set(previewPath, '{"pages":[]}');
+  fake.files.set(`chats/previews/${other.chat.id}.json`, '{"pages":[]}');
+  fake.files.set('drafts/other.json', 'independent document draft');
+  first.chat.changes = applySiteProposal([], proposal([edit('index.html', 'private edit')]), snapshot({ 'index.html': 'published' }));
+  const saved = await saveChat(fake, first.chat, first.revision);
+  const before = fake.writes.length;
+  assert.deepEqual(await deleteChat(fake, first.chat.id, saved.revision), { deleted: first.chat.id });
+  assert.equal(fake.writes.length, before + 1);
+  assert.deepEqual(fake.writes.at(-1).map(file => file.path).sort(), [`chats/${first.chat.id}.json`, 'chats/index.json', previewPath].sort());
+  assert.equal(fake.files.has(`chats/${first.chat.id}.json`), false); assert.equal(fake.files.has(previewPath), false);
+  assert.deepEqual(JSON.parse(fake.files.get('chats/index.json')).chats.map(entry => entry.id), [other.chat.id]);
+  assert.ok(fake.files.has(`chats/${other.chat.id}.json`)); assert.ok(fake.files.has(`chats/previews/${other.chat.id}.json`));
+  assert.equal(fake.files.get('drafts/other.json'), 'independent document draft');
+  await assert.rejects(saveChat(fake, saved.chat, saved.revision), /another tab/);
+});
+
+test('empty and failed test chats can be deleted without requiring a preview', async () => {
+  for (const status of [null, 'failed', 'cancelled', 'completed']) {
+    const fake = privateStore(), created = await createChat(fake);
+    if (status) { created.chat.run = { status }; Object.assign(created, await saveChat(fake, created.chat, created.revision)); }
+    await deleteChat(fake, created.chat.id, created.revision);
+    assert.deepEqual(JSON.parse(fake.files.get('chats/index.json')).chats, []);
+    assert.equal(fake.writes.at(-1).length, 2);
+  }
+});
+
+test('stale or repeated deletion cannot remove newer changes', async () => {
+  const fake = privateStore(), created = await createChat(fake);
+  created.chat.messages.push({ role: 'user', content: 'Keep this new message' });
+  const changed = await saveChat(fake, created.chat, created.revision), before = fake.writes.length;
+  await assert.rejects(deleteChat(fake, created.chat.id, created.revision), error => error.status === 409);
+  assert.equal(fake.writes.length, before); assert.equal((await loadChat(fake, created.chat.id)).chat.messages.at(-1).content, 'Keep this new message');
+  await deleteChat(fake, created.chat.id, changed.revision);
+  await assert.rejects(deleteChat(fake, created.chat.id, changed.revision), error => error.status === 404);
+  assert.equal(fake.writes.length, before + 1);
+});
+
+test('deletion cannot orphan a running response or pending remote cleanup', async () => {
+  for (const run of [{ status: 'starting' }, { status: 'in_progress' }, { status: 'cancelling' }, { status: 'failed', cleanupPending: true }, { status: 'failed', lookupPending: true }]) {
+    const fake = privateStore(), created = await createChat(fake);
+    created.chat.run = run;
+    const saved = await saveChat(fake, created.chat, created.revision), before = fake.writes.length;
+    await assert.rejects(deleteChat(fake, created.chat.id, saved.revision), error => error.status === 409);
+    assert.equal(fake.writes.length, before); assert.ok(fake.files.has(`chats/${created.chat.id}.json`));
+  }
+});
+
+test('deletion uses a validated chat ID and leaves storage intact when its commit conflicts', async () => {
+  const fake = privateStore(), created = await createChat(fake);
+  await assert.rejects(deleteChat(fake, '../other', created.revision), /Invalid draft ID/);
+  const before = new Map(fake.files);
+  fake.commit = async () => { throw new Error('Concurrent commit'); };
+  await assert.rejects(deleteChat(fake, created.chat.id, created.revision), /Concurrent commit/);
+  assert.deepEqual(fake.files, before);
+});
+
+test('chat deletion requires sign-in and CSRF before accessing private storage', async () => {
+  const savedEnv = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]])); const transport = globalThis.fetch; let calls = 0;
+  try {
+    Object.assign(process.env, env);
+    globalThis.fetch = async () => { calls++; throw new Error('Unauthorized deletion reached storage'); };
+    const token = seal({ id: 123, token: 'test-token', csrf: 'csrf' }, 'session', config);
+    const request = (cookie, csrf) => new Request(`${config.origin}/api/chat/delete`, { method: 'POST', headers: { Cookie: cookie, Origin: config.origin, 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' }, body: JSON.stringify({ id, revision: 'test' }) });
+    assert.equal((await handle(request('', 'csrf'))).status, 401);
+    assert.equal((await handle(request(`__Host-site-editor=${token}`, 'wrong'))).status, 403);
+    assert.equal(calls, 0);
   } finally { globalThis.fetch = transport; for (const [key, value] of Object.entries(savedEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
 });

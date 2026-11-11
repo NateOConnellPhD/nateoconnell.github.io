@@ -33,11 +33,16 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     const result = await api('chats');
     const history = $('chat-history'); history.replaceChildren();
     for (const entry of result.chats) {
-      const button = node('button', entry.title); button.dataset.chatId = entry.id; button.title = entry.title;
+      const row = node('div', undefined, 'chat-history-row');
+      const button = node('button', entry.title, 'chat-history-open'); button.dataset.chatId = entry.id; button.title = entry.title;
       button.setAttribute('aria-current', String(entry.id === current?.chat.id));
       button.disabled = inFlight;
       button.addEventListener('click', () => run(() => openConversation(entry.id)));
-      history.append(button);
+      const remove = node('button', 'Delete', 'chat-history-delete');
+      remove.type = 'button'; remove.disabled = inFlight;
+      remove.setAttribute('aria-label', `Delete chat: ${entry.title}`);
+      remove.addEventListener('click', () => run(() => deleteConversation(entry.id)));
+      row.append(button, remove); history.append(row);
     }
     if (!result.chats.length) history.append(node('p', 'Your conversations will appear here.', 'small'));
   }
@@ -50,7 +55,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     if (key !== outputKey || !running()) { stopStream(); output = new ChatOutput(); outputKey = key; streamCursor = null; }
     if (running()) output.snapshot(result.liveMessages);
     $('chat-title').textContent = chat?.messages.length ? chat.title : 'Website chat';
-    for (const button of $('chat-history').querySelectorAll('button')) button.setAttribute('aria-current', String(button.dataset.chatId === chat?.id));
+    for (const button of $('chat-history').querySelectorAll('[data-chat-id]')) button.setAttribute('aria-current', String(button.dataset.chatId === chat?.id));
     $('chat-empty').hidden = Boolean(chat?.messages.length);
     renderMessages();
     renderLive();
@@ -223,6 +228,29 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     if (!(await activate())) return;
     show(await api(`chat?id=${encodeURIComponent(id)}`)); $('chat-prompt').value = ''; $('chat-reference').value = '';
     view.attachment(); view.resize(); view.jump();
+  }
+  async function deleteConversation(id) {
+    if (inFlight) return;
+    const isCurrent = id === current?.chat.id;
+    inFlight = true; availability();
+    try {
+      const target = isCurrent ? current : await api(`chat?id=${encodeURIComponent(id)}`);
+      const task = target.chat.run;
+      if (task && !['completed', 'failed', 'cancelled'].includes(task.status)) throw new Error('Open this chat, stop the response, and check its progress before deleting it.');
+      if (task?.cleanupPending || task?.lookupPending) throw new Error('Open this chat and use Check progress to finish remote cleanup before deleting it.');
+      const count = target.chat.changes.length;
+      const pending = count ? ` This also discards ${count} unpublished file ${count === 1 ? 'change' : 'changes'}.` : '';
+      const unsaved = isCurrent && (fileDirty() || $('chat-prompt').value.trim() || $('chat-reference').files.length) ? ' Your unsaved file edit, message, or attachment will also be discarded.' : '';
+      if (!confirm(`Delete “${target.chat.title}” and its saved conversation and preview?${pending}${unsaved} Your published website will stay as it is.`)) return;
+      await api('chat/delete', { id, revision: target.revision });
+      if (isCurrent) {
+        show(null); $('chat-prompt').value = ''; $('chat-reference').value = '';
+        $('workspace-preview').removeAttribute('src'); $('chat-review-dialog').close();
+        view.attachment(); view.resize();
+      }
+      await refresh(); notice('Chat deleted.');
+    } finally { inFlight = false; availability(); }
+    $('chat-new').focus();
   }
   $('chat-form').addEventListener('submit', event => { event.preventDefault(); send(); });
   $('chat-stop').addEventListener('click', () => run(async () => { show(await api('chat/stop', { id: current.chat.id })); $('chat-status').textContent = 'Stopping the cloud task…'; }));

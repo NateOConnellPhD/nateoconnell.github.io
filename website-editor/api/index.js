@@ -5,7 +5,7 @@ import { schemas, kindForPath } from '../public/schema.js';
 import { parseSource, validateDocument } from '../lib/content.js';
 import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
-import { createChat, loadChat, saveChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
+import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
 import { startWorkspace, pollWorkspace, cancelWorkspace } from '../lib/response-workspace.js';
 import { streamChat } from '../lib/chat-stream.js';
 
@@ -100,6 +100,7 @@ export async function handle(request) {
     }
     const data = await readJson(request);
     if (route === 'chat/new') return json(await createChat(github));
+    if (route === 'chat/delete') return json(await deleteChat(github, data.id, data.revision));
     if (route === 'chat/send') return json(await startWorkspace(github, config, data));
     if (route === 'chat/poll') return json(await pollWorkspace(github, config, validId(data.id)));
     if (route === 'chat/stop') return json(await cancelWorkspace(github, config, validId(data.id)));

@@ -14,7 +14,11 @@ body:has(#app:not([hidden])) .brand-sub { font-size: .7rem; margin-top: 3px; }
 .nav-button:hover, .chat-history button:hover { background: #e5edf4; }
 .nav-label { margin: 30px 12px 10px; color: var(--muted); font-size: .75rem; }
 .chat-history { flex: 1; overflow: auto; min-height: 0; }
+.chat-history-row { display: flex; align-items: center; }
 .chat-history button { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; background: transparent; border: 0; padding: 12px; border-radius: 8px; font-size: .83rem; }
+.chat-history .chat-history-open { flex: 1; min-width: 0; min-height: 44px; }
+.chat-history .chat-history-delete { flex: none; width: auto; min-width: 44px; min-height: 44px; padding: 10px 8px; font-size: .72rem; color: var(--muted); }
+.chat-history .chat-history-delete:hover { color: #8b3232; background: #f6e8e8; }
 .chat-history button[aria-current=true] { background: #dfeaf3; }
 .chat-history .small { padding: 0 12px; }
 .conversation-footer { border-top: 1px solid #e1e8ee; margin-top: 15px; padding-top: 10px; }

@@ -141,6 +141,26 @@ export async function saveChat(github, chat, expected, extra = []) {
 export async function createChat(github) {
   return saveChat(github, { id: randomUUID(), title: 'New site chat', messages: [], changes: [] }, null);
 }
+export async function deleteChat(github, id, expected) {
+  const repo = github.config.drafts, path = chatPath(id), head = await github.head(repo);
+  const file = await github.read(repo, path, head, true);
+  if (!file) throw new HttpError(404, 'This conversation was already deleted. Refresh the chat history.');
+  if (file.sha !== expected) throw new HttpError(409, 'This conversation changed. Reopen it before deleting it.');
+  const chat = checkChat(JSON.parse(file.buffer.toString()));
+  if (chat.id !== id) throw new HttpError(400, 'Invalid saved conversation.');
+  if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop this response and check its progress before deleting the chat.');
+  if (chat.run?.cleanupPending || chat.run?.lookupPending) throw new HttpError(409, 'Open this chat and use Check progress to finish remote cleanup before deleting it.');
+  const previewPath = `chats/previews/${id}.json`;
+  const [index, preview] = await Promise.all([
+    github.readJson(repo, 'chats/index.json', head, { chats: [] }),
+    github.read(repo, previewPath, head, true)
+  ]);
+  index.chats = index.chats.filter(entry => entry.id !== id);
+  const files = [{ path, content: null }, { path: 'chats/index.json', content: JSON.stringify(index) + '\n' }];
+  if (preview) files.push({ path: previewPath, content: null });
+  await github.commit(repo, head, files, `Delete private site chat: ${chat.title.replace(/[\r\n]/g, ' ').slice(0, 100)}`);
+  return { deleted: id };
+}
 export async function prepareChatPublish(github, chat) {
   if (!chat.changes.length) throw new HttpError(400, 'There are no proposed website changes to publish.');
   const changes = await validateSiteChanges(chat.changes);
