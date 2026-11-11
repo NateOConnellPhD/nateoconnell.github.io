@@ -48,19 +48,20 @@ async function checkAuthentication() {
 async function checkModel() {
   log({ model, environment: hosted ? 'minimal OpenAI-hosted sandbox' : 'no sandbox', timeoutSeconds: 90 });
   creationAttempted = true;
-  const response = await request('/sessions', 'POST', {
+  // Conversation-only sessions require input at creation. Stream this same
+  // request so a fast reply cannot finish before we subscribe to its events.
+  stream = await request('/sessions', 'POST', {
     agent: { model, instructions: 'Reply with exactly the word connected. Do not use tools.', multi_agent: { enabled: false } },
     environment: { type: hosted ? 'openai_hosted' : 'none' },
+    input: 'Reply with exactly the word connected.',
+    stream: true,
     metadata: { editor_diagnostic: requestId }
   });
-  const session = await response.json();
-  if (!validId(session.id)) throw new Error('The API did not return a usable session ID.');
-  sessionId = session.id; log({ sessionId });
-  stream = await request(`/sessions/${sessionId}/events?stream=true`);
-  await request(`/sessions/${sessionId}/events`, 'POST', {
-    events: [{ type: 'agent.session.input.message', input: [{ role: 'user', content: [{ type: 'input_text', text: 'Reply with exactly the word connected.' }] }] }]
-  });
   for await (const event of readEvents(stream.body)) {
+    const eventSessionId = event.session?.id || event.session_id;
+    if (!sessionId && validId(eventSessionId)) {
+      sessionId = eventSessionId; log({ sessionId });
+    }
     if (event.type === 'agent.session.environment.connected') log('Sandbox connected.');
     if (event.type === 'agent.session.turn.output_text.done') log({ reply: event.text });
     if (event.type === 'error' || event.type.endsWith('.failed')) {
@@ -80,7 +81,7 @@ try {
   await (authOnly ? checkAuthentication() : checkModel());
 } catch (error) {
   process.exitCode = 1;
-  creationRejected = creationAttempted && !sessionId && [401, 403].includes(error.status);
+  creationRejected = creationAttempted && !sessionId && [400, 401, 403].includes(error.status);
   log({ error: error.message });
 } finally {
   if (stream?.body && !stream.body.locked) await stream.body.cancel().catch(() => {});
