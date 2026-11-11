@@ -146,3 +146,16 @@ test('Responses streams resume from a cursor and expose replies without shell or
 test('a malformed reconnect cursor is rejected before any upstream request', async () => {
   await assert.rejects(streamChat({}, { backend: 'responses', responseId: 'resp_test', status: 'in_progress' }, new AbortController().signal, () => { throw new Error('Must not call'); }, '1&another=value'), /Invalid stream cursor/);
 });
+
+test('direct file-tool stages do not reconnect to an already completed model stream', async () => {
+  for (const stage of ['tools', 'ready', 'submitting']) {
+    const response = await streamChat({}, { backend: 'repository', responseId: 'resp_test', stage, status: 'in_progress' }, new AbortController().signal, () => assert.fail('Must not stream the previous response'));
+    assert.equal(response.status, 204);
+  }
+});
+
+test('a cursor from an earlier response triggers a state reload without streaming the new response', async () => {
+  const response = await streamChat({}, { backend: 'repository', responseId: 'resp_new', stage: 'waiting', status: 'in_progress' }, new AbortController().signal,
+    () => assert.fail('Do not reuse the old cursor'), 900, 'resp_old');
+  assert.equal(response.status, 204);
+});

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, SITE, validId, blobSha, digest } from './security.js';
+import { nextAiUsage } from './drafts.js';
 
 const MAX_FILE = 500000, MAX_CONTEXT = 1500000, MAX_CHANGES = 200;
 const chatPath = id => `chats/${validId(id)}.json`;
@@ -27,10 +28,12 @@ function sourceText(text) {
   if (typeof text !== 'string' || text.includes('\0') || Buffer.byteLength(text) > MAX_FILE) throw new HttpError(413, 'A website file is too large or is not text.');
   return text;
 }
-export async function websiteSnapshot(github, changes = [], ref = null) {
+export async function websiteSnapshot(github, changes = [], ref = null, onlyPaths = null) {
+  const selected = onlyPaths === null ? null : new Set(onlyPaths);
+  if (selected && [...selected].some(path => !sitePath(path))) throw new HttpError(403, 'A requested file is outside the website project.');
   const head = ref || await github.head(SITE);
   const tree = await github.tree(SITE, head);
-  const entries = tree.entries.filter(item => item.type === 'blob' && ['100644', '100755'].includes(item.mode) && sitePath(item.path) && (textPath(item.path) || !item.path.split('/').at(-1).includes('.')));
+  const entries = tree.entries.filter(item => (!selected || selected.has(item.path)) && item.type === 'blob' && ['100644', '100755'].includes(item.mode) && sitePath(item.path) && (textPath(item.path) || !item.path.split('/').at(-1).includes('.')));
   if (entries.length > 800 || entries.reduce((sum, item) => sum + (item.size || 0), 0) > MAX_CONTEXT) throw new HttpError(413, 'The repository exceeds this workspace’s source size limit. No files were changed.');
   const files = new Map(); let bytes = 0;
   for (let i = 0; i < entries.length; i += 6) {
@@ -44,7 +47,7 @@ export async function websiteSnapshot(github, changes = [], ref = null) {
   if (bytes > MAX_CONTEXT) throw new HttpError(413, 'The website is too large for one chat context. No files were changed.');
   for (const change of changes) if ((tree.entries.find(item => item.path === change.path)?.sha || null) !== change.beforeSha) throw new HttpError(409, `The public version of ${change.path} changed. Start a new chat using the latest website; this chat's changes remain private.`);
   const assets = tree.entries.filter(item => item.type === 'blob' && item.mode === '100644' && /^(assets\/(images|files)\/|Presentations\/)/.test(item.path)).map(item => item.path).slice(0, 300);
-  const binaries = new Map(tree.entries.filter(item => item.type === 'blob' && ['100644', '100755'].includes(item.mode) && sitePath(item.path) && !files.has(item.path)).map(item => [item.path, { sha: item.sha, mode: item.mode, binary: true, content: null }]));
+  const binaries = new Map(tree.entries.filter(item => (!selected || selected.has(item.path)) && item.type === 'blob' && ['100644', '100755'].includes(item.mode) && sitePath(item.path) && !files.has(item.path)).map(item => [item.path, { sha: item.sha, mode: item.mode, binary: true, content: null }]));
   return { head, files, binaries, assets, occupied: new Set(tree.entries.map(item => item.path)), directories: new Set(tree.entries.filter(item => item.type === 'tree').map(item => item.path)) };
 }
 export function applySiteProposal(changes, proposal, snapshot) {
@@ -131,7 +134,7 @@ export async function checkpointChat(github, chat, expected) {
   await github.writePrivate(chatPath(chat.id), content, expected);
   return { chat, revision: blobSha(content) };
 }
-export async function saveChat(github, chat, expected, extra = []) {
+export async function saveChat(github, chat, expected, extra = [], claimRequest = false) {
   checkChat(chat);
   const repo = github.config.drafts, head = await github.head(repo);
   const current = await github.read(repo, chatPath(chat.id), head, true);
@@ -141,6 +144,9 @@ export async function saveChat(github, chat, expected, extra = []) {
   const entry = { id: chat.id, title: chat.title, updated: chat.updated, changes: chat.changes.length };
   index.chats = [entry, ...index.chats.filter(item => item.id !== chat.id)];
   const content = JSON.stringify(chat) + '\n';
+  // Reserve the daily allowance atomically with the message. This avoids a
+  // second Git commit on every send, and concurrent starts cannot double-run.
+  if (claimRequest) extra = [...extra, await nextAiUsage(github, head)];
   await github.commit(repo, head, [{ path: chatPath(chat.id), content }, { path: 'chats/index.json', content: JSON.stringify(index) + '\n' }, ...extra], `Save private site chat: ${chat.title.slice(0, 100)}`);
   return { chat, revision: blobSha(content) };
 }

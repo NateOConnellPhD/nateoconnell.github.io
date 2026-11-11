@@ -2,8 +2,12 @@ import { HttpError } from './security.js';
 import { visibleEvent, visibleResponseEvent } from './agent-output.js';
 import { readEvents } from '../public/event-stream.js';
 
-export async function streamChat(config, run, signal, transport = fetch, after = null) {
-  const responses = run?.backend === 'responses', id = responses ? run?.responseId : run?.sessionId;
+export async function streamChat(config, run, signal, transport = fetch, after = null, expected = null) {
+  const responses = ['responses', 'repository'].includes(run?.backend), id = responses ? run?.responseId : run?.sessionId;
+  // Another tab may have advanced the tool loop. Its new response has a new
+  // cursor sequence; have this client reload state before opening that stream.
+  if (expected && expected !== id) return new Response(null, { status: 204 });
+  if (run?.backend === 'repository' && (run.stage !== 'waiting' || run.status === 'cancelling')) return new Response(null, { status: 204 });
   if (!id || ['completed', 'failed', 'cancelled'].includes(run.status)) return new Response(null, { status: 204 });
   if (!/^[a-zA-Z0-9_-]{1,256}$/.test(id)) throw new HttpError(400, 'Invalid remote workspace identifier.');
   if (after !== null && !/^\d{1,12}$/.test(String(after))) throw new HttpError(400, 'Invalid stream cursor.');

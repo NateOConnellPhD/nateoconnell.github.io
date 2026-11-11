@@ -55,7 +55,7 @@ test('new chats use background Responses with hosted shell, private source and f
     assert.equal(result.chat.run.status, 'in_progress'); assert.equal(streamClosed, true);
   });
   assert.equal(calls.filter(url => url.endsWith('/responses')).length, 1);
-  assert.equal(uploaded.working['index.html'], '<h1>Nate, PhD</h1>'); assert.deepEqual(uploaded.pending, changes);
+  assert.equal(uploaded.original['index.html'], '<h1>Nate</h1>'); assert.equal(uploaded.working, undefined); assert.deepEqual(uploaded.pending, changes);
   assert.equal(submitted.model, 'gpt-6-astra'); assert.equal(submitted.background, true); assert.equal(submitted.stream, true); assert.equal(submitted.store, true);
   assert.deepEqual(submitted.tools[0], { type: 'shell', environment: { type: 'container_reference', container_id: 'cntr_test' } });
   assert.equal(submitted.input[1].content, 'The whole website.');

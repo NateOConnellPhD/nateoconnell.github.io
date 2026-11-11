@@ -27,11 +27,15 @@ export function configuration(env = process.env) {
   }
   const daily = Number(env.MAX_DAILY_AI_REQUESTS || 40);
   if (!Number.isInteger(daily) || daily < 1 || daily > 100) throw new HttpError(503, 'Daily AI request limit must be between 1 and 100.');
+  const chatSteps = Number(env.MAX_CHAT_MODEL_STEPS || 8), chatOutputTokens = Number(env.MAX_CHAT_OUTPUT_TOKENS || 12000);
+  if (!Number.isInteger(chatSteps) || chatSteps < 1 || chatSteps > 20 || !Number.isInteger(chatOutputTokens) || chatOutputTokens < 1024 || chatOutputTokens > 32000) throw new HttpError(503, 'Chat limits must be 1–20 model steps and 1024–32000 output tokens per message.');
+  const chatReasoning = env.OPENAI_CHAT_REASONING_EFFORT || 'low';
+  if (!['low', 'medium', 'high'].includes(chatReasoning)) throw new HttpError(503, 'Chat reasoning effort must be low, medium, or high.');
   const shellDomains = (env.OPENAI_SHELL_ALLOWED_DOMAINS || '').split(',').map(value => value.trim()).filter(Boolean);
   if (shellDomains.length > 30 || shellDomains.some(value => !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(value))) throw new HttpError(503, 'Shell network access must list hostnames separated by commas.');
   return { origin: origin.origin, clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET,
     ownerId: env.ALLOWED_GITHUB_USER_ID, secret: env.SESSION_SECRET, drafts: env.DRAFT_REPOSITORY,
-    apiKey: env.OPENAI_API_KEY || '', model: env.OPENAI_MODEL || 'gpt-5.4-mini', agentModel: env.OPENAI_AGENT_MODEL || 'gpt-6-astra', shellDomains, daily };
+    apiKey: env.OPENAI_API_KEY || '', model: env.OPENAI_MODEL || 'gpt-5.4-mini', agentModel: env.OPENAI_AGENT_MODEL || 'gpt-6-astra', shellDomains, daily, chatSteps, chatOutputTokens, chatReasoning };
 }
 export function seal(payload, purpose, config, ttl = 3600) {
   const iv = randomBytes(12);

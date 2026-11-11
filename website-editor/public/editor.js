@@ -10,7 +10,7 @@ function notice(message, error = false, link) {
   if (link) { const a = element('a', ' View update ↗'); a.href = link; a.target = '_blank'; a.rel = 'noopener noreferrer'; node.append(a); }
 }
 async function api(route, data) {
-  const response = await fetch(`/api/${route}`, { credentials: 'same-origin', cache: 'no-store',
+  const response = await fetch(`/api/${route}`, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(110000),
     ...(data !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.auth?.csrf || '' }, body: JSON.stringify(data) } : {}) });
   let result;
   try { result = await response.json(); } catch { throw new Error('The editor could not reach its server. Check the connection and try again.'); }

@@ -79,16 +79,20 @@ export async function preparePublish(github, draft) {
   }
   return { head, files, content, hash: digest(content + files.slice(1).map(f => digest(f.content)).join('')) };
 }
+export async function nextAiUsage(github, head) {
+  const day = new Date().toISOString().slice(0, 10);
+  const usage = await github.readJson(github.config.drafts, 'usage.json', head, { day, count: 0 });
+  const count = usage.day === day ? usage.count : 0;
+  if (!Number.isInteger(count) || count < 0 || count >= github.config.daily) throw new HttpError(429, 'The editor’s daily AI request limit has been reached. You can still edit and save manually.');
+  return { path: 'usage.json', content: JSON.stringify({ day, count: count + 1 }) + '\n' };
+}
 export async function claimAiRequest(github) {
   // Persist the allowance in private storage; serverless restarts do not reset it.
-  const day = new Date().toISOString().slice(0, 10);
   for (let attempt = 0; attempt < 3; attempt++) {
     const head = await github.head(github.config.drafts);
-    const usage = await github.readJson(github.config.drafts, 'usage.json', head, { day, count: 0 });
-    const count = usage.day === day ? usage.count : 0;
-    if (!Number.isInteger(count) || count < 0 || count >= github.config.daily) throw new HttpError(429, 'The editor’s daily AI request limit has been reached. You can still edit and save manually.');
+    const usage = await nextAiUsage(github, head);
     try {
-      await github.commit(github.config.drafts, head, [{ path: 'usage.json', content: JSON.stringify({ day, count: count + 1 }) + '\n' }], 'Record editor AI request');
+      await github.commit(github.config.drafts, head, [usage], 'Record editor AI request');
       return;
     } catch (error) { if (![409, 422].includes(error.status) || attempt === 2) throw error; }
   }

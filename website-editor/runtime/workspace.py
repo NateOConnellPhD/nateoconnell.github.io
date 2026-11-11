@@ -28,7 +28,9 @@ def allowed(path):
 def prepare():
     data = json.loads(INPUT.read_text())
     ROOT.mkdir(parents=True, exist_ok=True)
-    for name, text in data['working'].items():
+    # New requests send source once and apply the pending overlay below. Keep
+    # older saved inputs compatible with their explicit working tree.
+    for name, text in data.get('working', data['original']).items():
         if not allowed(name):
             raise ValueError('Invalid workspace input path')
         path = ROOT / name

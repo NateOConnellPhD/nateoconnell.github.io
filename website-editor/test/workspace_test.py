@@ -21,7 +21,7 @@ class WorkspaceChecks(unittest.TestCase):
     def setUp(self):
         self.temp_root = PROJECT / '.codex-tmp'
         self.created_root = not self.temp_root.exists()
-        self.parent = self.temp_root / 'responses-editor-review'
+        self.parent = self.temp_root / 'editor-efficiency-review'
         self.created_parent = not self.parent.exists()
         self.parent.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(prefix='workspace-export-check-', dir=self.parent)
@@ -63,6 +63,19 @@ class WorkspaceChecks(unittest.TestCase):
         changes = self.result()
         self.assertEqual(set(changes), {'index.html', 'new.html', 'script.sh'})
         self.assertEqual(changes['index.html']['content'], '<h1>Working</h1>')
+        self.assertIsNone(changes['script.sh']['content'])
+
+    def test_single_source_payload_preserves_pending_edits_and_deletions(self):
+        del self.data['working']
+        self.data['pending'] = [
+            {'path': 'index.html', 'after': '<h1>Private edit</h1>'},
+            {'path': 'new.html', 'after': '<h1>New</h1>'},
+            {'path': 'script.sh', 'after': None},
+        ]
+        self.prepare()
+        changes = self.result()
+        self.assertEqual(changes['index.html']['content'], '<h1>Private edit</h1>')
+        self.assertEqual(changes['new.html']['content'], '<h1>New</h1>')
         self.assertIsNone(changes['script.sh']['content'])
 
     def test_binary_asset_verified_and_pending_replacement_exported(self):

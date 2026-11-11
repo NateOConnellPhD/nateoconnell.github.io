@@ -6,7 +6,7 @@ import { parseSource, validateDocument } from '../lib/content.js';
 import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
 import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
-import { startWorkspace, pollWorkspace, cancelWorkspace } from '../lib/response-workspace.js';
+import { startChat, pollChat, stopChat } from '../lib/repository-chat.js';
 import { streamChat } from '../lib/chat-stream.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
@@ -66,7 +66,7 @@ export async function handle(request) {
     if (request.method === 'GET') {
       if (route === 'chat/events') {
         const { chat } = await loadChat(github, validId(url.searchParams.get('id')));
-        return await streamChat(config, chat.run, request.signal, undefined, new URL(request.url).searchParams.get('after'));
+        return await streamChat(config, chat.run, request.signal, undefined, url.searchParams.get('after'), url.searchParams.get('response'));
       }
       if (route === 'workspace/tree') {
         const tree = await github.tree(SITE, await github.head(SITE));
@@ -101,9 +101,9 @@ export async function handle(request) {
     const data = await readJson(request);
     if (route === 'chat/new') return json(await createChat(github));
     if (route === 'chat/delete') return json(await deleteChat(github, data.id, data.revision));
-    if (route === 'chat/send') return json(await startWorkspace(github, config, data));
-    if (route === 'chat/poll') return json(await pollWorkspace(github, config, validId(data.id)));
-    if (route === 'chat/stop') return json(await cancelWorkspace(github, config, validId(data.id)));
+    if (route === 'chat/send') return json(await startChat(github, config, data));
+    if (route === 'chat/poll') return json(await pollChat(github, config, validId(data.id)));
+    if (route === 'chat/stop') return json(await stopChat(github, config, validId(data.id)));
     if (route === 'workspace/file') {
       if (!sitePath(data.path)) throw new HttpError(403, 'This path is outside the website project.');
       const saved = data.id ? await loadChat(github, validId(data.id)) : null;
@@ -121,7 +121,8 @@ export async function handle(request) {
       const { chat, revision } = await loadChat(github, validId(data.id));
       if (revision !== data.revision) throw new HttpError(409, 'This workspace changed. Reopen it before saving.');
       if (chat.run && !['completed', 'failed', 'cancelled'].includes(chat.run.status)) throw new HttpError(409, 'Stop or finish the active cloud task before editing files directly.');
-      const snapshot = await websiteSnapshot(github, chat.changes);
+      if (!Array.isArray(data.edits) || data.edits.length > 200) throw new HttpError(400, 'Provide up to 200 file edits.');
+      const snapshot = await websiteSnapshot(github, chat.changes, null, data.edits.map(file => file?.path));
       chat.changes = applySiteProposal(chat.changes, { message: 'Manual file edit', edits: data.edits }, snapshot);
       chat.preview = null;
       chat.messages.push({ role: 'system', content: `You edited ${data.edits.map(file => file.path).join(', ')} directly in the workspace.` });

@@ -11,13 +11,14 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   const view = createChatView();
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
-  let streamCursor = null;
+  let streamCursor = null, streamResponse = null, liveConnected = false;
   const running = () => current?.chat.run && !['completed', 'failed', 'cancelled'].includes(current.chat.run.status);
+  const needsProgress = () => running() || current?.chat.run?.cleanupPending;
   const fileDirty = () => filePath && !fileBinary && $('file-source').value !== fileOriginal;
   const leaveFile = () => !fileDirty() || confirm('Discard the unsaved file edit?');
   function resetFile() { filePath = null; fileBinary = false; binaryContent = null; fileOriginal = ''; $('workspace-file-panel').hidden = true; }
   function availability() {
-    $('chat-send').disabled = !aiAvailable() || inFlight || Boolean(running());
+    $('chat-send').disabled = !aiAvailable() || inFlight || Boolean(needsProgress());
     for (const id of ['chat-new', 'workspace-new-file', 'workspace-upload-button']) $(id).disabled = inFlight;
     for (const button of $('chat-history').querySelectorAll('button')) button.disabled = inFlight;
     $('chat-review').disabled = !current?.chat.changes.length || Boolean(running());
@@ -53,6 +54,8 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     const chat = result?.chat;
     const key = chat?.run?.key || null;
     if (key !== outputKey || !running()) { stopStream(); output = new ChatOutput(); outputKey = key; streamCursor = null; }
+    const responseId = chat?.run?.responseId || chat?.run?.sessionId || null;
+    if (responseId !== streamResponse) { stopStream(); streamResponse = responseId; streamCursor = null; }
     if (running()) output.snapshot(result.liveMessages);
     $('chat-title').textContent = chat?.messages.length ? chat.title : 'Website chat';
     for (const button of $('chat-history').querySelectorAll('[data-chat-id]')) button.setAttribute('aria-current', String(button.dataset.chatId === chat?.id));
@@ -74,6 +77,11 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     const failure = chat?.run?.failure || (chat?.run?.error ? { message: chat.run.error, sessionId: chat.run.sessionId, status: chat.run.status } : null);
     $('chat-error-details').hidden = !failure;
     $('chat-error-data').textContent = failure ? JSON.stringify(failure, null, 2) : '';
+    const usage = chat?.usage, last = chat?.run?.usage;
+    $('chat-usage').textContent = usage ? 'Recorded usage: ' + usage.model_requests + ' model requests · ' + usage.input_tokens.toLocaleString() + ' input tokens (' +
+      usage.cached_input_tokens.toLocaleString() + ' cached) · ' + usage.output_tokens.toLocaleString() + ' output tokens · ' + usage.containers + ' temporary workspaces.' +
+      (last ? ' Latest message: ' + last.output_tokens.toLocaleString() + ' output tokens.' : '') +
+      (usage.reported_responses < usage.model_requests ? ' Usage is still incomplete for some responses.' : '') : 'Usage will appear after the first response. Token counts are not a dollar spending cap.';
     $('workspace-preview-panel').hidden = !chat?.preview;
     $('workspace-preview-pages').replaceChildren(...(chat?.preview?.pages || []).map(page => { const option = node('option', page.title || page.path); option.value = page.path; return option; }));
     if (chat?.preview) showPreview();
@@ -118,18 +126,19 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     }
     view.follow(follow);
   }
-  function stopStream() { clearTimeout(streamTimer); streamTimer = null; streamAbort?.abort(); streamAbort = null; }
+  function stopStream() { clearTimeout(streamTimer); streamTimer = null; liveConnected = false; streamAbort?.abort(); streamAbort = null; }
   async function connectStream() {
     if (!active || document.hidden || !running() || !(current?.chat.run.responseId || current?.chat.run.sessionId) || streamAbort || streamTimer) return;
-    const id = current.chat.id, key = outputKey, abort = new AbortController(); streamAbort = abort;
+    const id = current.chat.id, key = outputKey, responseId = streamResponse, abort = new AbortController(); streamAbort = abort;
     try {
-      const response = await fetch(`/api/chat/events?id=${encodeURIComponent(id)}${streamCursor === null ? '' : `&after=${streamCursor}`}`, { credentials: 'same-origin', cache: 'no-store', signal: abort.signal });
+      const response = await fetch(`/api/chat/events?id=${encodeURIComponent(id)}&response=${encodeURIComponent(responseId)}${streamCursor === null ? '' : `&after=${streamCursor}`}`, { credentials: 'same-origin', cache: 'no-store', signal: abort.signal });
       if (response.status === 204) { await checkProgress(); return; }
       if (!response.ok || !response.body) throw new Error('Live connection unavailable');
       for await (const event of readEvents(response.body)) {
-        if (current?.chat.id !== id || outputKey !== key || abort.signal.aborted) break;
+        if (current?.chat.id !== id || outputKey !== key || streamResponse !== responseId || abort.signal.aborted) break;
         if (Number.isSafeInteger(event.cursor)) streamCursor = event.cursor;
-        if (event.kind === 'text' || event.kind === 'message') { output.event(event); renderLive(); }
+        if (event.kind === 'connected') { liveConnected = true; schedulePoll(); }
+        else if (event.kind === 'text' || event.kind === 'message') { output.event(event); renderLive(); }
         else if (event.kind === 'status') $('chat-status').textContent = event.text;
         else if (event.kind === 'settle') { await checkProgress(); break; }
       }
@@ -138,7 +147,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     }
     finally {
       if (streamAbort === abort) {
-        streamAbort = null;
+        streamAbort = null; liveConnected = false; schedulePoll();
         if (running() && active && !document.hidden) streamTimer = setTimeout(() => { streamTimer = null; connectStream(); }, 2000);
       }
     }
@@ -146,14 +155,14 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   function showPreview() { $('workspace-preview').src = `/api/workspace/preview?id=${encodeURIComponent(current.chat.id)}&path=${encodeURIComponent($('workspace-preview-pages').value)}`; }
   function schedulePoll() {
     clearTimeout(timer);
-    if (running() && active && !document.hidden) timer = setTimeout(checkProgress, 5000);
+    if (needsProgress() && active && !document.hidden) timer = setTimeout(checkProgress, liveConnected ? 30000 : 2000);
   }
   async function checkProgress() {
-    if (polling || !current) return;
+    if (polling || !current) { schedulePoll(); return; }
     const id = current.chat.id, key = current.chat.run?.key; polling = true;
     try { const result = await api('chat/poll', { id }); if (current?.chat.id === id && current.chat.run?.key === key) show(result); }
-    catch (error) { if (current?.chat.id === id) { $('chat-status').textContent = error.message + ' Use Check progress to retry.'; schedulePoll(); } }
-    finally { polling = false; }
+    catch (error) { if (current?.chat.id === id) $('chat-status').textContent = error.message + ' Reconnecting automatically…'; }
+    finally { polling = false; schedulePoll(); }
   }
   async function activate() {
     if (!(await leaveDraft())) return false;
@@ -164,7 +173,7 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
   }
   function hide() { active = false; clearTimeout(timer); stopStream(); $('site-chat').hidden = true; $('site-chat-nav').setAttribute('aria-pressed', 'false'); $('app').classList.remove('chat-mode'); view.project(false, false); }
   async function send() {
-    if (inFlight || running()) return;
+    if (inFlight || needsProgress()) return;
     const prompt = $('chat-prompt').value.trim();
     if (!prompt) return;
     const file = $('chat-reference').files[0]; let attachment;
@@ -253,13 +262,13 @@ export function createSiteChat({ api, run, notice, leaveDraft, aiAvailable, onPu
     $('chat-new').focus();
   }
   $('chat-form').addEventListener('submit', event => { event.preventDefault(); send(); });
-  $('chat-stop').addEventListener('click', () => run(async () => { show(await api('chat/stop', { id: current.chat.id })); $('chat-status').textContent = 'Stopping the cloud task…'; }));
+  $('chat-stop').addEventListener('click', () => run(async () => { show(await api('chat/stop', { id: current.chat.id })); }));
   $('chat-check').addEventListener('click', checkProgress);
   $('workspace-preview-pages').addEventListener('change', showPreview);
   $('chat-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !$('chat-send').disabled) { event.preventDefault(); $('chat-form').requestSubmit(); } });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { clearTimeout(timer); stopStream(); }
-    else if (active) { connectStream(); if (running()) checkProgress(); }
+    else if (active) { connectStream(); if (needsProgress()) checkProgress(); }
   });
   document.querySelectorAll('[data-chat-example]').forEach(button => button.addEventListener('click', () => { $('chat-prompt').value = button.dataset.chatExample; view.resize(); $('chat-prompt').focus(); }));
   $('chat-review').addEventListener('click', () => run(async () => {
