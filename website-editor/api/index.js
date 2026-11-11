@@ -7,6 +7,7 @@ import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish,
 import { suggest, pdfAttachment } from '../lib/assistant.js';
 import { createChat, loadChat, saveChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish } from '../lib/site-chat.js';
 import { startWorkspace, pollWorkspace, cancelWorkspace } from '../lib/hosted-agent.js';
+import { streamChat } from '../lib/chat-stream.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
 function redirect(location, values = []) {
@@ -63,6 +64,10 @@ export async function handle(request) {
     // Fail closed if private storage is ever made public.
     await github.privateRepo();
     if (request.method === 'GET') {
+      if (route === 'chat/events') {
+        const { chat } = await loadChat(github, validId(url.searchParams.get('id')));
+        return await streamChat(config, chat.run, request.signal);
+      }
       if (route === 'workspace/tree') {
         const tree = await github.tree(SITE, await github.head(SITE));
         return json({ files: tree.entries.filter(item => item.type === 'blob' && ['100644', '100755'].includes(item.mode) && sitePath(item.path)).map(({ path, size }) => ({ path, size })) });
@@ -200,8 +205,18 @@ export async function handle(request) {
     throw new HttpError(404, 'Unknown editor action.');
   } catch (error) {
     // Never return upstream bodies, tokens, request URLs, or stack traces.
+    let reference;
+    if (!(error instanceof HttpError)) {
+      reference = nonce().slice(0, 12);
+      const kind = ['Error', 'TypeError', 'SyntaxError', 'RangeError'].includes(error?.name) ? error.name : 'Error';
+      const frames = String(error?.stack || '').split('\n').slice(1).flatMap(line => {
+        const match = line.match(/\/(api|lib)\/([A-Za-z0-9_.-]+\.[cm]?js):(\d+):(\d+)/);
+        return match ? [`${match[1]}/${match[2]}:${match[3]}:${match[4]}`] : [];
+      }).slice(0, 8);
+      console.error('editor_request_failed', { reference, kind, frames });
+    }
     if (route === 'auth/callback') return new Response('Sign-in could not be completed. Return to the editor and try again.', { status: error.status || 500, headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
-    return json({ error: error instanceof HttpError ? error.message : 'The editor could not complete this request. Your last saved draft is still available.' }, error instanceof HttpError ? error.status : 500);
+    return json({ error: error instanceof HttpError ? error.message : `The editor hit a server error (reference ${reference}). Your saved conversation and drafts are still available.` }, error instanceof HttpError ? error.status : 500);
   }
 }
 export default { fetch: handle };

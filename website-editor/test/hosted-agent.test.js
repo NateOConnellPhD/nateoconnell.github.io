@@ -139,3 +139,85 @@ test('binary updates preserve the original blob identity and keep private bytes 
   const changes = applySiteProposal([], { message: 'Replace image', edits: [{ path: 'assets/images/test.png', content: Buffer.from([137, 80, 78, 71, 1]).toString('base64'), encoding: 'base64', reason: 'New image' }] }, snapshot);
   assert.equal(changes[0].beforeSha, blobSha(original)); assert.equal(changes[0].binaryBefore, true); assert.equal(changes[0].before, null);
 });
+
+test('running conversation replies are recovered without accepting changes or starting new model work', async () => {
+  const fake = store(); const loaded = await initial(fake, { run: { sessionId: 'sess_test', key: 'key', status: 'running', head: 'public-head' } });
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(options.method, 'GET');
+      if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn1', subagent_id: null, status: 'in_progress' }] });
+      if (url.includes('/items?')) return Response.json({ data: [
+        { id: 'reply', type: 'message', role: 'assistant', phase: 'commentary', status: 'completed', turn_id: 'turn1', content: [{ type: 'output_text', text: 'I’m checking the highlighted papers.' }] },
+        { id: 'hidden', type: 'reasoning', summary: ['Do not show this'] }
+      ] });
+      return Response.json({ status: 'in_progress' });
+    };
+    const result = await pollWorkspace(fake, config, id);
+    assert.equal(result.liveMessages[0].content, 'I’m checking the highlighted papers.');
+    assert.equal(result.liveMessages.length, 1); assert.equal(result.revision, loaded.revision);
+    assert.equal(result.chat.changes.length, 0);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('failure code, session identity and existing reply are saved before cloud cleanup', async () => {
+  const fake = store(); await initial(fake, { run: { sessionId: 'sess_test', key: 'key', status: 'running', head: 'public-head' } });
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, options) => {
+      if (options.method === 'DELETE') {
+        const saved = JSON.parse(fake.files.get(`chats/${id}.json`));
+        assert.equal(saved.run.failure.code, 'internal_error');
+        assert.equal(saved.run.failure.sessionId, 'sess_test');
+        assert.equal(saved.run.failure.turnId, 'turn1');
+        assert.equal(saved.messages[0].content, 'I found the current selection.');
+        return new Response(null, { status: 204 });
+      }
+      if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn1', subagent_id: null, status: 'failed', error: { code: 'internal_error', message: 'An internal error occurred.' } }] });
+      if (url.includes('/items?')) return Response.json({ data: [{ id: 'reply', type: 'message', role: 'assistant', phase: 'commentary', turn_id: 'turn1', content: [{ type: 'output_text', text: 'I found the current selection.' }] }] });
+      return Response.json({ id: 'sess_test', status: 'idle' });
+    };
+    const result = await pollWorkspace(fake, config, id);
+    assert.match(result.chat.run.error, /internal_error/); assert.equal(result.chat.run.cleanupPending, false);
+    assert.equal(result.chat.messages.at(-1).role, 'system');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('a completed question saves the assistant answer and accepts an empty change set', async () => {
+  const fake = store(); await initial(fake, { messages: [{ role: 'user', content: 'Which papers are highlighted?' }], run: { sessionId: 'sess_test', key: 'key', status: 'running', head: 'public-head' } });
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, options) => {
+      if (options.method === 'DELETE') return new Response(null, { status: 204 });
+      if (url.includes('/turns')) return Response.json({ data: [{ id: 'turn1', subagent_id: null, status: 'completed' }] });
+      if (url.includes('/items?')) return Response.json({ data: [{ id: 'reply', type: 'message', role: 'assistant', phase: 'final_answer', status: 'completed', turn_id: 'turn1', content: [{ type: 'output_text', text: 'Here is the current selection. Which would you like to change?' }] }] });
+      if (url.includes('/artifacts?')) return Response.json({ data: [{ id: 'report1', turn_id: 'turn1', path: '/workspace/outputs/review.json' }] });
+      if (url.endsWith('/report1/content')) return Response.json({ message: 'Fallback export message', edits: [] });
+      return Response.json({ status: 'idle' });
+    };
+    const result = await pollWorkspace(fake, config, id);
+    assert.equal(result.chat.run.status, 'completed'); assert.equal(result.chat.changes.length, 0);
+    assert.equal(result.chat.messages.at(-1).content, 'Here is the current selection. Which would you like to change?');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('follow-ups receive the saved conversation and pending edits without publishing them', async () => {
+  const fake = store();
+  const pending = [{ path: 'index.html', before: '<h1>Nate</h1>', beforeSha: blobSha('<h1>Nate</h1>'), after: '<h1>Nate, PhD</h1>', reason: 'Credential' }];
+  const loaded = await initial(fake, { changes: pending, messages: [{ role: 'user', content: 'Add my credential.' }, { role: 'assistant', content: 'Done. What next?' }] });
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, options) => {
+      if (url.endsWith('/sessions')) {
+        const body = JSON.parse(options.body), file = body.environment.files.find(item => item.path === '/workspace/project-input.json');
+        const source = JSON.parse(Buffer.from(file.data, 'base64').toString());
+        assert.equal(source.working['index.html'], '<h1>Nate, PhD</h1>');
+        assert.deepEqual(source.messages.map(message => message.content), ['Add my credential.', 'Done. What next?', 'Now help me choose a paper.']);
+        return Response.json({ id: 'sess_next' });
+      }
+      return new Response(null, { status: 202 });
+    };
+    const result = await startWorkspace(fake, config, { id, revision: loaded.revision, prompt: 'Now help me choose a paper.' });
+    assert.deepEqual(result.chat.changes, pending);
+  } finally { globalThis.fetch = originalFetch; }
+});
