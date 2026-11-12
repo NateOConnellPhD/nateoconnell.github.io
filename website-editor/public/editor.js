@@ -4,9 +4,11 @@ import { createSiteChat } from './site-chat.js';
 import { liveRequest } from './live-request.js';
 import { renderDiff } from './diff.js';
 import { createWritingChat, mergeWritingResult } from './writing-chat.js';
+import { librarySections, libraryTitle, sectionItems } from './library.js';
 
 const $ = id => document.getElementById(id);
 const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'content', drafts: [], files: [], projectFiles: [], pendingFiles: [], review: null, images: new Map() };
+const library = { section: 'pages', cache: new Map(), loading: new Map(), errors: new Map() };
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 function notice(message, error = false, link) {
   const node = $('notice'); node.replaceChildren(document.createTextNode(message)); node.classList.toggle('error', error); node.hidden = false;
@@ -42,16 +44,29 @@ async function refreshLists() {
   const [drafts, files, project] = await Promise.all([api('drafts'), api('library'), api('workspace/tree')]);
   state.drafts = drafts.drafts; state.files = files.files; state.projectFiles = project.files; renderList();
 }
+function sectionKey(section) { return JSON.stringify(sectionItems(state.files, section).map(item => [item.path, item.sha])); }
+async function loadSection(section, key) {
+  library.loading.set(section, key);
+  try {
+    const result = await api(`library?section=${section}`);
+    if (sectionKey(section) === key) library.cache.set(section, { key, files: result.files });
+  } catch (error) { if (sectionKey(section) === key) library.errors.set(section, error.message); }
+  finally { library.loading.delete(section); if (state.list === 'content' && library.section === section) renderList(); }
+}
 function renderList() {
   const container = $('file-list'); container.replaceChildren();
   const descriptions = {
-    content: 'Edit your existing pages, posts, research and talks using content forms. Changes are saved as private writing drafts before publishing.',
-    drafts: 'Resume content you saved in the writing editor. These drafts are separate from the proposed changes saved in each chat.',
-    files: 'Browse all source files and media. Use this for layouts, code, images and PDFs. Edits join the current chat’s proposed changes.'
+    content: '',
+    drafts: 'Your saved writing, including unpublished edits to existing content.',
+    files: 'Layouts, code, images and PDFs. File changes are reviewed in chat before publishing.'
   };
-  $('library-description').textContent = descriptions[state.list];
-  $('content-actions').hidden = state.list === 'files'; $('source-actions').hidden = state.list !== 'files';
-  $('filter').placeholder = state.list === 'files' ? 'Find a source file or upload…' : state.list === 'drafts' ? 'Find a saved draft…' : 'Find a page, post, research entry or talk…';
+  const section = librarySections[library.section];
+  $('library-description').textContent = descriptions[state.list]; $('library-description').hidden = !descriptions[state.list];
+  $('content-section-field').hidden = state.list !== 'content';
+  $('content-actions').hidden = state.list === 'files' || state.list === 'content' && !section.create; $('source-actions').hidden = state.list !== 'files';
+  $('new').textContent = `＋ ${state.list === 'content' ? section.action || 'Add content' : 'Add content'}`;
+  $('filter').placeholder = state.list === 'files' ? 'Find a source file or upload…' : state.list === 'drafts' ? 'Search drafts…' : `Search ${section.label.toLowerCase()}…`;
+  container.classList.toggle('content-list', state.list !== 'files');
   const query = $('filter').value.toLocaleLowerCase();
   if (state.list === 'files') {
     const root = { folders: new Map(), files: [] };
@@ -76,27 +91,50 @@ function renderList() {
     }
     draw(root, container); return;
   }
-  const items = state.list === 'drafts' ? state.drafts : state.files;
-  let lastGroup = null;
-  const ordered = state.list === 'content' ? [...items].sort((a, b) => (a.kind || '').localeCompare(b.kind || '') || a.path.localeCompare(b.path)) : items;
+  let ordered = state.list === 'drafts' ? [...state.drafts].sort((a, b) => String(b.updated).localeCompare(String(a.updated))) : sectionItems(state.files, library.section);
+  if (state.list === 'content' && library.section !== 'pages' && ordered.length) {
+    const key = sectionKey(library.section), cached = library.cache.get(library.section), error = library.errors.get(library.section);
+    if (cached?.key === key) ordered = sectionItems(cached.files, library.section);
+    else {
+      container.append(element('p', error || `Loading ${section.label.toLowerCase()}…`, 'small'));
+      if (error) {
+        const retry = element('button', 'Try again', 'quiet'); retry.addEventListener('click', () => { library.errors.delete(library.section); renderList(); }); container.append(retry);
+      } else if (!$('project-panel').hidden && !library.loading.has(library.section)) loadSection(library.section, key);
+      return;
+    }
+  }
+  const examples = element('details', undefined, 'library-examples');
+  let exampleCount = 0;
   for (const item of ordered) {
-    const title = item.title || (schemas[item.kind].path ? schemas[item.kind].label : item.path.split('/').pop().replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '').replaceAll('-', ' '));
+    const title = libraryTitle(item);
     if (!`${title} ${item.path}`.toLocaleLowerCase().includes(query)) continue;
-    if (state.list === 'content' && item.kind !== lastGroup) { container.append(element('h3', schemas[item.kind].label, 'content-group')); lastGroup = item.kind; }
-    const button = element('button', title);
-    button.classList.toggle('active', item.id === state.draft?.id);
+    const row = element('div', undefined, 'content-row'), button = element('button', undefined, 'content-open'); button.type = 'button';
+    button.append(element('span', title, 'content-title'));
+    button.classList.toggle('active', state.list === 'drafts' ? item.id === state.draft?.id : item.path === state.draft?.document.path);
     const pending = state.pendingFiles.some(change => change.path === item.path);
-    button.append(element('span', state.list === 'drafts' ? `Saved ${new Date(item.updated).toLocaleDateString()}` : pending ? 'Proposed changes in current chat · opens source editor' : schemas[item.kind].label));
-    button.append(element('span', item.path, 'content-path'));
+    const details = state.list === 'drafts' ? [`Saved ${new Date(item.updated).toLocaleDateString()}`] : [item.date?.slice(0, 10), item.published === false ? 'Hidden' : '', item.metadataError ? 'Open in source editor' : ''];
+    if (pending) details.push('Chat edit pending');
+    if (details.filter(Boolean).length) button.append(element('span', details.filter(Boolean).join(' · '), 'content-meta'));
     button.addEventListener('click', () => run(async () => {
-      if (state.list === 'content' && pending) { await siteChat.openFile(item.path); return; }
+      if (state.list === 'content' && (pending || item.metadataError)) { await siteChat.openFile(item.path); return; }
       if (!siteChat.leaveFile() || !(await leaveDraft())) return;
       showDraft(state.list === 'drafts' ? await api(`draft?id=${encodeURIComponent(item.id)}`) : await api('open', { path: item.path }));
       await refreshLists();
     }, 'Opening…'));
-    container.append(button);
+    row.append(button);
+    const saved = state.list === 'content' && state.drafts.find(draft => draft.path === item.path);
+    if (saved && !pending) {
+      const resume = element('button', 'Resume draft', 'content-resume'); resume.type = 'button'; resume.setAttribute('aria-label', `Resume saved draft: ${title}`);
+      resume.addEventListener('click', () => run(async () => {
+        if (!siteChat.leaveFile() || !(await leaveDraft())) return;
+        showDraft(await api(`draft?id=${encodeURIComponent(saved.id)}`));
+      }, 'Opening saved draft…')); row.append(resume);
+    }
+    if (state.list === 'content' && item.example) { examples.append(row); exampleCount++; }
+    else container.append(row);
   }
-  if (!container.children.length) container.append(element('p', state.list === 'drafts' ? 'No drafts here yet. Start something new or open a page from Website content.' : 'No matching content.', 'small'));
+  if (exampleCount) { examples.prepend(element('summary', `Examples (${exampleCount})`)); examples.open = Boolean(query); container.append(examples); }
+  if (!container.children.length) container.append(element('p', query ? 'No matches.' : state.list === 'drafts' ? 'No saved drafts yet.' : `No ${section.label.toLowerCase()} yet.`, 'small'));
 }
 async function leaveDraft() {
   if (writingChat.isBusy()) { notice('Stop the writing reply or let it finish before opening another draft.', true); return false; }
@@ -282,10 +320,12 @@ $('publish').addEventListener('click', () => run(publish, 'Publishing approved c
 $('write-tab').addEventListener('click', () => setView('write'));
 $('preview-tab').addEventListener('click', () => setView('preview'));
 $('filter').addEventListener('input', renderList);
+$('content-section').addEventListener('change', () => { library.section = $('content-section').value; $('filter').value = ''; renderList(); });
+for (const id of ['project-open', 'chat-project-open', 'chat-changes-open', 'file-browse']) $(id).addEventListener('click', renderList);
 for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; $('filter').value = ''; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
 function newDestination() { $('new-destination').textContent = 'Website destination: ' + contentPath($('new-kind').value, $('new-slug').value || 'your-title', $('new-date').value || 'YYYY-MM-DD'); }
 function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; newDestination(); $('new-dialog').showModal(); }
-$('new').addEventListener('click', newDialog);
+$('new').addEventListener('click', () => { if (state.list === 'content' && librarySections[library.section].create) $('new-kind').value = librarySections[library.section].create; newDialog(); });
 $('create-post').addEventListener('click', newDialog);
 for (const id of ['new-kind', 'new-date', 'new-slug']) $(id).addEventListener('input', newDestination);
 $('new-title').addEventListener('input', () => { $('new-slug').value = $('new-title').value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); newDestination(); });

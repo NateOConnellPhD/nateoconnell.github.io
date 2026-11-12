@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { HttpError, SITE, SITE_URL, SESSION, STATE, configuration, nonce, seal, unseal, cookies, cookie, session, requireMutation, readJson, validId, equal, blobSha } from '../lib/security.js';
 import { GitHub } from '../lib/github.js';
 import { schemas, kindForPath } from '../public/schema.js';
-import { parseSource, validateDocument } from '../lib/content.js';
+import { parseSource, validateDocument, contentSummary } from '../lib/content.js';
+import { librarySections } from '../public/library.js';
 import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest, assertDraftIdle } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
 import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish, workingFileSha, checkFileExpectations } from '../lib/site-chat.js';
@@ -87,8 +88,19 @@ export async function handle(request) {
       if (route === 'chats') return json(await github.readJson(config.drafts, 'chats/index.json', 'main', { chats: [] }));
       if (route === 'chat') return json(await loadChat(github, validId(url.searchParams.get('id'))));
       if (route === 'library') {
+        const section = url.searchParams.get('section');
+        if (section && !Object.hasOwn(librarySections, section)) throw new HttpError(400, 'Unknown content section.');
         const tree = await github.tree(SITE, await github.head(SITE));
-        return json({ files: tree.entries.filter(item => item.type === 'blob' && item.mode === '100644' && kindForPath(item.path)).map(item => ({ path: item.path, kind: kindForPath(item.path) })) });
+        const entries = tree.entries.filter(item => item.type === 'blob' && item.mode === '100644' && kindForPath(item.path)).map(item => ({ path: item.path, sha: item.sha, kind: kindForPath(item.path) }));
+        if (!section) return json({ files: entries });
+        const selected = entries.filter(item => librarySections[section].kinds.includes(item.kind)), files = [];
+        // Load only the selected section; immutable blobs use the existing cache.
+        for (let i = 0; i < selected.length; i += 4) files.push(...await Promise.all(selected.slice(i, i + 4).map(async item => {
+          const source = await github.blob(SITE, item.sha);
+          try { return { ...item, ...await contentSummary(item.path, source.buffer.toString()) }; }
+          catch (error) { if (error.status !== 400) throw error; return { ...item, metadataError: true }; }
+        })));
+        return json({ files });
       }
       if (route === 'drafts') return json(await github.readJson(config.drafts, 'index.json', 'main', { drafts: [] }));
       if (route === 'draft') return json(await loadDraft(github, validId(url.searchParams.get('id'))));

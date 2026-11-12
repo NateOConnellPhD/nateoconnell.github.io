@@ -82,7 +82,8 @@
         <section id="workspace-preview-panel" class="workspace-panel" hidden><h2>Built website preview</h2><label for="workspace-preview-pages">Page</label><select id="workspace-preview-pages"></select><iframe id="workspace-preview" title="Private built website preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe><p class="small">Private preview from the cloud build. Forms and external network requests are disabled inside this preview.</p></section>
       <section id="project-files" aria-label="Website library">
         <div class="list-tabs"><button id="content-tab" aria-pressed="true">Content</button><button id="drafts-tab" aria-pressed="false">Saved drafts</button><button id="files-tab" aria-pressed="false">Source & media</button></div>
-        <p id="library-description" class="small"></p>
+        <p id="library-description" class="small" hidden></p>
+        <div id="content-section-field" class="content-section-field"><label class="sr-only" for="content-section">Content section</label><select id="content-section"><option value="pages">Pages</option><option value="posts">Blog posts</option><option value="research">Research</option><option value="talks">Talks</option></select></div>
         <div id="content-actions" class="library-actions"><button id="new" class="button">＋ Add content</button></div>
         <div id="source-actions" class="library-actions" hidden><button id="workspace-new-file" class="button">New source file</button><button id="workspace-upload-button" class="button">Upload image or file</button></div>
         <label class="sr-only" for="filter">Search this library</label><input id="filter" type="search" placeholder="Find content…">

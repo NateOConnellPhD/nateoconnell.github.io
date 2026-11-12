@@ -7,6 +7,16 @@
 .project-panel .list-tabs { justify-content: space-between; margin-bottom: 12px; }
 .project-panel .list-tabs button { padding: 10px 5px; }
 .project-panel .file-list { margin-top: 10px; }
+.content-section-field { margin: 16px 0 12px; }
+.project-panel .content-list { display: block; }
+.content-row { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #e6edf3; }
+.file-list .content-open { flex: 1; min-width: 0; min-height: 48px; border: 0; border-radius: 6px; padding: 12px 8px; background: transparent; }
+.file-list .content-open:hover, .file-list .content-open.active { background: var(--wash); }
+.file-list .content-open .content-title { margin: 0; color: var(--ink); font-size: .86rem; line-height: 1.45; }
+.file-list .content-open .content-meta { font-size: .7rem; line-height: 1.4; margin-top: 4px; }
+.file-list .content-resume { width: auto; flex: none; min-height: 44px; padding: 8px; border: 0; color: var(--blue); font-size: .7rem; white-space: nowrap; }
+.library-examples { margin-top: 18px; }
+.library-examples > summary { padding: 12px 8px; color: var(--muted); font-size: .78rem; }
 .destination-note { font-size: .8rem; line-height: 1.6; background: var(--wash); padding: 12px; border-radius: 6px; overflow-wrap: anywhere; }
 .form-error { color: var(--error); font-size: .85rem; }
 .manual-source { max-width: 1100px; margin: 0 auto; }

@@ -78,6 +78,17 @@ export async function parseSource(path, source) {
   const fields = Object.fromEntries(Object.entries(value).filter(([key]) => Object.hasOwn(schemas[kind].fields, key)));
   return validateDocument({ path, kind, fields, body: parts.body });
 }
+export async function contentSummary(path, source) {
+  const kind = kindForPath(path);
+  if (!kind || Buffer.byteLength(source) > sizeLimit) throw new HttpError(400, 'Unsupported content file.');
+  const { value } = await yamlDocument(split(source, kind).yaml);
+  return {
+    title: typeof value.title === 'string' ? value.title : '',
+    date: String(value.event_date || value.date || ''),
+    published: value.published !== false,
+    example: value.example === true
+  };
+}
 export async function serialize(document, original = '', publish = false) {
   const checked = validateDocument(document, publish);
   const schema = schemas[checked.kind];
