@@ -2,8 +2,17 @@
 example: false
 published: true
 date: 2026-11-11
-tags: []
+tags:
+  - poster
+  - bayesian
+  - hierarchical model
+  - ordinal regression
+  - app
+  - mcmc
+  - judge
+  - heterogeneity
 title: "The Luck of the Judge: Why Averaging Evaluation Scores Can Be Misleading"
+description: I was tasked with organizing a student poster competition for a conference and select the award winners. But simply averaging scores from different judges didn't seem particularly fair. So instead I designed optimized judging assignments, built a Bayesian hierarchical model to account for reviewer variability, and ran simulations to see whether it actually improved the selections. Here's how a simple conference responsibility turned into an unnecessarily elaborate (but useful) statistical exercise.
 ---
 I recently led the poster award competition at the 2026 ASA Statistical Learning and Data Science (SLDS) Conference. I had 40 award-eligible posters, needed to recruit judges and assign evaluations, and ultimately had to select three award winners and two honorable mentions.
 
