@@ -19,7 +19,7 @@ What started as a fairly straightforward responsibility on the organizing commit
 
 1. The problem with naive averaging
 
-Let \T_{ij}\ denote the total score assigned to poster \i\ by reviewer \j\, and let $\mathcal J_i$ be the set of reviewers assigned to poster $i$.
+Let $$T_{ij}$$ denote the total score assigned to poster $$i$$ by reviewer $$j$$, and let $$\mathcal J_i$$ be the set of reviewers assigned to poster $$i$$.
 
 The naive estimator is simply
 
@@ -28,7 +28,7 @@ $$
 \sum_{j\in\mathcal J_i}T_{ij}.
 $$
 
-The problem is that $T_{ij}$ reflects both the poster and the reviewer.
+The problem is that $$T_{ij}$$ reflects both the poster and the reviewer.
 
 If reviewers differ in their scoring severity, the average of two or three scores contains variation attributable to the specific reviewers assigned to the poster.
 
@@ -48,7 +48,7 @@ The resulting design provided 84 required evaluations, guaranteeing at least two
 
 Rather than assigning posters completely at random, I constructed a constrained incomplete block design.
 
-Let $A$ denote the $40\times 28$ binary assignment matrix, where
+Let $$A$$ denote the $$40\times 28$$ binary assignment matrix, where
 
 $$
 A_{ij} = I(\text{reviewer } j \text{ evaluates poster } i).
@@ -88,7 +88,7 @@ $$
 C(A) = \operatorname{diag}(r) - A\operatorname{diag}(k_j^{-1})A^\top,
 $$
 
-where $r_i$ and $k_j$ are the poster and reviewer assignment counts.
+where $$r_i$$ and $$k_j$$ are the poster and reviewer assignment counts.
 
 A natural A-optimality objective is
 
@@ -98,7 +98,7 @@ $$
 }
 $$
 
-where $C(A)^+$ is the Moore–Penrose inverse.
+where $$C(A)^+$$ is the Moore–Penrose inverse.
 
 I used constrained assignment generation and optimization to improve the design while preserving the coverage and overlap requirements. I didn’t actually prove global A-optimality, but I could verify the relevant combinatorial properties.
 
@@ -132,7 +132,7 @@ $$
 Y_{ijk}\in\{1,2,3,4,5\}
 $$
 
-denote the score assigned to poster $i$ by reviewer $j$ on criterion $k$.
+denote the score assigned to poster $$i$$ by reviewer $$j$$ on criterion $$k$$.
 
 I introduce an underlying latent assessment
 
@@ -150,12 +150,12 @@ The terms have the following interpretations:
 
 Term | Interpretation
 --- | ---
-$\alpha_i$ | Overall poster effect
-$\beta_j$ | General reviewer scoring tendency
-$\gamma_k$ | Criterion-specific location
-$\delta_{ik}$ | Poster-by-criterion deviation
-$\zeta_{jk}$ | Reviewer-by-criterion deviation
-$\xi_{ij}$ | Reviewer–poster interaction
+$$\alpha_i$$ | Overall poster effect
+$$\beta_j$$ | General reviewer scoring tendency
+$$\gamma_k$$ | Criterion-specific location
+$$\delta_{ik}$$ | Poster-by-criterion deviation
+$$\zeta_{jk}$$ | Reviewer-by-criterion deviation
+$$\xi_{ij}$$ | Reviewer–poster interaction
 
 The reviewer–poster interaction is particularly interesting. It represents the possibility that a reviewer forms an overall impression of a particular poster that influences all four ratings.
 
@@ -234,9 +234,9 @@ $$
 
 evaluations.
 
-Let $Y_{ijk}^{\mathrm{full}}$ denote the score that reviewer $j$ would assign poster $i$ on criterion $k$ under this hypothetical complete evaluation.
+Let $$Y_{ijk}^{\mathrm{full}}$$ denote the score that reviewer $$j$$ would assign poster $$i$$ on criterion $$k$$ under this hypothetical complete evaluation.
 
-The finite-panel average for poster $i$ would be
+The finite-panel average for poster $$i$$ would be
 
 $$
 S_i^{\mathrm{full}} = \frac{1}{28}
@@ -267,7 +267,7 @@ $$
 p_{i,3} = P\left(\operatorname{rank}(S_i^{\mathrm{full}})\leq 3\mid \mathbf Y_{\mathrm{obs}}\right).
 $$
 
-I also calculated $p_{i,5}$ and $p_{i,10}$ to be used as a tiebreaker.
+I also calculated $$p_{i,5}$$ and $$p_{i,10}$$ to be used as a tiebreaker.
 
 One important assumption is that the missing evaluations can be predicted from the observed scores, assignment structure, and hierarchical model. If optional-review completion depends on the unobserved assessment itself, that assumption may fail. Likewise, a poster that never appeared is not simply an ordinary missing review.
 
@@ -281,7 +281,7 @@ Rather than ranking posters by posterior mean scores, I ranked them by their pos
 
 There’s a straightforward decision-theoretic justification.
 
-Let $\mathcal S$ denote the three selected award recipients and $\mathcal T_3$ denote the top three under the fully observed panel.
+Let $$\mathcal S$$ denote the three selected award recipients and $$\mathcal T_3$$ denote the top three under the fully observed panel.
 
 Then
 
@@ -295,13 +295,13 @@ E\left[\left|\mathcal S\cap\mathcal T_3\right|\mid\mathbf Y_{\mathrm{obs}}\right
 \end{aligned}
 $$
 
-Thus, selecting the three posters with the largest $p_{i,3}$ maximizes the posterior expected number of correctly identified top-three posters.
+Thus, selecting the three posters with the largest $$p_{i,3}$$ maximizes the posterior expected number of correctly identified top-three posters.
 
 The next two posters in that same ordering received honorable mentions.
 
 I also considered the severity of mistakes. Mistaking the fourth-ranked poster for the third seems relatively harmless. Awarding a poster that would rank 20th under a complete evaluation is considerably more concerning.
 
-I therefore included a limited tie-breaking rule based on $P(\text{Top 10})$, with numerical safeguards to avoid reversing decisions based on negligible Monte Carlo differences.
+I therefore included a limited tie-breaking rule based on $$P(\text{Top 10})$$, with numerical safeguards to avoid reversing decisions based on negligible Monte Carlo differences.
 
 To be clear, I established this model and selection rules before ever modeling the real evaluations. It was set before the conference poster session. There was no post-hoc model evaluation other than checking convergence.
 
