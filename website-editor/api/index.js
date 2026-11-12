@@ -3,13 +3,14 @@ import { HttpError, SITE, SITE_URL, SESSION, STATE, configuration, nonce, seal, 
 import { GitHub } from '../lib/github.js';
 import { schemas, kindForPath } from '../public/schema.js';
 import { parseSource, validateDocument } from '../lib/content.js';
-import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest } from '../lib/drafts.js';
+import { loadDraft, saveDraft, openDraft, updateDraft, addImage, preparePublish, claimAiRequest, assertDraftIdle } from '../lib/drafts.js';
 import { suggest, pdfAttachment } from '../lib/assistant.js';
 import { createChat, loadChat, saveChat, deleteChat, websiteSnapshot, sitePath, applySiteProposal, prepareChatPublish, workingFileSha, checkFileExpectations } from '../lib/site-chat.js';
 import { startChat, pollChat, stopChat } from '../lib/repository-chat.js';
 import { streamChat } from '../lib/chat-stream.js';
 import { liveChat } from '../lib/live-chat.js';
 import { cleanupDeletedChat } from '../lib/chat-cleanup.js';
+import { writingTurn, writingAction } from '../lib/writing-chat.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
 function redirect(location, values = []) {
@@ -179,6 +180,7 @@ export async function handle(request) {
     if (route === 'save') return json(await updateDraft(github, data));
     if (route === 'upload') return json(await addImage(github, data));
     if (route === 'assist') {
+      if (data.requestId) return liveChat(live => writingTurn(github, config, data, live), request.signal, config);
       const { draft, revision } = await loadDraft(github, data.id);
       if (revision !== data.revision) throw new HttpError(409, 'Save or reload your draft before asking the assistant.');
       if (!config.apiKey) throw new HttpError(503, 'The OpenAI key has not been configured. Manual editing is available.');
@@ -187,6 +189,7 @@ export async function handle(request) {
       await claimAiRequest(github);
       return json({ ...(await suggest(config, draft.document, data.prompt, data.attachment)), revision });
     }
+    if (route === 'assist/action') return json(await writingAction(github, data));
     if (route === 'review') {
       const { draft, revision } = await loadDraft(github, data.id);
       if (revision !== data.revision) throw new HttpError(409, 'Save or reload the draft before review.');
@@ -213,6 +216,7 @@ export async function handle(request) {
     }
     if (route === 'restore') {
       const { draft, revision } = await loadDraft(github, data.id);
+      assertDraftIdle(draft);
       if (revision !== data.revision || !draft.publishedCommit || !Object.hasOwn(draft, 'previousSource')) throw new HttpError(409, 'There is no saved previous version for this draft.');
       const file = await github.read(SITE, draft.document.path);
       if (file.sha !== draft.sourceSha) throw new HttpError(409, 'The website has newer edits. Open its current version before restoring anything.');

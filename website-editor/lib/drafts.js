@@ -4,6 +4,9 @@ import { validateDocument, parseSource, serialize, newPath, imageUpload } from '
 import { schemas, initialFields } from '../public/schema.js';
 
 export const draftPath = id => `drafts/${validId(id)}.json`;
+export function assertDraftIdle(draft) {
+  if (draft.writing?.run?.status === 'running' && draft.writing.run.expires > Date.now()) throw new HttpError(409, 'A reply is still in progress for this draft. Stop it or wait for it to finish before saving.');
+}
 export async function loadDraft(github, id, ref = 'main') {
   const file = await github.read(github.config.drafts, draftPath(id), ref);
   const draft = JSON.parse(file.buffer.toString());
@@ -27,9 +30,18 @@ export async function saveDraft(github, draft, expected, extra = []) {
   index.drafts = [entry, ...index.drafts.filter(item => item.id !== draft.id)];
   const content = JSON.stringify(draft, null, 2) + '\n';
   if (Buffer.byteLength(content) > 800000) throw new HttpError(413, 'This draft is too large.');
+  const extraFiles = typeof extra === 'function' ? await extra(head) : extra;
   await github.commit(repo, head, [
-    { path: draftPath(draft.id), content }, { path: 'index.json', content: JSON.stringify(index, null, 2) + '\n' }, ...extra
+    { path: draftPath(draft.id), content }, { path: 'index.json', content: JSON.stringify(index, null, 2) + '\n' }, ...extraFiles
   ], `Save private draft: ${entry.title.slice(0, 100)}`);
+  return { draft, revision: blobSha(content) };
+}
+export async function saveWritingCheckpoint(github, draft, revision) {
+  // A completed reply only updates its draft, not the library index or other files.
+  draft.updated = new Date().toISOString();
+  const content = JSON.stringify(draft, null, 2) + '\n';
+  if (Buffer.byteLength(content) > 800000) throw new HttpError(413, 'This draft’s saved conversation is too large. Clear its chat to continue. Your writing is preserved.');
+  await github.writePrivate(draftPath(draft.id), content, revision);
   return { draft, revision: blobSha(content) };
 }
 export async function openDraft(github, { path, kind, slug, date }) {
@@ -50,6 +62,7 @@ export async function openDraft(github, { path, kind, slug, date }) {
 }
 export async function updateDraft(github, data) {
   const { draft, revision } = await loadDraft(github, data.id);
+  assertDraftIdle(draft);
   if (revision !== data.revision) throw new HttpError(409, 'This draft changed. Reload before saving.');
   if (data.document?.path !== draft.document.path || data.document?.kind !== draft.document.kind) throw new HttpError(403, 'A draft cannot change its destination.');
   draft.document = validateDocument(data.document);
@@ -57,6 +70,7 @@ export async function updateDraft(github, data) {
 }
 export async function addImage(github, data) {
   const { draft, revision } = await loadDraft(github, data.id);
+  assertDraftIdle(draft);
   if (revision !== data.revision) throw new HttpError(409, 'Save or reload the draft before uploading.');
   if (draft.assets.length >= 12) throw new HttpError(400, 'This draft already has 12 uploaded images.');
   const image = imageUpload(data);
@@ -66,6 +80,7 @@ export async function addImage(github, data) {
   return { ...(await saveDraft(github, draft, revision, [{ path: asset.path, content: image.buffer }])), asset };
 }
 export async function preparePublish(github, draft) {
+  assertDraftIdle(draft);
   const content = await serialize(draft.document, draft.source, true);
   const head = await github.head(SITE);
   const current = await github.read(SITE, draft.document.path, head, true);

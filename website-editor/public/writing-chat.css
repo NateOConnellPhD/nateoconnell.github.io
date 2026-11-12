@@ -1,0 +1,26 @@
+.editor-columns { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); }
+.writing-chat { align-self: start; position: sticky; top: 18px; padding-left: 22px; }
+.writing-chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.writing-chat-heading h2 { font-family: inherit; font-size: 1.1rem; margin: 0; }
+.writing-chat-heading .quiet { white-space: nowrap; font-size: .75rem; }
+.writing-scroll { max-height: 55dvh; min-height: 240px; overflow: auto; overscroll-behavior: contain; padding: 4px 10px 12px 0; }
+.writing-message { margin: 0 0 18px; overflow-wrap: anywhere; font-size: .88rem; }
+.writing-message > div { white-space: pre-wrap; }
+.writing-message > div p { margin: 0 0 10px; }
+.writing-user { margin-left: 24px; padding: 12px; border-radius: 12px 12px 2px 12px; background: var(--wash); }
+.writing-speaker { font-size: .68rem; font-weight: 650; color: var(--muted); margin: 0 0 6px; }
+.writing-system { color: var(--muted); font-size: .78rem; border-left: 2px solid var(--line); padding-left: 10px; }
+.writing-stream { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .88rem; margin-bottom: 16px; }
+.writing-chat .suggestion { margin-top: 16px; }
+.writing-chat .suggestion h3 { font-size: .95rem; }
+.writing-chat .suggestion .source-diff { font-size: .72rem; }
+.writing-chat #ai-status { min-height: 1.4em; margin: 8px 0; }
+.writing-composer { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: white; }
+.writing-composer textarea { border: 0; padding: 4px; min-height: 72px; max-height: 180px; resize: vertical; font-size: .9rem; }
+.writing-composer-actions { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
+.writing-composer-actions details { flex: 1; min-width: 0; }
+.writing-composer-actions summary { font-size: .75rem; }
+.writing-composer-actions .button { min-height: 40px; padding: 9px 14px; }
+.writing-chat-note { font-size: .72rem; }
+@media (max-width: 1250px) { .editor-columns { grid-template-columns: 1fr; } .writing-chat { position: static; border-left: 0; border-top: 1px solid var(--line); padding: 24px 0 0; } }
+@media (max-width: 700px) { .writing-scroll { max-height: 50dvh; } .writing-composer textarea { font-size: 16px; } }

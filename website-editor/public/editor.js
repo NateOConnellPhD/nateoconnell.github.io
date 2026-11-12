@@ -3,9 +3,10 @@ import { markdown, linkTarget } from './markdown.js';
 import { createSiteChat } from './site-chat.js';
 import { liveRequest } from './live-request.js';
 import { renderDiff } from './diff.js';
+import { createWritingChat, mergeWritingResult } from './writing-chat.js';
 
 const $ = id => document.getElementById(id);
-const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'content', drafts: [], files: [], projectFiles: [], pendingFiles: [], proposal: null, review: null, images: new Map() };
+const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'content', drafts: [], files: [], projectFiles: [], pendingFiles: [], review: null, images: new Map() };
 const element = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 function notice(message, error = false, link) {
   const node = $('notice'); node.replaceChildren(document.createTextNode(message)); node.classList.toggle('error', error); node.hidden = false;
@@ -21,6 +22,7 @@ async function api(route, data) {
 }
 async function run(action, message = 'Working…') {
   if (state.busy) return;
+  if (writingChat.isBusy()) return notice('Stop the writing reply or let it finish before switching or saving. You can keep typing in the draft.', true);
   state.busy = true;
   const disabled = [...document.querySelectorAll('button,input,textarea,select')].map(node => [node, node.disabled]);
   disabled.forEach(([node]) => { node.disabled = true; });
@@ -28,14 +30,14 @@ async function run(action, message = 'Working…') {
   try { await action(); } catch (error) { notice(error.message, true); }
   finally {
     state.busy = false; disabled.forEach(([node, previous]) => { if (node.isConnected) node.disabled = previous; });
-    $('ask').disabled = !state.auth?.ai; siteChat.availability(); updateSaveState();
+    writingChat.controls(); siteChat.availability(); updateSaveState();
   }
 }
 function updateSaveState() {
   if (!state.draft) return;
   $('save-state').textContent = state.dirty ? 'Unsaved changes' : `Saved privately · ${new Date(state.draft.updated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
 }
-function dirty() { state.dirty = true; state.review = null; updateSaveState(); }
+function dirty() { state.dirty = true; state.review = null; updateSaveState(); writingChat.controls(); }
 async function refreshLists() {
   const [drafts, files, project] = await Promise.all([api('drafts'), api('library'), api('workspace/tree')]);
   state.drafts = drafts.drafts; state.files = files.files; state.projectFiles = project.files; renderList();
@@ -97,6 +99,7 @@ function renderList() {
   if (!container.children.length) container.append(element('p', state.list === 'drafts' ? 'No drafts here yet. Start something new or open a page from Website content.' : 'No matching content.', 'small'));
 }
 async function leaveDraft() {
+  if (writingChat.isBusy()) { notice('Stop the writing reply or let it finish before opening another draft.', true); return false; }
   if (!state.dirty) return true;
   if (!confirm('Save this draft before opening something else? Cancel keeps you here.')) return false;
   await save(); return true;
@@ -104,13 +107,12 @@ async function leaveDraft() {
 function showDraft(result) {
   siteChat.hide();
   $('app').classList.remove('conversations-open'); $('chat-menu').setAttribute('aria-expanded', 'false');
-  state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.proposal = null; state.review = null; state.images.clear();
-  $('document').hidden = false; $('suggestion').hidden = true;
-  $('prompt').value = ''; $('reference').value = ''; $('ai-status').textContent = '';
+  state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.review = null; state.images.clear();
+  $('document').hidden = false;
   $('document-kind').textContent = schemas[state.draft.document.kind].label;
   $('document-destination').textContent = `${state.draft.sourceSha ? 'Updates' : 'Creates'} ${state.draft.document.path} when you publish. Until then, this is a private draft.`;
   $('restore').hidden = !state.draft.publishedCommit || !Object.hasOwn(state.draft, 'previousSource');
-  renderFields(); setView('write'); updateSaveState();
+  renderFields(); setView('write'); updateSaveState(); writingChat.show();
 }
 function inputField(key, spec, value, change) {
   const wrap = element('div', undefined, 'field');
@@ -150,8 +152,13 @@ function renderFields() {
 }
 async function save() {
   if (!state.draft || !state.dirty) return;
-  const result = await api('save', { id: state.draft.id, revision: state.revision, document: state.draft.document });
-  state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.review = null;
+  const sent = JSON.stringify(state.draft.document);
+  const result = await api('save', { id: state.draft.id, revision: state.revision, document: JSON.parse(sent) });
+  const typedDuringSave = JSON.stringify(state.draft.document) !== sent, document = state.draft.document;
+  state.draft = result.draft;
+  if (typedDuringSave || JSON.stringify(result.draft.document) === sent) state.draft.document = document;
+  else renderFields();
+  state.revision = result.revision; state.dirty = typedDuringSave; state.review = null;
   updateSaveState();
   const index = await api('drafts'); state.drafts = index.drafts; renderList();
 }
@@ -211,25 +218,6 @@ async function upload(file) {
   insertText(`\n\n![Describe the image](${result.asset.publicPath})\n\n`);
   await save(); notice('Image saved privately. Replace “Describe the image” with a useful description.');
 }
-function clearProposal() { state.proposal = null; $('suggestion').hidden = true; $('ai-status').textContent = ''; }
-async function ask() {
-  const prompt = $('prompt').value.trim(); if (!prompt) throw new Error('Tell GPT what you would like to change.');
-  const file = $('reference').files[0]; let attachment;
-  if (file) { if (file.size > 1500000) throw new Error('Reference PDFs must be smaller than 1.5 MB.'); attachment = { base64: await base64(file) }; }
-  await save(); const baseline = JSON.stringify(state.draft.document);
-  $('ai-status').textContent = 'Reading and working on your request…';
-  try {
-    const result = await api('assist', { id: state.draft.id, revision: state.revision, prompt, attachment });
-    state.proposal = { ...result, baseline };
-    $('suggestion-message').textContent = result.message; $('suggestion-content').replaceChildren();
-    const before = state.draft.document;
-    for (const [key, spec] of Object.entries(schemas[before.kind].fields)) if (JSON.stringify(before.fields[key]) !== JSON.stringify(result.document.fields[key])) {
-      const details = element('details'); details.append(element('summary', spec.label), element('pre', typeof result.document.fields[key] === 'string' ? result.document.fields[key] : JSON.stringify(result.document.fields[key], null, 2))); $('suggestion-content').append(details);
-    }
-    if (before.body !== result.document.body) { const details = element('details'); details.open = true; details.append(element('summary', 'Revised writing'), element('pre', result.document.body)); $('suggestion-content').append(details); }
-    $('suggestion').hidden = false; $('ai-status').textContent = 'Suggestion ready. Your draft has not changed.';
-  } catch (error) { $('ai-status').textContent = 'Your draft has not changed.'; throw error; }
-}
 async function review() {
   await save(); state.review = await api('review', { id: state.draft.id, revision: state.revision });
   $('review-description').textContent = state.review.visible ? 'Review the content and exact changes below. Nothing goes public until you choose Publish.' : 'This update keeps the entry hidden on the website. Its source will still be in the public repository.';
@@ -246,17 +234,19 @@ async function publish() {
   await refreshLists();
 }
 
+const writingChat = createWritingChat({ api, stream: (route, data, onEvent, signal) => liveRequest(route, data, state.auth?.csrf || '', onEvent, signal),
+  current: () => state, save, available: () => Boolean(state.auth?.ai), locked: () => state.busy, notice,
+  receive(result) {
+    if (mergeWritingResult(state, result)) { renderFields(); setView('write'); }
+    updateSaveState();
+  }
+});
+
 const siteChat = createSiteChat({ api, apiStream: (route, data, onEvent, signal) => liveRequest(route, data, state.auth?.csrf || '', onEvent, signal), run, notice, leaveDraft, aiAvailable: () => Boolean(state.auth?.ai), onPublished: refreshLists, onWorkingFiles: changes => { state.pendingFiles = changes; renderList(); } });
 $('body').addEventListener('input', () => { state.draft.document.body = $('body').value; dirty(); });
 $('save').addEventListener('click', () => run(save, 'Saving privately…'));
 $('review').addEventListener('click', () => run(review, 'Preparing review…'));
 $('publish').addEventListener('click', () => run(publish, 'Publishing approved changes…'));
-$('ask').addEventListener('click', () => run(ask, 'Working with GPT…'));
-$('apply').addEventListener('click', () => {
-  if (!state.proposal || JSON.stringify(state.draft.document) !== state.proposal.baseline) return notice('Your draft changed after this suggestion. Ask again so no edits are overwritten.', true);
-  state.draft.document = structuredClone(state.proposal.document); dirty(); renderFields(); clearProposal(); setView('write'); notice('Suggestion applied to your working draft. Review it and save when ready.');
-});
-$('discard').addEventListener('click', clearProposal);
 $('write-tab').addEventListener('click', () => setView('write'));
 $('preview-tab').addEventListener('click', () => setView('preview'));
 $('filter').addEventListener('input', renderList);
@@ -298,7 +288,7 @@ $('format-bar').addEventListener('click', event => {
   }
 });
 $('logout').addEventListener('click', () => run(async () => { if (!(await leaveDraft())) return; await api('logout', {}); location.assign('/'); }));
-window.addEventListener('beforeunload', event => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.dirty || writingChat.isBusy()) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 's' && state.draft) { event.preventDefault(); run(save, 'Saving privately…'); } });
 let initializing = false;
 async function initialize() {
