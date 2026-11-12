@@ -349,7 +349,7 @@ For example, how often would the selected three award recipients include at leas
 In a separate simulation with 75 competitions per scenario, the results with only the required reviews were:
 
 Scenario | Naive average | Bayesian model
---- | ---: | ---:
+--- | ---: | ---: | ---:
 Moderate variability | 12.0% | 5.3%
 Different reviewer preferences | 32.0% | 22.7%
 Closely matched posters | 61.3% | 54.7%
@@ -384,7 +384,7 @@ Not every scheduled poster appeared, and some reviewers didn’t complete all of
 
 I fitted the prespecified model using four independent MCMC chains, retaining 16,000 posterior parameter draws and generating 32,000 completed-panel realizations.
 
-The model ran in approximately 51 seconds in JavaScript. The maximum reported split-$\hat R$ values were approximately 1.002 for the poster scores and 1.004 for the variance components.
+The model ran in approximately 51 seconds in JavaScript. The maximum reported split-R-hat values were approximately 1.002 for the poster scores and 1.004 for the variance components.
 
 The resulting posterior estimates for the leading seven posters are shown below. Posters are identified only by their final model rank, not by their actual presentation numbers or identities.
 
