@@ -145,9 +145,7 @@ $$
 with
 
 $$
-\eta_{ijk}=
-\mu+\alpha_i+\beta_j+\gamma_k+
-\delta_{ik}+\zeta_{jk}+\xi_{ij}.
+\eta_{ijk}=\mu+\alpha_i+\beta_j+\gamma_k+\delta_{ik}+\zeta_{jk}+\xi_{ij}.
 $$
 
 The terms have the following interpretations:
@@ -174,9 +172,7 @@ so
 
 $$
 P(Y_{ijk}=c\mid\eta_{ijk})
-=
-\Phi(\tau_{kc}-\eta_{ijk})
--
+=\Phi(\tau_{kc}-\eta_{ijk})-
 \Phi(\tau_{k,c-1}-\eta_{ijk}).
 $$
 
@@ -250,11 +246,7 @@ The finite-panel average for poster \(i\) would be
 
 $$
 S_i^{\mathrm{full}}
-=
-\frac{1}{28}
-\sum_{j=1}^{28}
-\sum_{k=1}^{4}
-Y_{ijk}^{\mathrm{full}}.
+=\frac{1}{28}\sum_{j=1}^{28}\sum_{k=1}^{4}Y_{ijk}^{\mathrm{full}}.
 $$
 
 These averages define the ranking that would result from the collective assessments of the actual judging panel.
@@ -276,12 +268,7 @@ Repeating this procedure produced a posterior distribution over the rankings tha
 In particular,
 
 $$
-p_{i,3}
-=
-P\left(
-\operatorname{rank}(S_i^{\mathrm{full}})\leq3
-\mid\mathbf Y_{\mathrm{obs}}
-\right).
+p_{i,3}=P\left(\operatorname{rank}(S_i^{\mathrm{full}})\leq3\mid\mathbf Y_{\mathrm{obs}}\right).
 $$
 
 I also calculated \(p_{i,5}\) and \(p_{i,10}\) to be used as a tiebreaker.
@@ -304,15 +291,9 @@ Then
 
 $$
 \begin{aligned}
-E\left[
-|\mathcal S\cap\mathcal T_3|
-\mid\mathbf Y_{\mathrm{obs}}
-\right]
-&=
-\sum_{i\in\mathcal S}
-P(i\in\mathcal T_3\mid\mathbf Y_{\mathrm{obs}})\\
-&=
-\sum_{i\in\mathcal S}p_{i,3}.
+E\left[|\mathcal S\cap\mathcal T_3|\mid\mathbf Y_{\mathrm{obs}}\right]
+&=\sum_{i\in\mathcal S}P(i\in\mathcal T_3\mid\mathbf Y_{\mathrm{obs}})\\
+&=\sum_{i\in\mathcal S}p_{i,3}.
 \end{aligned}
 $$
 
@@ -342,13 +323,14 @@ Bayesian adjustment versus simple averaging
 
 The table shows the average number of the complete panel’s top-three posters correctly selected. The maximum possible is three.
 
-Scenario\tReviews\tNaive average\tBayesian model
-Moderate reviewer variability\t80\t1.88\t1.92
-\t130\t2.05\t2.19
-Different reviewer preferences\t80\t1.62\t1.75
-\t130\t1.88\t2.06
-Closely matched posters\t80\t1.09\t1.26
-\t130\t1.27\t1.56
+Scenario | Reviews | Naive average | Bayesian model
+--- | --- | --- | ---
+Moderate reviewer variability | 80 | 1.88 | 1.92
+Moderate reviewer variability | 130 | 2.05 | 2.19
+Different reviewer preferences | 80 | 1.62 | 1.75
+Different reviewer preferences | 130 | 1.88 | 2.06
+Closely matched posters | 80 | 1.09 | 1.26
+Closely matched posters | 130 | 1.27 | 1.56
 
 These results come from 160 simulated competitions per scenario, using an earlier ordinal hierarchical specification.
 
@@ -368,10 +350,11 @@ For example, how often would the selected three award recipients include at leas
 
 In a separate simulation with 75 competitions per scenario, the results with only the required reviews were:
 
-Scenario\tNaive average\tBayesian model
-Moderate variability\t12.0%\t5.3%
-Different reviewer preferences\t32.0%\t22.7%
-Closely matched posters\t61.3%\t54.7%
+Scenario | Naive average | Bayesian model
+--- | --- | ---
+Moderate variability | 12.0% | 5.3%
+Different reviewer preferences | 32.0% | 22.7%
+Closely matched posters | 61.3% | 54.7%
 
 Here, the Bayesian analysis generally reduced the frequency of severe errors.
 
