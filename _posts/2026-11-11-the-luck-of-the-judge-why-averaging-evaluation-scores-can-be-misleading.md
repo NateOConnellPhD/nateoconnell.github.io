@@ -19,7 +19,7 @@ What started as a fairly straightforward responsibility on the organizing commit
 
 1. The problem with naive averaging
 
-Let $T_{ij}$ denote the total score assigned to poster $i$ by reviewer $j$, and let $\mathcal J_i$ be the set of reviewers assigned to poster $i$.
+Let \T_{ij}\ denote the total score assigned to poster \i\ by reviewer \j\, and let $\mathcal J_i$ be the set of reviewers assigned to poster $i$.
 
 The naive estimator is simply
 
