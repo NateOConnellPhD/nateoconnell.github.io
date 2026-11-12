@@ -19,4 +19,8 @@
 #file-action-replace-label { align-items: start; margin-top: 18px; color: var(--error); }
 #file-action-replace { width: 20px; min-width: 20px; }
 .file-list .content-path { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.image-field-preview { display: grid; place-items: center; min-height: 120px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--wash); }
+.image-field-preview img { display: block; max-width: 100%; max-height: 260px; width: auto; height: auto; border-radius: 4px; }
+.image-field-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.image-field-actions button { min-height: 44px; }
 @media (min-width: 1151px) { .app.project-open { grid-template-columns: 232px minmax(340px, 1fr) minmax(340px, 440px); } }

@@ -6,7 +6,7 @@ export const schemas = {
   post: { label: 'Blog post', folder: '_posts', body: true, fields: {
     ...common, description: long('Short description', { required: true, help: 'Appears below the title on the homepage and blog page. Required before publishing.' }),
     date: { label: 'Publication date', type: 'date', required: true }, tags: { label: 'Topics', type: 'tags' },
-    cover: text('Cover image', { url: true }), cover_alt: text('Cover image description'), cover_caption: text('Cover caption'), ...visible
+    cover: { label: 'Cover image', type: 'image', url: true }, cover_alt: text('Cover image description'), cover_caption: text('Cover caption'), ...visible
   } },
   research: { label: 'Research entry', folder: '_research', body: true, fields: {
     title: common.title, kind: { label: 'Type', type: 'select', options: ['Publication', 'Preprint', 'Manuscript', 'Project', 'Other'] },

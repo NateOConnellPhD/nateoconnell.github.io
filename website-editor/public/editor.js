@@ -118,6 +118,33 @@ function inputField(key, spec, value, change) {
   const wrap = element('div', undefined, 'field');
   const id = `field-${key}`;
   const label = element('label', spec.label); label.htmlFor = id; wrap.append(label);
+  if (spec.type === 'image') {
+    wrap.classList.add('image-field');
+    const image = element('img'), placeholder = element('p', value ? 'Loading cover image…' : 'No cover image selected.', 'small');
+    image.alt = state.draft.document.fields.cover_alt || 'Cover image preview'; image.hidden = true;
+    const unavailable = () => { image.hidden = true; placeholder.hidden = false; placeholder.textContent = 'Preview unavailable. You can replace this image below.'; };
+    image.addEventListener('load', () => { image.hidden = false; placeholder.hidden = true; });
+    image.addEventListener('error', unavailable);
+    const preview = element('div', undefined, 'image-field-preview'); preview.append(image, placeholder);
+    const input = element('input'); input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp,image/gif'; input.hidden = true; input.dataset.imageAction = '';
+    const choose = element('button', value ? 'Replace cover image' : 'Upload cover image', 'button'); choose.type = 'button'; choose.id = id; choose.dataset.imageAction = '';
+    choose.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => { const file = input.files[0]; input.value = ''; if (file) run(() => upload(file, key), 'Saving cover image privately…'); });
+    const actions = element('div', undefined, 'image-field-actions'); actions.append(choose);
+    if (value) {
+      const remove = element('button', 'Remove cover image', 'quiet'); remove.type = 'button'; remove.dataset.imageAction = '';
+      remove.addEventListener('click', () => run(async () => {
+        change('');
+        try { await save(); } finally { renderFields(); }
+        notice('Cover removed from this draft. Review and publish to update the website.');
+      }, 'Removing cover image…'));
+      actions.append(remove);
+    }
+    const help = element('p', 'Appears at the top of the post. Choose a PNG, JPEG, WebP, or GIF. The image stays private until you publish.', 'small'); help.id = `${id}-help`; choose.setAttribute('aria-describedby', help.id);
+    wrap.append(preview, actions, input, help);
+    if (value) imageResolver(image, value, unavailable);
+    return wrap;
+  }
   if (spec.type === 'list') {
     wrap.classList.add('field-list'); const values = Array.isArray(value) ? value : [];
     values.forEach((item, index) => {
@@ -163,13 +190,13 @@ async function save() {
   updateSaveState();
   const index = await api('drafts'); state.drafts = index.drafts; renderList();
 }
-function imageResolver(image, path) {
+function imageResolver(image, path, unavailable = () => { image.alt += ' (preview unavailable)'; }) {
   const asset = state.draft?.assets.find(item => item.publicPath === path);
   if (asset) {
     if (!state.images.has(asset.id)) state.images.set(asset.id, api(`media?id=${state.draft.id}&asset=${asset.id}`).then(data => `data:${data.mime};base64,${data.base64}`));
-    state.images.get(asset.id).then(src => { if (image.isConnected) image.src = src; }).catch(() => { image.alt += ' (preview unavailable)'; });
+    state.images.get(asset.id).then(src => { if (image.isConnected) image.src = src; }).catch(unavailable);
   } else if (/^\/assets\/images\/[A-Za-z0-9/_ .-]+$/.test(path)) image.src = `https://nateoconnell.com${path}`;
-  else image.alt += ' (external image; open its link to view)';
+  else unavailable();
 }
 function preview(doc, container) {
   container.replaceChildren();
@@ -211,11 +238,15 @@ async function prepareImage(file) {
   if (!reduced || reduced.size > 1024 * 1024) throw new Error('This image is still too large. Resize it before uploading.');
   return base64(reduced);
 }
-async function upload(file) {
+async function upload(file, field) {
   const encoded = await prepareImage(file); await save();
-  const result = await api('upload', { id: state.draft.id, revision: state.revision, base64: encoded });
-  if (mergeWritingResult(state, result)) renderFields();
+  const result = await api('upload', { id: state.draft.id, revision: state.revision, base64: encoded, ...(field ? { field } : {}) });
   state.images.set(result.asset.id, Promise.resolve(`data:${result.asset.mime};base64,${encoded}`));
+  if (mergeWritingResult(state, result)) renderFields();
+  if (field) {
+    notice('Cover image saved privately. Add its description and optional caption below, then review and publish when ready.');
+    return;
+  }
   insertText(`\n\n![Describe the image](${result.asset.publicPath})\n\n`);
   await save(); notice('Image saved privately. Replace “Describe the image” with a useful description.');
 }

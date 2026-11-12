@@ -21,6 +21,7 @@ export function createWritingChat({ api, stream, current, receive, save, availab
     $('ask').disabled = busy || locked() || !available(); $('ask').hidden = busy;
     $('writing-stop').hidden = !busy || !abort; $('writing-new').disabled = busy || locked();
     for (const id of ['save', 'review', 'restore', 'image-button', 'image-file']) $(id).disabled = busy || locked();
+    document.querySelectorAll('[data-image-action]').forEach(node => { node.disabled = busy || locked(); });
     const proposal = current().draft?.writing?.proposal;
     const stale = proposal && JSON.stringify(current().draft.document) !== JSON.stringify(proposal.before);
     $('apply').disabled = busy || locked() || Boolean(stale); $('discard').disabled = busy || locked();

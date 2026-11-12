@@ -72,11 +72,13 @@ export async function addImage(github, data) {
   const { draft, revision } = await loadDraft(github, data.id);
   assertDraftIdle(draft);
   if (revision !== data.revision) throw new HttpError(409, 'Save or reload the draft before uploading.');
+  if (data.field !== undefined && (typeof data.field !== 'string' || schemas[draft.document.kind].fields[data.field]?.type !== 'image')) throw new HttpError(400, 'Choose a supported image field.');
   if (draft.assets.length >= 12) throw new HttpError(400, 'This draft already has 12 uploaded images.');
   const image = imageUpload(data);
   const id = randomUUID();
   const asset = { id, mime: image.mime, path: `media/${draft.id}/${id}.${image.ext}`, publicPath: `/assets/images/editor-${id}.${image.ext}` };
   draft.assets.push(asset);
+  if (data.field !== undefined) draft.document.fields[data.field] = asset.publicPath;
   return { ...(await saveDraft(github, draft, revision, [{ path: asset.path, content: image.buffer }])), asset };
 }
 export async function preparePublish(github, draft) {
