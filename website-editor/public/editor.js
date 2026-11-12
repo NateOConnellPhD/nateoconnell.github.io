@@ -139,6 +139,7 @@ function inputField(key, spec, value, change) {
     change(spec.type === 'boolean' ? input.checked : spec.type === 'number' ? Number(input.value) : spec.type === 'tags' ? input.value.split(',').map(v => v.trim()).filter(Boolean) : input.value);
   });
   if (spec.type === 'tags') wrap.append(element('p', 'Separate topics with commas.', 'small'));
+  if (spec.help) wrap.append(element('p', spec.help, 'small'));
   return wrap;
 }
 function renderFields() {
@@ -213,7 +214,7 @@ async function prepareImage(file) {
 async function upload(file) {
   const encoded = await prepareImage(file); await save();
   const result = await api('upload', { id: state.draft.id, revision: state.revision, base64: encoded });
-  state.draft = result.draft; state.revision = result.revision;
+  if (mergeWritingResult(state, result)) renderFields();
   state.images.set(result.asset.id, Promise.resolve(`data:${result.asset.mime};base64,${encoded}`));
   insertText(`\n\n![Describe the image](${result.asset.publicPath})\n\n`);
   await save(); notice('Image saved privately. Replace “Describe the image” with a useful description.');

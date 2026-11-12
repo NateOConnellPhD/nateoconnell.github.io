@@ -1,11 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
-import { parseSource, serialize } from '../lib/content.js';
+import { parseSource, serialize, validateDocument } from '../lib/content.js';
 import { preparePublish } from '../lib/drafts.js';
 import { schemas } from '../public/schema.js';
 
 const root = new URL('../../', import.meta.url);
+test('blog descriptions may be drafted empty but must be present before publishing', () => {
+  const document = { path: '_posts/2000-01-01-example.md', kind: 'post', fields: { title: 'Example', date: '2000-01-01', published: true }, body: 'Post body.' };
+  for (const description of [undefined, '', '   ']) {
+    const draft = structuredClone(document);
+    if (description !== undefined) draft.fields.description = description;
+    assert.doesNotThrow(() => validateDocument(draft));
+    assert.throws(() => validateDocument(draft, true), /Short description is required before publishing/);
+  }
+  const described = { ...document, fields: { ...document.fields, description: 'The author’s short description.' } };
+  assert.equal(validateDocument(described, true).fields.description, described.fields.description);
+});
 test('all existing editable documents can be opened and round-tripped without losing fields', async () => {
   const files = Object.values(schemas).filter(s => s.path).map(s => s.path);
   for (const folder of ['_posts', '_research', '_talks']) for (const file of await readdir(new URL(folder + '/', root))) if (file.endsWith('.md')) files.push(`${folder}/${file}`);
