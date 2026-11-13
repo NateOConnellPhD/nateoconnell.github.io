@@ -63,6 +63,19 @@ h3{font-size:1.65rem;line-height:1.28;letter-spacing:-.025em}
 .section-heading h2{margin-bottom:0}
 .section-heading .eyebrow{margin-bottom:13px}
 .section-intro{color:var(--muted);font-size:.9rem;margin-bottom:33px;max-width:620px}
+.recent-papers{margin-top:52px;padding:28px 32px 22px;border:1px solid var(--line);background:var(--tint)}
+.recent-papers-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 24px;margin-bottom:8px}
+.recent-papers-heading h2{font-size:1.8rem;margin:0}
+.recent-papers-links{display:flex;flex-wrap:wrap;gap:8px 24px}
+.recent-papers-list{list-style:none;padding:0;margin:0}
+.recent-paper{display:grid;grid-template-columns:88px minmax(0,1fr);gap:24px;padding:18px 0;border-bottom:1px solid var(--line)}
+.recent-paper time{font-size:.75rem;color:var(--muted);padding-top:3px}
+.recent-paper h3{font-size:1.2rem;line-height:1.4;margin:0}
+.recent-paper h3 a{color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.recent-paper h3 a:hover{color:var(--blue);text-decoration:underline}
+.recent-paper p{font-size:.75rem;color:var(--muted);margin:6px 0 0}
+.recent-papers-source{font-size:.7rem;color:var(--muted);margin:16px 0 0}
+@media(max-width:700px){.recent-papers{margin-top:36px;padding:22px 20px}.recent-paper{grid-template-columns:1fr;gap:5px}.recent-paper time{padding:0}.recent-paper h3{font-size:1.15rem}}
 .work-row,.post-row{display:grid;grid-template-columns:180px 1fr;gap:34px;padding:28px 0;border-top:1px solid var(--line)}
 .work-row:last-of-type,.post-row:last-of-type{border-bottom:1px solid var(--line)}
 .row-meta{display:flex;flex-direction:column;align-items:start;gap:6px;color:var(--muted);font-size:.71rem;padding-top:5px}

@@ -1,0 +1,31 @@
+{% assign recent_papers = site.data.publications.items | sort: 'date' | reverse %}
+{% assign scholar = site.data.profile.links | where: 'label', 'Google Scholar' | first %}
+{% assign paper_count = 0 %}
+{% capture paper_rows %}
+  {% for paper in recent_papers %}
+    {% if paper.type == 'article' or paper.type == 'review' or paper.type == 'preprint' %}
+      <li class="recent-paper">
+        <time datetime="{{ paper.date | escape }}">{{ paper.date | date: '%b %Y' }}</time>
+        <div>
+          <h3><a href="{{ paper.url | escape }}">{{ paper.title | escape }} <span class="text-arrow" aria-hidden="true">↗</span></a></h3>
+          {% if paper.venue != empty or paper.type == 'preprint' %}<p>{% if paper.venue != empty %}{{ paper.venue | escape }}{% endif %}{% if paper.type == 'preprint' %}{% if paper.venue != empty %} · {% endif %}Preprint{% endif %}</p>{% endif %}
+        </div>
+      </li>
+      {% assign paper_count = paper_count | plus: 1 %}
+      {% if paper_count == 3 %}{% break %}{% endif %}
+    {% endif %}
+  {% endfor %}
+{% endcapture %}
+{% if paper_count > 0 %}
+<section class="recent-papers" aria-labelledby="recent-papers-heading">
+  <div class="recent-papers-heading">
+    <h2 id="recent-papers-heading">Recent papers</h2>
+    <div class="recent-papers-links">
+      <a class="text-link" href="{{ '/publications/' | relative_url }}">All publications <span aria-hidden="true">→</span></a>
+      {% if scholar.url %}<a class="text-link" href="{{ scholar.url | escape }}">Google Scholar <span aria-hidden="true">↗</span></a>{% endif %}
+    </div>
+  </div>
+  <ol class="recent-papers-list">{{ paper_rows }}</ol>
+  <p class="recent-papers-source">Updated weekly from <a href="{{ site.data.publications.author_url | escape }}">OpenAlex</a> · Last refreshed {{ site.data.publications.updated | date: '%B %-d, %Y' }}. Newly released papers may take time to appear.</p>
+</section>
+{% endif %}
