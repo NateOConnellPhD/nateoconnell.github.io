@@ -36,7 +36,7 @@ You can find different recommendations throughout the literature, none of which 
 
 For example, [Kohavi's influential 1995 study](https://www.ijcai.org/Proceedings/95-2/Papers/016.pdf) helped establish stratified ten-fold cross-validation as a practical default. The widely used [scikit-learn documentation](https://scikit-learn.org/stable/modules/cross_validation.html) cautions that leave-one-out can have high variance because its training sets overlap so heavily, generally favoring five or ten folds.
 
-Other studies, typically based on empirical evidence, recommend repeated $$K$$-fold or MCCV, arguing that averaging over repeated random partitions provides more stable estimates. I myself, had reasoned: if I just run MCCV (i.e. repeated split sampling at the sample training:validation split ratio, where each fold is generated independently) hundreds of times), that has to be sufficient for averaging out the sampling variability, right?
+Other studies, typically based on empirical evidence, recommend repeated $$K$$-fold or MCCV, arguing that averaging over repeated random partitions provides more stable estimates. I myself, had reasoned: if I just run MCCV (i.e. repeated split sampling at the sample training:validation split ratio, where each fold is generated independently hundreds of times), that has to be sufficient for averaging out the sampling variability, right?
 
 The comparison between ordinary $$K$$-fold and MCCV is particularly interesting. Repeated random splitting gives us more flexibility in choosing training fractions and can reduce dependence on any particular partition. But ordinary $$K$$-fold ensures that every observation contributes equally to validation. Which advantage matters more for variance?
 
@@ -52,8 +52,7 @@ But even when focusing specifically on variance, general answers have been diffi
 
 ## Trying to find an answer empirically
 
-Between 2022 and 2024, I spent considerable time investigating these questions through simulations and benchmarking studies. I presented some of this work in an invited session at JSM 2022. My summer research intern in 2024, Jerry John Rawlings Mensah
-(https://www.linkedin.com/in/jjrmensah/), spent the summer working on a benchmarking study focused on studying cross-validation methods.
+Between 2022 and 2024, I spent considerable time investigating these questions through simulations and benchmarking studies. I presented some of this work in an invited session at JSM 2022. My summer research intern in 2024, Jerry John Rawlings Mensah(https://www.linkedin.com/in/jjrmensah/), spent the summer working on a benchmarking study focused on studying cross-validation methods.
 
 I compared $$K$$-fold and MCCV across different datasets, sample sizes, training fractions, and numbers of repetitions. The results were frustratingly inconsistent.
 
