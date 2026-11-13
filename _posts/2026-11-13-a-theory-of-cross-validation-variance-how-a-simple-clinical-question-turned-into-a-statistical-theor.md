@@ -2,8 +2,14 @@
 example: false
 published: true
 date: 2026-11-13
-tags: []
-title: "A Theory of Cross-Validation Variance: How a Simple Clinical Question turned into a Statistical Theory"
+tags:
+  - Cross-Validation
+  - K-Fold Cross-Validation
+  - Monte Carlo Cross-Validation
+  - Variance Decomposition
+  - Statistical Inference
+  - Hoeffding Decomposition
+title: "A Theory of Cross-Validation Variance: What is the Variance of a Cross-Validated Metric and what Influences it??? "
 description: What began as a clinical prediction question in 2020 became a six-year investigation into the uncertainty of cross-validation. Here's the story behind our new variance theory, why longstanding recommendations about cross-validation disagree, and how a simple change in mathematical perspective helped resolve fundamental questions about K-fold, Monte Carlo, and leave-one-out cross-validation.
 ---
 *How a clinical prediction problem led to a new understanding of cross-validation, its uncertainty, and the longstanding debate over which methods work best.*
@@ -16,7 +22,7 @@ The obvious response to this statement from anyone who's worked in building pred
 
 Ultimately, neither the clinical investigator nor I was particularly interested in whether two specific fitted models produced different AUCs on our particular dataset. We wanted to answer a much broader scientific question: **Across the population of patients with pulmonary embolism, do these four cardiac MRI measurements genuinely improve our ability to predict clinical deterioration?** Answering that question required comparing the expected predictive performance of two learning procedures, not simply two sets of predictions from fixed models.
 
-To make that comparison, I needed to quantify the uncertainty of the entire cross-validation procedure, including the variability arising from sampling patients from a larger population, repeatedly fitting models, and evaluating their predictions. The variation introduced by randomly assigning observations to different folds was only one component of that uncertainty. What I needed was a general mathematical characterization of the sampling variance of cross-validated performance estimates, and ultimately, the variance of the difference between two such estimates. At the time, a general theory that would allow me to do that did not exist. 
+To make that comparison, I needed to quantify the uncertainty of the entire cross-validation procedure, including the variability arising from sampling patients from a larger population, repeatedly fitting models, and evaluating their predictions. The variation introduced by randomly assigning observations to different folds was only one component of that uncertainty. What I needed was a general mathematical characterization of the sampling variance of cross-validated performance estimates, and ultimately, the variance of the difference between two such estimates. At the time, a general theory that would allow me to do that did not exist.
 
 That question stuck with me for years.
 
@@ -47,11 +53,11 @@ But even when focusing specifically on variance, general answers have been diffi
 ## Trying to find an answer empirically
 
 Between 2022 and 2024, I spent considerable time investigating these questions through simulations and benchmarking studies. I presented some of this work in an invited session at JSM 2022. My summer research intern in 2024, Jerry John Rawlings Mensah
-(https://www.linkedin.com/in/jjrmensah/), spent the summer working on a benchmarking study focused on studying cross-validation methods. 
+(https://www.linkedin.com/in/jjrmensah/), spent the summer working on a benchmarking study focused on studying cross-validation methods.
 
 I compared $$K$$-fold and MCCV across different datasets, sample sizes, training fractions, and numbers of repetitions. The results were frustratingly inconsistent.
 
-Single train/test splits were generally much more variable, which wasn't surprising. But comparisons between MCCV and $$K$$-fold were less straightforward. Sometimes one performed better, sometimes the other. At larger sample sizes, differences often became difficult to distinguish. I still had questions on how this depended on the model/learner itself, the metric being cross-validated, the data structure... 
+Single train/test splits were generally much more variable, which wasn't surprising. But comparisons between MCCV and $$K$$-fold were less straightforward. Sometimes one performed better, sometimes the other. At larger sample sizes, differences often became difficult to distinguish. I still had questions on how this depended on the model/learner itself, the metric being cross-validated, the data structure...
 
 It looks like, in aggregate, some form of k-fold or repeated k-fold was likely better, but I couldn't identify a general principle explaining the results.
 
@@ -136,13 +142,13 @@ For fixed-size cross-validation designs under the usual independent sampling and
 
 This meant I could focus on characterizing the variance **conditional on the splitting assignments**, treating the design as fixed while allowing the sampled observations to vary.
 
-I began expanding the variance and covariance terms associated with the weighted observation-level losses, accounting for how each observation contributes through validation and through training. These were relatively straightforward calculations through some basic algebra, and revealed important relationships between cross-validation designs, including why the balance of observation weights matters and how the covariance between training and validation influences affects variance. I was able to reduce this to a variance identity that showed the validation weights mattered, and that minimizing them minimzied the first order variance, but the training weights and correlations were still not completely clear in the math. 
+I began expanding the variance and covariance terms associated with the weighted observation-level losses, accounting for how each observation contributes through validation and through training. These were relatively straightforward calculations through some basic algebra, and revealed important relationships between cross-validation designs, including why the balance of observation weights matters and how the covariance between training and validation influences affects variance. I was able to reduce this to a variance identity that showed the validation weights mattered, and that minimizing them minimzied the first order variance, but the training weights and correlations were still not completely clear in the math.
 
 I then explored the same problem using **influence functions**, approaching it from the perspective of how individual observations affect the completed cross-validation estimate.
 
 This recovered the same first-order relationships through a different mathematical approach. The agreement was reassuring, particularly because the original variance expansions and the influence-function calculations had arrived at the same conclusions independently.
 
-But I wanted something more general. With each of the two approaches, I had to make higher order rate assumptions assuming stability criteria that couldn't necessarily be proved for many ML algorithms we use. This worked for estimators like logistic regression, but didn't necessarily hold for Random Forests. For more complex learning algorithms, interactions involving multiple observations may contribute meaningfully to variance. I didn't want general theory that required assuming those contributions were negligible, I wanted a theory for the collection of learning procedures people use. 
+But I wanted something more general. With each of the two approaches, I had to make higher order rate assumptions assuming stability criteria that couldn't necessarily be proved for many ML algorithms we use. This worked for estimators like logistic regression, but didn't necessarily hold for Random Forests. For more complex learning algorithms, interactions involving multiple observations may contribute meaningfully to variance. I didn't want general theory that required assuming those contributions were negligible, I wanted a theory for the collection of learning procedures people use.
 
 That eventually led me to the **Hoeffding decomposition**.
 
@@ -154,11 +160,53 @@ The earlier variance expansions and influence-function derivations had revealed 
 
 We could also reverse the conditioning in the law of total variance, conditioning on the sampled dataset rather than the inclusion structure. That gives the complementary distinction between *sampling variance*, arising from drawing different datasets, and *split noise*, arising from different training and validation assignments within the same dataset.
 
-**That's why we ultimately chose the Hoeffding decomposition as the foundation for the paper. Not because the earlier derivations were wrong, but because it unified their conclusions within an exact framework capable of characterizing variance across all orders of interaction.** You can derive the first order identity of the CV variance to algabraically equivalent representations in 3 different ways, but the Hoeffding decomposition provide the most general and complete approch. 
+**That's why we ultimately chose the Hoeffding decomposition as the foundation for the paper. Not because the earlier derivations were wrong, but because it unified their conclusions within an exact framework capable of characterizing variance across all orders of interaction.** You can derive the first order identity of the CV variance to algabraically equivalent representations in 3 different ways, but the Hoeffding decomposition provide the most general and complete approch.
 
 The resulting [paper, coauthored with Jaime Speiser](https://arxiv.org/abs/2611.14463), establishes an exact finite-sample variance identity for cross-validation. The identity itself requires neither model stability nor higher-order rate assumptions.
 
 Those additional assumptions become relevant when deriving particular optimality results, but not when establishing the identity itself.
+
+## The variance identity: What does it actually tell us?
+
+So, after all of that, what does the variance identity actually look like?
+
+For a unit-level performance metric, such as mean squared error, and a fixed training-set size, the variance of the cross-validation estimate, conditional on the splitting assignments $$I$$, is exactly
+
+$$
+\begin{aligned}
+\operatorname{Var}(\widehat R_{\mathrm{CV}}\mid I)
+={}&
+\sigma_V^2\sum_{i=1}^{n}v_i^2
++
+\sigma_T^2\sum_{i=1}^{n}w_i^2\\
+&+
+2\gamma_0\sum_{i=1}^{n}v_iw_i
++
+\rho_n^{(2+)}(I).
+\end{aligned}
+$$
+
+There are four pieces here, each with a distinct interpretation.
+
+**The first term is validation variance.** The constant $$\sigma_V^2$$ describes how variable an observation's contribution is when it is held out for evaluation. This is weighted by $$\sum_i v_i^2$$, which measures how evenly the cross-validation design distributes validation influence across observations.
+
+**The second term is training variance.** The constant $$\sigma_T^2$$ describes how variable an observation's influence is on the fitted model's expected performance. It is weighted by $$\sum_i w_i^2$$, reflecting how evenly observations contribute through model fitting.
+
+**The third term is the covariance between training and validation influence.** The constant $$\gamma_0$$ tells us whether observations that strongly influence their own validation losses also tend to influence the fitted models in the same or opposite direction. This covariance can be positive or negative, meaning the two influences can reinforce or partially offset one another.
+
+**The fourth term, $$\rho_n^{(2+)}(I)$$, captures higher-order interactions.** These are effects involving pairs, triples, and larger collections of observations that cannot be explained by adding up their individual influences. Importantly, this term is nonnegative, and it isn't simply an unspecified approximation error. In the full identity, we expand it exactly into separate contributions at every order through the Hoeffding decomposition.
+
+The interesting thing is how cleanly the identity separates two different ingredients. **The statistical constants describe the population, the learning algorithm, and the performance metric. The weights describe the cross-validation design.**
+
+And those weights are determined by the random inclusion matrix $$I$$ that we introduced earlier.
+
+For ordinary $$K$$-fold, every observation has $$v_i=w_i=1/n$$. For MCCV, these weights generally differ across observations. Their squared sums and cross-products consequently change, and so does the variance.
+
+That's the connection between the abstract mathematics and the practical question of which cross-validation design to use.
+
+Because the expected cross-validation estimate is the same for every fixed-size splitting assignment, averaging this conditional identity over $$I$$ gives the total variance. The higher-order terms can likewise be expressed through weights describing how frequently pairs, triples, and larger subsets of observations participate together.
+
+**This is what makes the identity useful: rather than deriving a separate variance formula for every cross-validation procedure, we can compare designs by how they distribute the same underlying statistical influences.**
 
 ## What the theory reveals
 
@@ -170,7 +218,7 @@ Sampling variance reflects the uncertainty from having collected one particular 
 
 At a fixed training fraction, the exchangeable cross-validation designs we study share the same sampling variance. They differ in the additional noise introduced by splitting. Ordinary $$K$$-fold is balanced: every observation receives equal validation and training weights. MCCV and standard bootstrap cross-validation generally introduce imbalance.
 
-We establish the first-order variance optimality of $$K$$-fold among fixed-size cross-validation designs at the same training fraction, under the relevant conditions. This provides a mathematical explanation for an important distinction between cross-validation procedures, rather than relying only on empirical comparisons. Higher order optimality can be extended when k-fold is permuted to ensure balance in pairs or higher combinations of observations, although computationally this becomes quite heavy. 
+We establish the first-order variance optimality of $$K$$-fold among fixed-size cross-validation designs at the same training fraction, under the relevant conditions. This provides a mathematical explanation for an important distinction between cross-validation procedures, rather than relying only on empirical comparisons. Higher order optimality can be extended when k-fold is permuted to ensure balance in pairs or higher combinations of observations, although computationally this becomes quite heavy.
 
 **3. More folds do not necessarily mean greater variance.**
 
@@ -180,7 +228,7 @@ One longstanding argument against leave-one-out cross-validation is that its tra
 
 Increasing $$K$$ changes the training-set size and higher-order contributions, but not that common leading variance. Under additional assumptions about the learner and how variance changes with training size, we further show that leave-one-out minimizes variance within the $$K$$-fold family.
 
-This doesn't mean leave-one-out is universally optimal for every learner or objective. In fact, in follw-up work that is under way, I am working to characterize when this is and isn't true. But it challenges the idea that greater training-set overlap necessarily produces a more variable estimate. And in this follow-up work, LOO optimality is largely tied to model stability -- unstable models like single decision trees, or even LASSO on low signal data, can in fact inflate the variance as $$K$$ approaches $$n$$, but not because of the overlap in the training sets as conventionally thought. This work will be published and discussed at a later date. 
+This doesn't mean leave-one-out is universally optimal for every learner or objective. In fact, in follw-up work that is under way, I am working to characterize when this is and isn't true. But it challenges the idea that greater training-set overlap necessarily produces a more variable estimate. And in this follow-up work, LOO optimality is largely tied to model stability -- unstable models like single decision trees, or even LASSO on low signal data, can in fact inflate the variance as $$K$$ approaches $$n$$, but not because of the overlap in the training sets as conventionally thought. This work will be published and discussed at a later date.
 
 **4. The performance metric matters.**
 
@@ -202,7 +250,7 @@ Looking back, what's most satisfying is that the breakthrough came from changing
 
 **Cross-validation variance isn't determined by training-set overlap alone. It's determined by how observations influence the entire procedure, how those influences covary, and how the resampling design distributes them across the data.**
 
-That conceptual shift became the foundation for a year of mathematical work—and a much clearer understanding of a question that had been bothering me for six years, and the literature more broadly for decades. 
+That conceptual shift became the foundation for a year of mathematical work—and a much clearer understanding of a question that had been bothering me for six years, and the literature more broadly for decades.
 
 ---
 
