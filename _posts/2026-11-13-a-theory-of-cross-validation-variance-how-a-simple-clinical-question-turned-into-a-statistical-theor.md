@@ -9,7 +9,7 @@ tags:
   - Variance Decomposition
   - Statistical Inference
   - Hoeffding Decomposition
-title: "A Theory of Cross-Validation Variance: What is the Variance of a Cross-Validated Metric and what Influences it??? "
+title: "A Theory of Cross-Validation Variance: What is the Variance of a Cross-Validated Metric and What Influences it?"
 description: What began as a clinical prediction question in 2020 became a six-year investigation into the uncertainty of cross-validation. Here's the story behind our new variance theory, why longstanding recommendations about cross-validation disagree, and how a simple change in mathematical perspective helped resolve fundamental questions about K-fold, Monte Carlo, and leave-one-out cross-validation.
 ---
 *How a clinical prediction problem led to a new understanding of cross-validation, its uncertainty, and the longstanding debate over which methods work best.*
