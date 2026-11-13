@@ -88,6 +88,14 @@ h3{font-size:1.65rem;line-height:1.28;letter-spacing:-.025em}
 .work-row p,.post-row p,.talk-row p{font-size:.875rem;max-width:685px;color:var(--muted);margin-bottom:8px}
 .work-row .venue,.venue{font-size:.75rem;font-style:italic}
 .work-row .work-study{font-size:.72rem;font-weight:600;letter-spacing:.06em;color:var(--blue);margin-bottom:10px}
+.active-work .section-intro{max-width:780px;margin-bottom:32px;font-size:.95rem}
+.active-work .section-intro p{margin-bottom:16px}
+.active-work-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:40px}
+.active-work-grid .work-row{grid-template-columns:minmax(0,1fr);align-content:start;gap:12px;padding:22px 0;border-bottom:0}
+.active-work-grid .row-meta{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:0}
+.active-work-grid .work-row h3{font-size:1.4rem;line-height:1.35;overflow-wrap:anywhere}
+.active-work-grid .work-row p{margin-bottom:0}
+@media(max-width:700px){.active-work-grid{grid-template-columns:1fr}.active-work-grid .work-row h3{font-size:1.35rem}.active-work .section-intro{font-size:.9rem}}
 .research-jumps{display:flex;flex-wrap:wrap;gap:12px 32px;margin-top:24px}
 .research-jumps a{padding:8px 0}
 .research-group{scroll-margin-top:28px}
