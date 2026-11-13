@@ -1,6 +1,6 @@
-# Complete the one-time GitHub setup in docs/COMMENTS.md before enabling.
-enabled: false
+# GitHub Discussions connection; setup and moderation: docs/COMMENTS.md.
+enabled: true
 repo: "NateOConnellPhD/nateoconnell.github.io"
-repo_id: ""
-category: "Blog comments"
-category_id: ""
+repo_id: "R_kgDORU6ckQ"
+category: "Blog Comments"
+category_id: "DIC_kwDORU6ckc4DLD7J"
