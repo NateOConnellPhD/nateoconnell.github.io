@@ -1,0 +1,28 @@
+{% assign comments = site.data.comments %}
+{% if comments.enabled and comments.repo_id and comments.repo_id != empty and comments.category_id and comments.category_id != empty %}
+{% unless page.comments == false or page.example or page.published == false or site.data.profile.preview_mode %}
+<section class="post-comments" aria-labelledby="discussion-heading">
+  <h2 id="discussion-heading">Discussion</h2>
+  <p class="comments-note">Sign in with GitHub to comment or reply.</p>
+  <div class="giscus" id="comments"></div>
+  <script src="https://giscus.app/client.js"
+          data-repo="{{ comments.repo | escape }}"
+          data-repo-id="{{ comments.repo_id | escape }}"
+          data-category="{{ comments.category | escape }}"
+          data-category-id="{{ comments.category_id | escape }}"
+          data-mapping="specific"
+          data-term="{{ page.url | escape }}"
+          data-strict="1"
+          data-reactions-enabled="1"
+          data-emit-metadata="0"
+          data-input-position="top"
+          data-theme="light"
+          data-lang="en"
+          data-loading="lazy"
+          crossorigin="anonymous"
+          async></script>
+  <p class="comments-note"><a href="https://github.com/{{ comments.repo | escape }}/discussions">Browse discussions on GitHub ↗</a></p>
+  <noscript><p class="comments-note">Enable JavaScript to see comments here, or use the GitHub link above.</p></noscript>
+</section>
+{% endunless %}
+{% endif %}

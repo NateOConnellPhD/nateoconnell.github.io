@@ -44,6 +44,7 @@ content:
         default: false
         description: "Leave off to save a draft. Turn on and save to publish. Future-dated posts require a new site build after their date; they are not automatically scheduled."
       - {name: example, label: Mark as example content, type: boolean, default: false}
+      - {name: comments, label: Show discussion, type: boolean, default: true, description: "Show GitHub comments and replies below this post once site-wide comments are connected."}
       - {name: cover, label: Cover image (optional), type: image, options: {media: images}}
       - {name: cover_alt, label: Cover image description, type: string, description: "Describe the image for someone who cannot see it."}
       - {name: cover_caption, label: Cover caption (optional), type: string}

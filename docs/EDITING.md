@@ -44,6 +44,8 @@ For each check, record device, OS, browser version, source app, and whether Mark
 
 ## Other updates
 
+Blog posts can have a **Discussion** section for reader comments and replies. See [blog discussion setup](COMMENTS.md) for the one-time GitHub connection and the per-post **Show discussion** switch.
+
 - **Name, profile & contact:** name, title, department, division, institution, introduction, portrait, interests, public email, and links. The homepage displays title, department, division, and institution on separate lines. The portrait is shared by the homepage and About page.
 - **Homepage text:** the main heading and short section descriptions.
 - **Biography:** longer-form biography with the same visual Markdown editor.

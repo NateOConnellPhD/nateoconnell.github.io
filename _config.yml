@@ -40,7 +40,7 @@ collections:
     permalink: /talks/:name/
 defaults:
   - scope: {path: "", type: posts}
-    values: {layout: post, section: blog, published: false}
+    values: {layout: post, section: blog, published: false, comments: true}
   - scope: {path: "", type: research}
     values: {layout: research-item, section: research, area: "Methods & theory", published: false}
   - scope: {path: "", type: talks}
