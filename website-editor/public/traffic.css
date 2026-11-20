@@ -1,4 +1,4 @@
-.traffic-shell{max-width:1160px;margin:0 auto;padding:44px 28px 64px}
+.traffic-shell{--sans:ui-sans-serif,system-ui,sans-serif;max-width:1160px;margin:0 auto;padding:44px 28px 64px}
 .traffic-heading,.traffic-panel-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
 .traffic-heading{margin-bottom:28px}.traffic-heading h1{margin:0 0 12px}.traffic-heading p{margin:0}.traffic-heading .eyebrow{margin-bottom:8px}
 .traffic-controls{display:flex;gap:16px;flex-wrap:wrap;margin:24px 0}.traffic-controls label{flex:1;min-width:180px;margin:0}.traffic-controls select{width:100%;margin-top:8px}
