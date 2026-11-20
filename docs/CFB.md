@@ -13,9 +13,11 @@ fallback, historical policy, scheduled updates, automated publication, and the
 public blog section remain unfinished.
 The updated private Margin of Merit v2 handoff replaces the production ordering
 policy, not the statistical model or importer. The maintained v2 implementation
-and saved-data fitting command are now present. Fifteen focused standard-library
-policy checks passed; the new numerical bridge and full fitting command have
-not yet been executed. Both handoffs stay private and unchanged; 2024 is a
+and saved-data fitting command are now present. The 2024 saved-data run passed
+sampling and LOO diagnostics, four numerical bridge tests passed, and a repeat
+reused both numerical caches with a byte-identical candidate. See
+[the v2 validation](CFB-2024-V2-VALIDATION.md) for measured timings, ordering
+changes, and limitations. Both handoffs stay private and unchanged; 2024 is a
 reference, not the limit of the historical archive.
 
 ## First GitHub data sync
@@ -126,7 +128,8 @@ Implementation and remaining replay checks:
   the exact 90% boundary, equal-record scope, common opponents, split/cyclic
   direct results, zero-bonus identity, ties, no-game teams, P4 exceptions,
   constraint conflicts, reproducibility, and a small exhaustive ordering oracle.
-  Four NumPy tests for raw rank/probability summaries are ready but not run yet.
+  Four NumPy tests for raw rank/probability summaries also passed, followed by
+  the full 2024 saved-data candidate run and an identical-input cache check.
 
 - The supplied folder and ZIP contain policy code, tests, and result tables,
   but not the referenced `2026_merit_draws.npz` or
@@ -163,7 +166,11 @@ LOO cache uses the fit, scorer, reference rank, and game IDs. Policy and display
 changes regenerate the candidate without invalidating a reusable posterior or
 LOO result. Each cache validates stored array hashes before reuse. This is a
 local validation cache; durable website snapshots and production storage still
-need integration. No numerical cache reuse has been measured on this new path.
+need integration. The 2024 run reported 17.71 seconds initially and 0.74 seconds
+with both numerical caches reused, excluding input preparation and imports.
+The numerical cache files were unchanged and the candidate was byte-identical.
+See the validation report above; these are local measurements, not cloud-runtime
+or publication-performance estimates.
 
 Candidates include sampling/LOO diagnostics, source provenance, venue corrections,
 the data cutoff, policy identity, official and raw ranks, raw top-K probabilities,
