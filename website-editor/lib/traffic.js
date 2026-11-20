@@ -28,7 +28,8 @@ export function pagePath(value) {
 }
 
 export function trafficOptions(params, now) {
-  const days = Number(params.get('days') || 7), scope = params.get('scope') || 'site', path = params.get('path') || '';
+  // Vercel's /api/:path* rewrite also adds `path`; keep the report filter separate.
+  const days = Number(params.get('days') || 7), scope = params.get('scope') || 'site', path = params.get('page') || '';
   if (![1, 7, 28].includes(days) || !['site', 'blog'].includes(scope)) throw new HttpError(400, 'Choose today, 7 days, or 28 days, and either the site or blog posts.');
   if (path && (!pagePath(path) || scope === 'blog' && (!path.startsWith('/blog/') || path === '/blog/'))) throw new HttpError(400, 'Choose a valid page path.');
   const end = new Date(now), midnight = Date.parse(end.toISOString().slice(0, 10) + 'T00:00:00Z');

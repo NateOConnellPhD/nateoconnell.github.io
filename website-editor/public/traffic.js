@@ -99,7 +99,7 @@ function render() {
 async function load() {
   controller?.abort(); const abort = new AbortController(); controller = abort; const id = ++serial;
   const params = new URLSearchParams({ days: $('traffic-days').value, scope: $('traffic-scope').value });
-  if (selectedPath) params.set('path', selectedPath);
+  if (selectedPath) params.set('page', selectedPath);
   history.replaceState(null, '', `/traffic.html?${params}`);
   $('traffic-status').textContent = 'Loading traffic…'; $('traffic-status').dataset.error = 'false';
   for (const key of ['traffic-report', 'traffic-setup', 'traffic-login']) $(key).hidden = true;
@@ -127,7 +127,8 @@ async function load() {
 const params = new URLSearchParams(location.search);
 if (['1', '7', '28'].includes(params.get('days'))) $('traffic-days').value = params.get('days');
 if (params.get('scope') === 'blog') $('traffic-scope').value = 'blog';
-selectedPath = params.get('path') || '';
+// Preserve existing dashboard links, but send only `page` to the API.
+selectedPath = params.get('page') ?? params.get('path') ?? '';
 $('traffic-controls').addEventListener('submit', event => event.preventDefault());
 for (const key of ['traffic-days', 'traffic-scope']) $(key).addEventListener('change', () => { selectedPath = ''; $('traffic-search').value = ''; load(); });
 $('traffic-audience').addEventListener('change', () => { if (report) { sort = $('traffic-audience').value; descending = true; chart(); dailyTable(); pages(); } });

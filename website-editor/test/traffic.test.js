@@ -21,10 +21,52 @@ test('date ranges include today in UTC and unsafe or unsupported filters are rej
   const range = trafficOptions(params('days=7&scope=blog'), instant);
   assert.equal(range.start, '2026-11-14T00:00:00.000Z');
   assert.equal(range.end, '2026-11-20T14:30:00.000Z');
-  for (const text of ['days=1000', 'scope=secret', 'scope=blog&path=/about/', 'scope=blog&path=/blog/']) assert.throws(() => trafficOptions(params(text), instant));
+  for (const text of ['days=1000', 'scope=secret', 'scope=blog&page=/about/', 'scope=blog&page=/blog/', 'page=traffic', 'page=//other.test/']) assert.throws(() => trafficOptions(params(text), instant));
   for (const path of ['https://other.test/', '//other.test/', '/a/../b', '/%2e%2e/', '/a?secret=1', '/a#b', '/a\\b']) assert.equal(pagePath(path), null);
   assert.equal(pagePath('/blog/caf%C3%A9/'), '/blog/caf%C3%A9/');
   assert.equal(pagePath('/blog/café/'), '/blog/café/');
+});
+
+test('Vercel route parameters do not become page filters', () => {
+  const rewritten = params('route=traffic&path=traffic&days=28&scope=site');
+  assert.equal(trafficOptions(rewritten, instant).path, '');
+  rewritten.set('page', '/about/');
+  assert.equal(trafficOptions(rewritten, instant).path, '/about/');
+  rewritten.set('page', 'traffic');
+  assert.throws(() => trafficOptions(rewritten, instant), error => error.status === 400);
+});
+
+test('dashboard uses a separate page parameter and preserves existing page links', async () => {
+  const source = await readFile(new URL('../public/traffic.js', import.meta.url), 'utf8');
+  for (const [search, selected] of [
+    ['?days=28&scope=site', ''],
+    ['?scope=blog&page=%2Fblog%2Fexample%2F', '/blog/example/'],
+    ['?path=%2Fabout%2F', '/about/']
+  ]) {
+    const elements = new Map(), requests = [], addresses = [];
+    const service = createTrafficService({ now: () => instant, fetchImpl: async () => { throw new Error('No external requests expected'); } });
+    await runInNewContext(source, {
+      URLSearchParams, AbortController, setTimeout, clearTimeout, location: { search },
+      history: { replaceState: (_state, _unused, url) => addresses.push(url) },
+      document: { getElementById: id => {
+        if (!elements.has(id)) elements.set(id, { value: id === 'traffic-days' ? '7' : id === 'traffic-scope' ? 'site' : '', dataset: {}, addEventListener() {} });
+        return elements.get(id);
+      } },
+      fetch: async url => {
+        const query = new URL(url, 'https://editor.example.com').searchParams;
+        requests.push(new URLSearchParams(query));
+        query.set('route', 'traffic'); query.set('path', 'traffic');
+        return Response.json(await service(query, {}));
+      }
+    });
+    assert.equal(requests.length, 1);
+    for (const query of [requests[0], new URL(addresses[0], 'https://editor.example.com').searchParams]) {
+      assert.equal(query.get('page') || '', selected);
+      assert.equal(query.has('path'), false);
+    }
+    assert.equal(elements.get('traffic-status').dataset.error, 'false');
+    assert.equal(elements.get('traffic-setup').hidden, false);
+  }
 });
 
 test('bot categories stay separate and weighted counts are not multiplied by sampling', () => {
@@ -70,7 +112,7 @@ test('reports coalesce and cache; filters stay on this site and blog titles incl
   await service(query, credentials); assert.equal(calls.length, 2);
   time += 5 * 60000 + 1;
   await service(query, credentials); assert.equal(calls.length, 3);
-  await service(params('path=/about/&days=1'), credentials);
+  await service(params('route=traffic&path=traffic&page=/about/&days=1'), credentials);
   assert.equal(JSON.parse(calls.at(-1).options.body).variables.filter.requestPath, '/about/');
 });
 
@@ -116,6 +158,10 @@ test('traffic route requires the owner session and does not open GitHub storage;
     const response = await handle(new Request(url, { headers: headers(123) }));
     assert.equal(response.status, 200); assert.equal((await response.json()).configured, false);
     assert.equal(response.headers.get('cache-control'), 'no-store');
+    const rewritten = `${config.origin}/api?route=traffic&path=traffic&days=28&scope=site`;
+    assert.equal((await handle(new Request(rewritten))).status, 401);
+    const routed = await handle(new Request(rewritten, { headers: headers(123) }));
+    assert.equal(routed.status, 200); assert.equal((await routed.json()).configured, false);
     assert.equal((await handle(new Request(url, { method: 'POST', headers: { ...headers(123), Origin: config.origin, 'X-CSRF-Token': 'test-csrf' } }))).status, 405);
     for (const [value, expected] of [['/traffic.html', '/traffic.html'], ['https://other.test/', '/']]) {
       const auth = await handle(new Request(`${config.origin}/api/auth/start?returnTo=${encodeURIComponent(value)}`));
