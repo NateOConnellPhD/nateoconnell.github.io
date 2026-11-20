@@ -21,7 +21,7 @@ The website stays on GitHub Pages and the domain stays at Namecheap. This uses C
 6. Publish the website changes and redeploy the editor after saving its environment variables. Never put the reporting API token in Git, browser code, or chat. Only the beacon token is public.
 7. Visit a public page with tracking allowed. After Cloudflare processes the visit, open **Traffic** and compare its report with Cloudflare’s Web Analytics dashboard. Verify both a normal page and a blog post. The live GraphQL query, permissions, collection and bot fields must be verified against the connected account during setup; local fixtures are not a live integration test.
 
-Tracking is initially disabled. Past traffic cannot be recovered. A missing connection shows setup instructions; a failed provider query shows an error, not zero visits. A successful report with no events shows zero recorded views.
+Tracking starts after the configured beacon is deployed. Past traffic cannot be recovered. A missing reporting connection shows setup instructions; a failed provider query shows an error, not zero visits. A successful report with no events shows zero recorded views.
 
 ## What is measured
 
