@@ -33,13 +33,21 @@ def normalize(season, payload, teams):
             name = POLL_NAMES.get(poll.get('poll'))
             if not name:
                 continue
-            final = poll.get('isFinal', False)
-            if type(final) is not bool or not isinstance(poll.get('ranks'), list):
-                raise ValueError('Invalid poll edition')
+            label = f"{season} {kind} week {number}, {poll['poll']}"
+            final = poll.get('isFinal')
+            # CFBD's Poll schema permits null; older responses may omit it.
+            # Only an explicit true marks an edition as final in the UI.
+            if final is not None and type(final) is not bool:
+                raise ValueError(f'Invalid isFinal for {label}: expected boolean or null')
+            final = final is True
+            if not isinstance(poll.get('ranks'), list):
+                raise ValueError(f'Invalid ranks for {label}: expected an array')
             if not poll['ranks']:
                 continue  # An empty edition is unavailable, not 138 unranked teams.
             ranks, seen = [], set()
             for rank in poll['ranks']:
+                if 'rank' in rank and rank['rank'] is None:
+                    continue  # A provider-unranked entry has no Top 25 position.
                 position = integer(rank.get('rank'), 'poll rank', 1)
                 if position > 25:
                     continue  # Receiving votes is not a Top 25 rank.

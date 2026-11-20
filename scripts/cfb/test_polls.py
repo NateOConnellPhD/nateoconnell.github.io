@@ -15,7 +15,7 @@ NOW = dt.datetime(2026, 11, 20, tzinfo=UTC)
 
 def polls(season=2026):
     return [{'season': season, 'seasonType': 'regular', 'week': 12, 'polls': [
-        {'poll': 'AP Top 25', 'ranks': [{'rank': 1, 'teamId': 1, 'school': 'Alpha'},
+        {'poll': 'AP Top 25', 'isFinal': None, 'ranks': [{'rank': 1, 'teamId': 1, 'school': 'Alpha'},
                                      {'rank': 2, 'teamId': 2, 'school': 'Beta'},
                                      {'rank': 2, 'teamId': 3, 'school': 'Gamma'}]},
         {'poll': 'Playoff Committee Rankings', 'isFinal': False,
@@ -24,6 +24,43 @@ def polls(season=2026):
 
 
 class PollTests(unittest.TestCase):
+    def test_nullable_final_flag_only_explicit_true_marks_final(self):
+        for value in (None, False, True, 'omitted'):
+            with self.subTest(value=value):
+                payload = polls()
+                for poll in payload[0]['polls'][:2]:
+                    if value == 'omitted':
+                        poll.pop('isFinal', None)
+                    else:
+                        poll['isFinal'] = value
+                original = copy.deepcopy(payload)
+                editions = normalize(2026, payload, TEAMS)
+                self.assertEqual(len(editions), 2)
+                self.assertTrue(all(p['final'] is (value is True) for p in editions))
+                self.assertTrue(all(p['id'].endswith('-final') == (value is True) for p in editions))
+                self.assertEqual(payload, original, 'Retain raw null values for provenance')
+
+    def test_reject_malformed_final_flag_and_ranks_with_edition_context(self):
+        for field, values in (('isFinal', (0, 1, 'false', 'true', [], {})),
+                              ('ranks', (None, {}, '[]'))):
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    payload = polls()
+                    payload[0]['polls'][0][field] = value
+                    with self.assertRaisesRegex(ValueError, f'Invalid {field} for 2026 regular week 12, AP Top 25'):
+                        normalize(2026, payload, TEAMS)
+
+    def test_null_and_beyond_top_25_ranks_are_not_ranked_teams(self):
+        payload = polls()
+        expected = normalize(2026, payload, TEAMS)
+        payload[0]['polls'][0]['ranks'].extend([
+            {'rank': None, 'teamId': 4, 'school': 'Delta'},
+            {'rank': 26, 'teamId': 5, 'school': 'Epsilon'}])
+        self.assertEqual(normalize(2026, payload, TEAMS), expected)
+        del payload[0]['polls'][0]['ranks'][-2]['rank']
+        with self.assertRaisesRegex(ValueError, 'Invalid integer field: poll rank'):
+            normalize(2026, payload, TEAMS)
+
     def test_editions_ids_ties_and_legacy_names(self):
         payload = polls()
         payload[0]['polls'][0]['ranks'][0].pop('teamId')
@@ -85,6 +122,9 @@ class PollTests(unittest.TestCase):
                 before = (public / '2026/polls.json').read_bytes()
                 result = json.loads(before)
                 self.assertEqual(result['editions'][0]['week'], 12)
+                self.assertIs(result['editions'][0]['final'], False)
+                raw = json.loads((data / '2026/polls.json').read_text())
+                self.assertIsNone(raw['payload'][0]['polls'][0]['isFinal'])
                 self.assertEqual(sync(now=NOW + dt.timedelta(hours=1))['requests'], 0)
                 self.assertEqual((public / '2026/polls.json').read_bytes(), before)
                 self.assertEqual(sync(now=NOW + dt.timedelta(hours=7))['requests'], 1)
@@ -96,6 +136,13 @@ class PollTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'disappeared'):
                     sync_polls(2026, 'fixture-key', destination=data, public=public,
                                now=NOW + dt.timedelta(days=1), fetcher=lambda *args: [])
+                self.assertEqual((public / '2026/polls.json').read_bytes(), before)
+                self.assertEqual((data / '2026/polls.json').read_bytes(), source_before)
+                malformed = polls()
+                malformed[0]['polls'][0]['isFinal'] = 'false'
+                with self.assertRaisesRegex(ValueError, 'Invalid isFinal'):
+                    sync_polls(2026, 'fixture-key', destination=data, public=public,
+                               now=NOW + dt.timedelta(days=1), fetcher=lambda *args: malformed)
                 self.assertEqual((public / '2026/polls.json').read_bytes(), before)
                 self.assertEqual((data / '2026/polls.json').read_bytes(), source_before)
                 stored = json.loads(source_before)
