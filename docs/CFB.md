@@ -121,10 +121,36 @@ https://collegefootballdata.com/api-tiers
 
 ## Numerical reference run
 
-The available local Python is 3.9 without numerical packages. The proposed
-reference environment is Python 3.11/3.12 plus the pinned direct dependencies in
-`scripts/cfb/requirements.txt`. Creating that environment requires approval under
-the working protocol. No installation occurs when importing or reading source.
+The available local Python is 3.9 without numerical packages. The reference
+environment uses Python 3.12 plus the pinned direct dependencies in
+`scripts/cfb/requirements.txt`. The owner approved downloading this environment
+with a 1.5 GB ceiling under `.codex-tmp/cfb-refit`, followed by cleanup after the
+analysis. However, this agent session's sandbox blocked access to
+`api.github.com` and execution of the app's bundled Python. Approval has been
+received; the remaining obstacle is the sandbox's access rules.
+
+The owner can perform the approved setup from Terminal:
+
+```sh
+cd /Users/noconnell/Websites/Professional_Site &&
+/Applications/Xcode.app/Contents/Developer/usr/bin/python3 -B scripts/cfb/setup_environment.py
+```
+
+This creates an isolated Apple Silicon Python 3.12 installation, checks the
+runtime archive's SHA-256 against its GitHub release metadata, downloads binary
+dependency wheels, and checks dependency consistency/imports. It records the
+runtime build and complete resolved package versions, uses no global package
+installation or cache, and runs no model fits. It refuses to overwrite an
+existing task directory. A failed attempt stops its child process and removes
+only the directory it created. Setup monitors its owned output, stops growth at
+1.2 GB to leave headroom below the 1.5 GB approval ceiling, and rejects archives
+whose expanded size would exceed that working budget. The archive checks and
+existing-directory preservation have offline tests; actual downloads and
+numerical execution remain unverified until setup runs successfully.
+
+The resulting interpreter is
+`.codex-tmp/cfb-refit/python/bin/python3`; subsequent fits use that executable.
+No installation occurs when importing or reading source.
 
 After environment approval, `scripts/cfb/refit_2024.py` accepts the original
 `2024_observed_FBS_games_used.csv` path and `--variant canonical`, `unfloored`, or
