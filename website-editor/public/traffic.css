@@ -1,7 +1,7 @@
 .traffic-shell{--sans:ui-sans-serif,system-ui,sans-serif;max-width:1160px;margin:0 auto;padding:44px 28px 64px}
 .traffic-heading,.traffic-panel-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
 .traffic-heading{margin-bottom:28px}.traffic-heading h1{margin:0 0 12px}.traffic-heading p{margin:0}.traffic-heading .eyebrow{margin-bottom:8px}
-.traffic-controls{display:flex;gap:16px;flex-wrap:wrap;margin:24px 0}.traffic-controls label{flex:1;min-width:180px;margin:0}.traffic-controls select{width:100%;margin-top:8px}
+.traffic-controls{display:flex;gap:16px;flex-wrap:wrap;margin:24px 0}.traffic-controls label{flex:1;min-width:180px;margin:0}.traffic-controls select,.traffic-controls input{width:100%;margin-top:8px}.traffic-controls .small{display:block;margin-top:6px;font-weight:400}
 .traffic-status{font-size:.9rem;color:var(--muted);min-height:1.5em}.traffic-status[data-error=true]{color:#9c2833}
 .traffic-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:22px 0}
 .traffic-stat,.traffic-panel{border:1px solid var(--line);background:white;border-radius:12px;padding:24px}.traffic-stat h2{font-family:var(--sans);font-size:.85rem;font-weight:500;margin:0 0 12px;color:var(--muted)}

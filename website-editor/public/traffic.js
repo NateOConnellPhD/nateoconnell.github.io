@@ -35,7 +35,8 @@ function chart() {
       group.append(svgNode('rect', { x: x - barWidth / 2, y, width: barWidth, height: size, class: key === 'bots' ? 'traffic-bar-bot' : key === 'unclassified' ? 'traffic-bar-unknown' : 'traffic-bar' }));
     }
     svg.append(group);
-    if (report.daily.length <= 7 || index === 0 || index === report.daily.length - 1 || index % 7 === 0) svg.append(svgNode('text', { x, y: 230, 'text-anchor': 'middle' }, dateLabel(day.date)));
+    const labelStep = Math.max(1, Math.ceil(report.daily.length / 7));
+    if (index % labelStep === 0) svg.append(svgNode('text', { x, y: 230, 'text-anchor': 'middle' }, dateLabel(day.date)));
   });
   container.append(svg);
 }
@@ -92,11 +93,12 @@ function render() {
   $('traffic-pages-heading').textContent = report.range.scope === 'blog' ? 'Blog posts' : 'Pages';
   $('traffic-empty').hidden = report.totals.all !== 0;
   $('traffic-limited').hidden = !report.pagesLimited;
-  $('traffic-freshness').textContent = `${report.source} · Queried ${new Date(report.fetchedAt).toLocaleString()}${report.sampled ? ' · Sampling reported' : ''}.`;
+  $('traffic-freshness').textContent = `${report.source} · Last ${report.range.days} ${report.range.days === 1 ? 'day' : 'days'} · Queried ${new Date(report.fetchedAt).toLocaleString()}${report.sampled ? ' · Sampling reported' : ''}.`;
   chart(); dailyTable(); pages();
 }
 
 async function load() {
+  if (!$('traffic-days').reportValidity()) return;
   controller?.abort(); const abort = new AbortController(); controller = abort; const id = ++serial;
   const params = new URLSearchParams({ days: $('traffic-days').value, scope: $('traffic-scope').value });
   if (selectedPath) params.set('page', selectedPath);
@@ -125,11 +127,11 @@ async function load() {
 }
 
 const params = new URLSearchParams(location.search);
-if (['1', '7', '28'].includes(params.get('days'))) $('traffic-days').value = params.get('days');
+if (/^[1-9]\d*$/.test(params.get('days') || '')) $('traffic-days').value = params.get('days');
 if (params.get('scope') === 'blog') $('traffic-scope').value = 'blog';
 // Preserve existing dashboard links, but send only `page` to the API.
 selectedPath = params.get('page') ?? params.get('path') ?? '';
-$('traffic-controls').addEventListener('submit', event => event.preventDefault());
+$('traffic-controls').addEventListener('submit', event => { event.preventDefault(); load(); });
 for (const key of ['traffic-days', 'traffic-scope']) $(key).addEventListener('change', () => { selectedPath = ''; $('traffic-search').value = ''; load(); });
 $('traffic-audience').addEventListener('change', () => { if (report) { sort = $('traffic-audience').value; descending = true; chart(); dailyTable(); pages(); } });
 $('traffic-search').addEventListener('input', () => { if (report) pages(); });

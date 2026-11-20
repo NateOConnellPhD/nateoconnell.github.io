@@ -15,7 +15,7 @@
     <section id="traffic-setup" class="traffic-panel" hidden><h2>Connect website analytics</h2><p>The dashboard is ready. Connect Cloudflare Web Analytics and enable the website’s beacon to start collecting visits.</p><p id="traffic-missing" class="small"></p><a href="https://github.com/NateOConnellPhD/nateoconnell.github.io/blob/main/docs/TRAFFIC.md" target="_blank" rel="noopener noreferrer">Open the setup guide ↗</a><p class="small">Your domain can stay at Namecheap and your site on GitHub Pages. Tracking starts after setup; earlier visits cannot be recovered.</p></section>
     <form id="traffic-controls" class="traffic-controls" aria-label="Report filters">
       <label>Report<select id="traffic-scope"><option value="site">Whole website</option><option value="blog">Blog posts</option></select></label>
-      <label>Date range<select id="traffic-days"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="28">Last 28 days</option></select></label>
+      <label>Number of days<input id="traffic-days" type="number" min="1" step="1" value="7" required inputmode="numeric" aria-describedby="traffic-days-help"><span id="traffic-days-help" class="small">Includes today. Enter 1 for today only.</span></label>
       <label>Chart and page list<select id="traffic-audience"><option value="notFlagged">Not flagged as bots</option><option value="bots">Detected bots</option><option value="all">All recorded views</option><option value="unclassified">Unclassified</option></select></label>
     </form>
     <p id="traffic-status" class="traffic-status" role="status" aria-live="polite">Loading traffic…</p>

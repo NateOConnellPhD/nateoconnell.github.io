@@ -16,12 +16,16 @@ const groups = () => ({
   pages: [row(10, 0, { requestPath: '/blog/2026/11/20/example/' }), row(3, 1, { requestPath: '/blog/2026/11/20/example/' }), row(2, null, { requestPath: '/' })]
 });
 const provider = account => Response.json({ data: { viewer: { accounts: [account] } } });
+const limitsResponse = (overrides = {}) => provider({ settings: { rumPageloadEventsAdaptiveGroups: { enabled: true, maxDuration: 30 * 86400, notOlderThan: 180 * 86400, ...overrides } } });
+const isLimits = options => Boolean(options?.body && JSON.parse(options.body).query.includes('WebsiteTrafficLimits'));
 
 test('date ranges include today in UTC and unsafe or unsupported filters are rejected', () => {
   const range = trafficOptions(params('days=7&scope=blog'), instant);
   assert.equal(range.start, '2026-11-14T00:00:00.000Z');
   assert.equal(range.end, '2026-11-20T14:30:00.000Z');
-  for (const text of ['days=1000', 'scope=secret', 'scope=blog&page=/about/', 'scope=blog&page=/blog/', 'page=traffic', 'page=//other.test/']) assert.throws(() => trafficOptions(params(text), instant));
+  for (const days of [1, 2, 14, 45, 90, 180, 1000]) assert.equal(trafficOptions(params(`days=${days}`), instant).days, days);
+  assert.equal(trafficOptions(params('days=45'), instant).start, '2026-10-07T00:00:00.000Z');
+  for (const text of ['days=', 'days=0', 'days=-1', 'days=2.5', 'days=1e2', 'days=no', 'days=9007199254740991', 'scope=secret', 'scope=blog&page=/about/', 'scope=blog&page=/blog/', 'page=traffic', 'page=//other.test/']) assert.throws(() => trafficOptions(params(text), instant));
   for (const path of ['https://other.test/', '//other.test/', '/a/../b', '/%2e%2e/', '/a?secret=1', '/a#b', '/a\\b']) assert.equal(pagePath(path), null);
   assert.equal(pagePath('/blog/caf%C3%A9/'), '/blog/caf%C3%A9/');
   assert.equal(pagePath('/blog/café/'), '/blog/café/');
@@ -40,6 +44,8 @@ test('dashboard uses a separate page parameter and preserves existing page links
   const source = await readFile(new URL('../public/traffic.js', import.meta.url), 'utf8');
   for (const [search, selected] of [
     ['?days=28&scope=site', ''],
+    ['?days=45&scope=site', ''],
+    ['?days=90&scope=blog&page=%2Fblog%2Fexample%2F', '/blog/example/'],
     ['?scope=blog&page=%2Fblog%2Fexample%2F', '/blog/example/'],
     ['?path=%2Fabout%2F', '/about/']
   ]) {
@@ -49,7 +55,7 @@ test('dashboard uses a separate page parameter and preserves existing page links
       URLSearchParams, AbortController, setTimeout, clearTimeout, location: { search },
       history: { replaceState: (_state, _unused, url) => addresses.push(url) },
       document: { getElementById: id => {
-        if (!elements.has(id)) elements.set(id, { value: id === 'traffic-days' ? '7' : id === 'traffic-scope' ? 'site' : '', dataset: {}, addEventListener() {} });
+        if (!elements.has(id)) elements.set(id, { value: id === 'traffic-days' ? '7' : id === 'traffic-scope' ? 'site' : '', dataset: {}, addEventListener() {}, reportValidity: () => true });
         return elements.get(id);
       } },
       fetch: async url => {
@@ -63,6 +69,7 @@ test('dashboard uses a separate page parameter and preserves existing page links
     for (const query of [requests[0], new URL(addresses[0], 'https://editor.example.com').searchParams]) {
       assert.equal(query.get('page') || '', selected);
       assert.equal(query.has('path'), false);
+      assert.equal(query.get('days'), new URLSearchParams(search).get('days') || '7');
     }
     assert.equal(elements.get('traffic-status').dataset.error, 'false');
     assert.equal(elements.get('traffic-setup').hidden, false);
@@ -85,9 +92,10 @@ test('bot categories stay separate and weighted counts are not multiplied by sam
 });
 
 test('reports coalesce and cache; filters stay on this site and blog titles include zero-view posts', async () => {
-  let time = instant;
+  let time = instant, limitCalls = 0;
   const calls = [];
   const service = createTrafficService({ now: () => time, fetchImpl: async (url, options) => {
+    if (options && isLimits(options)) { limitCalls++; return limitsResponse(); }
     calls.push({ url, options });
     if (url.endsWith('/traffic-posts.json')) return Response.json({ posts: [
       { path: '/blog/2026/11/20/example/', title: 'A real post' },
@@ -114,6 +122,7 @@ test('reports coalesce and cache; filters stay on this site and blog titles incl
   await service(query, credentials); assert.equal(calls.length, 3);
   await service(params('route=traffic&path=traffic&page=/about/&days=1'), credentials);
   assert.equal(JSON.parse(calls.at(-1).options.body).variables.filter.requestPath, '/about/');
+  assert.equal(limitCalls, 1);
 });
 
 test('missing setup makes no requests; provider failures are not zero reports or cached successes', async () => {
@@ -125,7 +134,10 @@ test('missing setup makes no requests; provider failures are not zero reports or
     () => provider({ totals: [row(-1, 0)], daily: [], pages: [] }),
     () => { throw new Error('request timed out'); }
   ];
-  const service = createTrafficService({ now: () => instant, fetchImpl: async () => { requests++; return responses.shift()(); } });
+  const service = createTrafficService({ now: () => instant, fetchImpl: async (_url, options) => {
+    if (isLimits(options)) return limitsResponse();
+    requests++; return responses.shift()();
+  } });
   const setup = await service(params(''), {});
   assert.equal(setup.configured, false); assert.equal(setup.missing.length, 3); assert.equal(requests, 0);
   for (let i = 0; i < 5; i++) await assert.rejects(service(params(''), credentials), error => error.status === 502 && !error.message.includes('private diagnostic'));
@@ -134,13 +146,96 @@ test('missing setup makes no requests; provider failures are not zero reports or
 
 test('an unavailable public catalog does not discard counts or retry on every different report', async () => {
   let catalogCalls = 0;
-  const service = createTrafficService({ now: () => instant, fetchImpl: async url => {
+  const service = createTrafficService({ now: () => instant, fetchImpl: async (url, options) => {
+    if (isLimits(options)) return limitsResponse();
     if (url.endsWith('/traffic-posts.json')) { catalogCalls++; return new Response('Not deployed', { status: 404 }); }
     return provider(groups());
   } });
   assert.equal((await service(params(''), credentials)).totals.all, 15);
   await service(params('scope=blog'), credentials);
   assert.equal(catalogCalls, 1);
+});
+
+test('a custom 90-day report combines non-overlapping provider windows without losing days or bot classes', async () => {
+  const windows = []; let limitCalls = 0;
+  const page = '/blog/2026/11/20/example/';
+  const service = createTrafficService({ now: () => instant, fetchImpl: async (url, options) => {
+    if (url.endsWith('/traffic-posts.json')) return Response.json({ posts: [] });
+    if (isLimits(options)) { limitCalls++; return limitsResponse(); }
+    const { filter } = JSON.parse(options.body).variables;
+    windows.push(filter);
+    const from = Date.parse(filter.datetime_geq), until = Date.parse(filter.datetime_lt);
+    const dates = [];
+    for (let date = Math.floor(from / 86400000) * 86400000; date < until; date += 86400000) {
+      if (date + 43200000 >= from && date + 43200000 < until) dates.push(new Date(date).toISOString().slice(0, 10));
+    }
+    return provider({
+      totals: [row(dates.length, 0), row(dates.length * 2, 1), row(dates.length * 3, null)],
+      daily: dates.flatMap(date => [row(1, 0, { date }), row(2, 1, { date }), row(3, null, { date }, 4)]),
+      pages: [row(dates.length, 0, { requestPath: page }), row(dates.length * 2, 1, { requestPath: page }), row(dates.length * 3, null, { requestPath: page })]
+    });
+  } });
+  const request = params(`days=90&scope=blog&page=${page}`);
+  const [report, matching] = await Promise.all([service(request, credentials), service(request, credentials)]);
+  assert.deepEqual(report, matching);
+  assert.equal(windows.length, 3); assert.equal(limitCalls, 1);
+  assert.equal(windows[0].datetime_geq, report.range.start);
+  assert.equal(windows.at(-1).datetime_lt, report.range.end);
+  for (let i = 0; i < windows.length; i++) {
+    assert.ok(Date.parse(windows[i].datetime_lt) - Date.parse(windows[i].datetime_geq) <= 30 * 86400000);
+    if (i) assert.equal(windows[i].datetime_geq, windows[i - 1].datetime_lt);
+    assert.equal(windows[i].requestPath, page);
+    assert.equal(windows[i].requestPath_like, '/blog/%');
+  }
+  assert.deepEqual(report.totals, { all: 540, notFlagged: 90, bots: 180, unclassified: 270 });
+  assert.equal(report.daily.length, 90); assert.ok(report.daily.every(day => day.all === 6));
+  assert.equal(report.pages.length, 1); assert.equal(report.pages[0].all, 540);
+  assert.equal(report.pagesLimited, false); assert.equal(report.sampled, true);
+  await service(request, credentials); assert.equal(windows.length, 3);
+});
+
+test('the actual provider retention is enforced with a useful maximum, not a preset ceiling', async () => {
+  let requests = 0, time = instant, limitCalls = 0;
+  const service = createTrafficService({ now: () => time, fetchImpl: async (url, options) => {
+    if (url.endsWith('/traffic-posts.json')) return Response.json({ posts: [] });
+    if (isLimits(options)) { limitCalls++; return limitsResponse({ notOlderThan: 120 * 86400 }); }
+    requests++; return provider({ totals: [], daily: [], pages: [] });
+  } });
+  await assert.rejects(service(params('days=121'), credentials), error => error.status === 400 && error.message.includes('120 days'));
+  assert.equal(requests, 0);
+  const report = await service(params('days=120'), credentials);
+  assert.equal(report.range.days, 120); assert.equal(report.daily.length, 120); assert.equal(requests, 4);
+  assert.equal(limitCalls, 1);
+  time += 86400000 + 1;
+  await service(params('days=1'), credentials);
+  assert.equal(limitCalls, 2);
+});
+
+test('long reports keep daily queries below their row limit and flag only truncated page windows', async () => {
+  let reports = 0;
+  const service = createTrafficService({ now: () => instant, fetchImpl: async (url, options) => {
+    if (url.endsWith('/traffic-posts.json')) return Response.json({ posts: [] });
+    if (isLimits(options)) return limitsResponse({ maxDuration: 180 * 86400 });
+    const { filter } = JSON.parse(options.body).variables;
+    assert.ok(Date.parse(filter.datetime_lt) - Date.parse(filter.datetime_geq) <= 60 * 86400000);
+    reports++;
+    return provider({ totals: [row(500, 0)], daily: [], pages: Array.from({ length: 500 }, (_, i) => row(1, 0, { requestPath: `/page-${i}/` })) });
+  } });
+  const report = await service(params('days=180'), credentials);
+  assert.equal(reports, 3); assert.equal(report.pagesLimited, false);
+  assert.equal(report.pages.length, 500); assert.equal(report.pages[0].all, 3);
+});
+
+test('failure in a later window does not return or cache a partial report', async () => {
+  let reports = 0;
+  const service = createTrafficService({ now: () => instant, fetchImpl: async (_url, options) => {
+    if (isLimits(options)) return limitsResponse();
+    reports++;
+    if (reports % 2 === 0) return Response.json({ errors: [{ message: 'private provider diagnostic' }] });
+    return provider({ totals: [row(5, 0)], daily: [], pages: [] });
+  } });
+  for (let i = 0; i < 2; i++) await assert.rejects(service(params('days=90'), credentials), error => error.status === 502 && !error.message.includes('private provider diagnostic'));
+  assert.equal(reports, 4);
 });
 
 test('traffic route requires the owner session and does not open GitHub storage; sign-in return is allowlisted', async () => {

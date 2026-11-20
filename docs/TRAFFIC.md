@@ -1,6 +1,8 @@
 # Website traffic
 
-Open **Traffic** in the editor sidebar after signing in at <https://nateoconnell.com/login>. Choose the whole website or blog posts, then Today, 7 days, or 28 days. Select a page to see its daily views. Sort the page list or search for a post by title.
+Open **Traffic** in the editor sidebar after signing in at <https://nateoconnell.com/login>. Choose the whole website or blog posts and enter the **number of days** you want, including today. Enter 1 for today only, or another positive whole number such as 14, 45, or 90. Press Enter or select **Reload report**. Select a page to see its daily views. Sort the page list or search for a post by title.
+
+There is no preset 28-day ceiling. The editor reads the account's actual retention and per-query duration from [Cloudflare's settings node](https://developers.cloudflare.com/analytics/graphql-api/features/discovery/settings/), caching those settings for a day. Longer reports are split into non-overlapping requests within those limits and combined. If the requested dates exceed available history, the error states the maximum number of calendar days available. Cloudflare [documents six months of Web Analytics history](https://developers.cloudflare.com/web-analytics/faq/#what-is-the-period-of-time-i-can-access-data-in-web-analytics); the connected account's API settings determine the actual limit. The editor does not archive traffic permanently.
 
 ## Connect once
 
