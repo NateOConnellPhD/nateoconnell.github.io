@@ -164,10 +164,12 @@ window.CFBExplorer = (root, api) => {
     const previous=new Map();
     for (const w of weeks) for (const id of ids) {
       const t=w.teams.find(t=>String(t.id)===id); if (!t) continue;
-      const prior=previous.get(id), change=prior&&prior.week===w.week-1&&prior.policy===w.policy_sha256&&Number.isFinite(prior.rank)&&Number.isFinite(t.rank)?prior.rank-t.rank:null;
+      const prior=previous.get(id), comparable=prior&&prior.week===w.week-1&&prior.policy===w.policy_sha256;
+      const change=comparable&&Number.isFinite(prior.rank)&&Number.isFinite(t.rank)?prior.rank-t.rank:null;
+      const movement=!comparable?'N/A':!Number.isFinite(t.rank)?'Unranked':!Number.isFinite(prior.rank)?'New':change>0?`↑ ${change}`:change<0?`↓ ${-change}`:'0 (unchanged)';
       const tr=node('tr'), td=node('td'), link=node('button',`Week ${w.week}`,{type:'button',class:'cfb-inline-button'});
       link.addEventListener('click',()=>api.select(w.id)); td.append(link); tr.append(td);
-      for (const value of [t.name,t.rank??'—',change===null?'—':change>0?`↑ ${change}`:change<0?`↓ ${-change}`:'·',`${t.wins_fbs}–${t.losses_fbs}`,`${num(t.merit_mean)} / ${num(t.merit_median)}`,interval(t.merit_lo90,t.merit_hi90)]) tr.append(node('td',value));
+      for (const value of [t.name,t.rank??'—',`${t.wins_fbs}–${t.losses_fbs}`,`${num(t.merit_mean)} / ${num(t.merit_median)}`,interval(t.merit_lo90,t.merit_hi90),movement]) tr.append(node('td',value));
       el('history-rows').append(tr); previous.set(id,{week:w.week,rank:t.rank,policy:w.policy_sha256});
     }
     legend(el('history-legend'),entries,key==='rank'?'Official point ranks; no posterior interval is assigned to these rule-adjusted ranks.':'Points = posterior means; bars = equal-tailed 90% intervals.');
