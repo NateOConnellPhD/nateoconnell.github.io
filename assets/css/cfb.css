@@ -56,7 +56,9 @@
 .cfb-tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:14px 0;color:var(--muted);font-size:.88rem;white-space:nowrap}
 .cfb-tabs [aria-selected=true]{border-bottom-color:var(--blue);color:var(--ink);font-weight:600}
 .cfb-archive{margin:20px 0 30px;border-bottom:1px solid var(--line);padding-bottom:18px}
-.cfb-archive>summary,.cfb-diagnostics>summary{cursor:pointer;color:var(--blue);font-size:.9rem;font-weight:600;min-height:34px}
+.cfb-revisions>summary,.cfb-diagnostics>summary{cursor:pointer;color:var(--blue);font-size:.9rem;font-weight:600;min-height:34px}
+.cfb-revisions{margin:18px 0}
+.cfb-revisions label{max-width:650px;margin-top:12px}
 .cfb-archive h3{font-size:1.3rem;margin:18px 0 10px}
 .cfb-week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:24px}
 .cfb-week-grid button{padding:10px 8px;border:1px solid var(--line);background:transparent;color:var(--blue);font-size:.85rem;text-align:left}

@@ -23,15 +23,19 @@ description: "My college football rankings: what teams have earned from the game
 
     <div id="cfb-history" class="cfb-history" data-cfb-controls hidden>
       <label for="cfb-season">Season<select id="cfb-season" data-cfb-season></select></label>
-      <label for="cfb-update">Saved update<select id="cfb-update" data-cfb-update></select></label>
+      <label for="cfb-week">Week of season<select id="cfb-week" data-cfb-week></select></label>
       <button type="button" class="button button-outline" data-cfb-latest>Latest rankings</button>
     </div>
-    <details class="cfb-archive" data-cfb-archive>
-      <summary>Browse every season and week</summary>
+    <section class="cfb-archive" data-cfb-archive aria-labelledby="cfb-archive-title" hidden>
+      <h3 id="cfb-archive-title" data-cfb-archive-title>Weeks in this season</h3>
       <p class="small-note" data-cfb-archive-status></p>
       <div data-cfb-archive-grid></div>
       <p class="small-note">Historical weeks are reconstructed using games through that week’s cutoff. They are not rankings that were published at the time. Coverage starts in 2024, when the current Power Four policy applies.</p>
-    </details>
+      <details class="cfb-revisions" data-cfb-revisions hidden>
+        <summary>Earlier saved versions of this week</summary>
+        <label for="cfb-update">Saved version<select id="cfb-update" data-cfb-update></select></label>
+      </details>
+    </section>
 
     <div data-cfb-results hidden>
       <div class="cfb-tabs" role="tablist" aria-label="Explore this update">
