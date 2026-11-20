@@ -1,0 +1,311 @@
+{
+  "schema": "reviewed-venues-v1",
+  "convention": "Official home designation includes temporary and relocated home venues; corrections never change raw source files.",
+  "games": [
+    {
+      "season": 2024,
+      "game_id": 401628503,
+      "home": "Northwestern",
+      "away": "Indiana",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 77,
+        "awayId": 84,
+        "homePoints": 24,
+        "awayPoints": 41,
+        "venue": "Lanny and Sharon Martin Stadium"
+      },
+      "reason": "Northwestern identifies these temporary-venue dates as home games during the Ryan Field rebuild.",
+      "sources": [
+        "https://nusports.com/news/2024/05/15/northwestern-announces-2024-football-schedule"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401628522,
+      "home": "Northwestern",
+      "away": "Wisconsin",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 77,
+        "awayId": 275,
+        "homePoints": 3,
+        "awayPoints": 23,
+        "venue": "Lanny and Sharon Martin Stadium"
+      },
+      "reason": "Northwestern identifies these temporary-venue dates as home games during the Ryan Field rebuild.",
+      "sources": [
+        "https://nusports.com/news/2024/05/15/northwestern-announces-2024-football-schedule"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401628550,
+      "home": "Northwestern",
+      "away": "Ohio State",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 77,
+        "awayId": 194,
+        "homePoints": 7,
+        "awayPoints": 31,
+        "venue": "Wrigley Field"
+      },
+      "reason": "Northwestern identifies these temporary-venue dates as home games during the Ryan Field rebuild.",
+      "sources": [
+        "https://nusports.com/news/2024/05/15/northwestern-announces-2024-football-schedule"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401635533,
+      "home": "Northwestern",
+      "away": "Duke",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 77,
+        "awayId": 150,
+        "homePoints": 20,
+        "awayPoints": 26,
+        "venue": "Lanny and Sharon Martin Stadium"
+      },
+      "reason": "Northwestern identifies these temporary-venue dates as home games during the Ryan Field rebuild.",
+      "sources": [
+        "https://nusports.com/news/2024/05/15/northwestern-announces-2024-football-schedule"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401636863,
+      "home": "Kansas",
+      "away": "UNLV",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2305,
+        "awayId": 2439,
+        "homePoints": 20,
+        "awayPoints": 23,
+        "venue": "Children's Mercy Park"
+      },
+      "reason": "Kansas identifies these alternate-stadium dates as home games during its stadium rebuild.",
+      "sources": [
+        "https://kuathletics.com/news/2024/1/30/kansas-football-to-play-2-games-at-childrens-mercy-park-4-at-arrowhead-stadium-in-2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401636882,
+      "home": "Kansas",
+      "away": "TCU",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2305,
+        "awayId": 2628,
+        "homePoints": 27,
+        "awayPoints": 38,
+        "venue": "GEHA Field at Arrowhead Stadium"
+      },
+      "reason": "Kansas identifies these alternate-stadium dates as home games during its stadium rebuild.",
+      "sources": [
+        "https://kuathletics.com/news/2024/1/30/kansas-football-to-play-2-games-at-childrens-mercy-park-4-at-arrowhead-stadium-in-2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401636901,
+      "home": "Kansas",
+      "away": "Houston",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2305,
+        "awayId": 248,
+        "homePoints": 42,
+        "awayPoints": 14,
+        "venue": "GEHA Field at Arrowhead Stadium"
+      },
+      "reason": "Kansas identifies these alternate-stadium dates as home games during its stadium rebuild.",
+      "sources": [
+        "https://kuathletics.com/news/2024/1/30/kansas-football-to-play-2-games-at-childrens-mercy-park-4-at-arrowhead-stadium-in-2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401636919,
+      "home": "Kansas",
+      "away": "Iowa State",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2305,
+        "awayId": 66,
+        "homePoints": 45,
+        "awayPoints": 36,
+        "venue": "GEHA Field at Arrowhead Stadium"
+      },
+      "reason": "Kansas identifies these alternate-stadium dates as home games during its stadium rebuild.",
+      "sources": [
+        "https://kuathletics.com/news/2024/1/30/kansas-football-to-play-2-games-at-childrens-mercy-park-4-at-arrowhead-stadium-in-2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401636932,
+      "home": "Kansas",
+      "away": "Colorado",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2305,
+        "awayId": 38,
+        "homePoints": 37,
+        "awayPoints": 21,
+        "venue": "GEHA Field at Arrowhead Stadium"
+      },
+      "reason": "Kansas identifies these alternate-stadium dates as home games during its stadium rebuild.",
+      "sources": [
+        "https://kuathletics.com/news/2024/1/30/kansas-football-to-play-2-games-at-childrens-mercy-park-4-at-arrowhead-stadium-in-2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401640979,
+      "home": "Florida International",
+      "away": "Central Michigan",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2229,
+        "awayId": 2117,
+        "homePoints": 52,
+        "awayPoints": 16,
+        "venue": "Pitbull Stadium"
+      },
+      "reason": "FIU identifies these dates at its renamed Pitbull Stadium as home games.",
+      "sources": [
+        "https://fiusports.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401640981,
+      "home": "Florida International",
+      "away": "Louisiana Tech",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2229,
+        "awayId": 2348,
+        "homePoints": 17,
+        "awayPoints": 10,
+        "venue": "Pitbull Stadium"
+      },
+      "reason": "FIU identifies these dates at its renamed Pitbull Stadium as home games.",
+      "sources": [
+        "https://fiusports.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401640984,
+      "home": "Florida International",
+      "away": "Sam Houston",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2229,
+        "awayId": 2534,
+        "homePoints": 7,
+        "awayPoints": 10,
+        "venue": "Pitbull Stadium"
+      },
+      "reason": "FIU identifies these dates at its renamed Pitbull Stadium as home games.",
+      "sources": [
+        "https://fiusports.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401640985,
+      "home": "Florida International",
+      "away": "New Mexico State",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2229,
+        "awayId": 166,
+        "homePoints": 34,
+        "awayPoints": 13,
+        "venue": "Pitbull Stadium"
+      },
+      "reason": "FIU identifies these dates at its renamed Pitbull Stadium as home games.",
+      "sources": [
+        "https://fiusports.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401640988,
+      "home": "Florida International",
+      "away": "Middle Tennessee",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 2229,
+        "awayId": 2393,
+        "homePoints": 35,
+        "awayPoints": 24,
+        "venue": "Pitbull Stadium"
+      },
+      "reason": "FIU identifies these dates at its renamed Pitbull Stadium as home games.",
+      "sources": [
+        "https://fiusports.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401644683,
+      "home": "Northwestern",
+      "away": "Miami (OH)",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 77,
+        "awayId": 193,
+        "homePoints": 13,
+        "awayPoints": 6,
+        "venue": "Lanny and Sharon Martin Stadium"
+      },
+      "reason": "Northwestern identifies these temporary-venue dates as home games during the Ryan Field rebuild.",
+      "sources": [
+        "https://nusports.com/news/2024/05/15/northwestern-announces-2024-football-schedule"
+      ],
+      "reviewed_on": "2026-11-20"
+    },
+    {
+      "season": 2024,
+      "game_id": 401645341,
+      "home": "South Florida",
+      "away": "Memphis",
+      "neutral_site": false,
+      "expected": {
+        "homeId": 58,
+        "awayId": 235,
+        "homePoints": 3,
+        "awayPoints": 21,
+        "venue": "Camping World Stadium"
+      },
+      "reason": "USF retains home designation for the Memphis game relocated to Orlando after Hurricane Milton. This follows official home designation, not an estimate of actual home advantage.",
+      "sources": [
+        "https://gousfbulls.com/sports/football/schedule/2024",
+        "https://gousfbulls.com/news/2024/10/10/usf-football-vs-memphis-game-moved-to-camping-world-stadium-in-orlando"
+      ],
+      "reviewed_on": "2026-11-20"
+    }
+  ]
+}

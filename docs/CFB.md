@@ -6,8 +6,9 @@ for all 134 teams. A separate likelihood-weighting error was identified in the
 saved archive; it must not be attributed to the new scale floor. See
 [the numerical comparison](CFB-2024-COMPARISON.md) for results and limitations.
 Maintained source now includes PSIS scoring, a reference ordering policy, and
-comparison commands. A manual CFBD data-sync workflow is implemented and has
-passed offline checks; live API access has not yet been tested. Exact-LOO
+comparison commands. The first live CFBD sync succeeded for 2024; the saved
+inputs have been audited against the reference, including documented venue
+corrections. See [the data audit](CFB-2024-DATA-AUDIT.md). Exact-LOO
 fallback, historical policy, scheduled updates, automated publication, and the
 public blog section remain unfinished.
 The updated private Margin of Merit v2 handoff has also been reviewed. It
@@ -52,8 +53,9 @@ changing an in-progress score does not change the eligible-data hash. That hash
 is not a complete fit identity: future fit caching must also include model,
 policy, and implementation versions.
 
-After the 2024 import succeeds, compare its eligibility and game set against the
-reference before connecting inference. Use a separate manual run for season
+The 2024 import and reference comparison have succeeded. Future fits must use
+`season_inputs.load_inputs()` so reviewed venue corrections and cutoff filters
+are applied while raw provider files remain intact. Use a separate manual run for season
 **2026** to seed current-season files; that season's first run also needs three
 requests. The eventual Sunday job will reuse these saved inputs. Visitors will
 read published result files and will never call CFBD.
@@ -61,7 +63,8 @@ read published result files and will never call CFBD.
 The importer uses Python's standard library, with no runtime or dependency
 downloads. Its 13 focused offline tests cover request reuse, unchanged data,
 corrections, rejected responses, input eligibility, and credential-safe errors.
-Those checks do not establish that the real provider response or key works.
+The subsequent live 2024 run established endpoint access with the saved key;
+current-season data and automatic model publication are not yet connected.
 
 ## Updated ranking policy: v2
 
