@@ -7,7 +7,7 @@ const source = fs.readFileSync(require.resolve('../../assets/js/cfb.js'), 'utf8'
 class Element {
   constructor(select = false) {
     this.select = select; this.children = []; this.handlers = {}; this.attributes = {};
-    this.textContent = ''; this.hidden = false; this.dataset = {}; this._value = '';
+    this.textContent = ''; this.hidden = false; this.dataset = {}; this.style = {}; this._value = '';
   }
   set value(value) { this._value = String(value); }
   get value() { return this.select && !this.children.some(c => c.value === this._value) ? '' : this._value; }
@@ -129,6 +129,16 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.equal(table[0].children[2].textContent, '5–2', 'Movement is last, after every statistic');
   assert.equal(table[3].children.at(-1).children[0].textContent, 'Unchanged');
 
+  const incomplete = {...row(2026, 12), week_complete: false};
+  const gatedIndex = {...weeklyIndex, latest: incomplete.id, snapshots: [incomplete, ...weeklyRows],
+    archive: [{season: 2026, weeks: [{week: 10}, {week: 11}]}]};
+  const completed = await page('', gatedIndex, fixtures);
+  assert.equal(completed.shown.at(-1), '2026-11-new', 'An incomplete latest pointer falls back to a completed week');
+  assert.equal(completed.get('week').options.some(o => o.value === '12'), false);
+  assert.equal(completed.requests.some(u => u.endsWith('2026-12-new.json')), false);
+  const partialLink = await page('?snapshot=2026-12-new', gatedIndex, fixtures);
+  assert.equal(partialLink.shown.at(-1), '2026-11-new', 'An old partial-snapshot link cannot load partial standings');
+
   const newTeam = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, null, 4])}});
   assert.equal(newTeam.get('rows').children[0].children[2].children.at(-1).textContent, 'New');
   const incompatible = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, 2, 4]), policy_sha256: 'older'}});
@@ -209,5 +219,33 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   await missingPolls.change('poll', 'ap');
   assert.match(missingPolls.get('poll-note').textContent, /could not be loaded/);
   assert.equal(missingPolls.get('results').hidden, false, 'Missing polls never hide merit rankings');
-  console.log('Navigation, weekly movement and poll checks passed: editions, gaps, ties/NR, rank differences, rules and cache reuse.');
+
+  // Exercise the real explorer controller with a stale history file containing
+  // the partial week, rather than relying on the main-controller explorer stub.
+  const elements = new Map(), get = key => {
+    if (!elements.has(key)) elements.set(key, new Element());
+    return elements.get(key);
+  };
+  const tabNames = ['rankings', 'rules', 'posterior', 'history'];
+  const buttons = tabNames.map(name => { const n = new Element(); n.dataset.cfbTab = name; return n; });
+  const panels = tabNames.map(name => { const n = new Element(); n.dataset.cfbPanel = name; return n; });
+  const explorerRoot = {querySelector: s => get(s.match(/data-cfb-([^\]]+)/)[1]),
+    querySelectorAll: s => s === '[data-cfb-tab]' ? buttons : panels};
+  const explorerContext = {window: {}, document: {createElement: () => new Element(), createElementNS: () => new Element()},
+    ResizeObserver: class { observe() {} }};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../assets/js/cfb-explorer.js'), 'utf8'), explorerContext);
+  const history = {schema: 'margin-of-merit-history-v1', season: 2026,
+    weeks: [10, 11, 12].map(week => ({week, id: `2026-${week}-new`, policy_sha256: 'same', teams: teams([1, 2])}))};
+  const explorer = explorerContext.window.CFBExplorer(explorerRoot, {fetchJSON: async () => history, url: path => path});
+  get('history-metric').value = 'rank';
+  explorer.show({season: 2026, teams: teams([1, 2]), order: [1, 2]},
+    {snapshots: weeklyRows, archive: [{season: 2026, weeks: [{week: 10}, {week: 11}]}]});
+  explorer.tab('rules');
+  assert.deepEqual(panels.map(n => n.hidden), [true, false, true, true]);
+  assert.deepEqual(buttons.map(n => n.attributes['aria-selected']), [false, true, false, false]);
+  explorer.tab('history'); await settle();
+  assert.match(get('history-status').textContent, /2 saved weeks/);
+  assert.deepEqual(get('history-rows').children.map(tr => tr.children[0].children[0].textContent), ['Week 10', 'Week 11']);
+  assert.equal(get('history-rows').children.at(-1).children.at(-1).textContent, '0 (unchanged)');
+  console.log('Offline controller checks passed: separate tabs, focused explanations, completed weeks, history, last-column movement, polls and cache reuse.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

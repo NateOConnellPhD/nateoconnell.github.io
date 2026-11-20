@@ -135,7 +135,8 @@ window.CFBExplorer = (root, api) => {
   function renderHistory() {
     if (!current || activeTab !== 'history' || !series) return;
     const key=el('history-metric').value, ids=[el('history-team').value,el('history-other').value].filter((v,i,a)=>v&&a.indexOf(v)===i);
-    const weeks=series.weeks, field=key==='rank'?'rank':`${key}_mean`;
+    const published=new Set(archive.snapshots.map(r=>r.id));
+    const weeks=series.weeks.filter(w=>published.has(w.id)), field=key==='rank'?'rank':`${key}_mean`;
     const entries=ids.map(id=>({name:current.teams.find(t=>String(t.id)===id)?.name, points:weeks.map(w=>({week:w.week,policy:w.policy_sha256,t:w.teams.find(t=>String(t.id)===id),id:w.id}))}));
     const finite=entries.flatMap(e=>e.points.filter(p=>Number.isFinite(p.t?.[field])));
     el('trajectory').replaceChildren(); el('history-rows').replaceChildren();

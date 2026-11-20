@@ -497,6 +497,8 @@
     try {
       index = await fetchJSON(root.dataset.index, 'no-store');
       if (index.schema !== 'margin-of-merit-index-v1' || !Array.isArray(index.snapshots)) throw new Error('Invalid archive');
+      index.snapshots = index.snapshots.filter(r => r.week_complete !== false);
+      if (!index.snapshots.some(r => r.id === index.latest)) index.latest = index.snapshots[0]?.id || null;
       const seasons = [...new Set([...index.snapshots.map(r => r.season), ...(index.archive || []).map(s => s.season)])].sort((a,b) => b-a);
       if (!seasons.length) {
         el('status').textContent = index.last_attempt?.status === 'failed'

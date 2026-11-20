@@ -24,7 +24,7 @@ on:
       - 'assets/js/cfb-policy.js'
       - '.github/workflows/cfb-rankings.yml'
   schedule:
-    - cron: '17 8 * 8-12 0'
+    - cron: '17 8 * 8-12 1'
       timezone: 'America/New_York'
 
 permissions:
@@ -60,6 +60,7 @@ jobs:
           python3 -B scripts/cfb/check_policy_v4.py
           python3 -B scripts/cfb/test_posterior_summary.py
           python3 -B scripts/cfb/test_history.py
+          python3 -B scripts/cfb/test_weekly_publication.py
       - name: Fetch the season once and check for changed inputs
         id: prepare
         env:
@@ -76,7 +77,7 @@ jobs:
           if [ "$CFB_REFRESH_METADATA" = true ]; then
             args+=(--refresh-metadata)
           fi
-          python3 -B scripts/cfb/update_rankings.py "${args[@]}"
+          python3 -B scripts/cfb/weekly_publication.py "${args[@]}"
       - uses: actions/setup-python@v7
         if: steps.prepare.outputs.needs_fit == 'true'
         with:
@@ -109,10 +110,10 @@ jobs:
           if [ -x .codex-tmp/cfb-refit/venv/bin/python ]; then
             runner=.codex-tmp/cfb-refit/venv/bin/python
           fi
-          python3 -B scripts/cfb/run_bounded.py "$runner" -B scripts/cfb/update_rankings.py complete
+          python3 -B scripts/cfb/run_bounded.py "$runner" -B scripts/cfb/weekly_publication.py complete
       - name: Record an unsuccessful update without replacing rankings
         if: failure() && steps.prepare.outcome == 'success'
-        run: python3 -B scripts/cfb/update_rankings.py failed
+        run: python3 -B scripts/cfb/weekly_publication.py failed
       - name: Commit saved data and ranking snapshots
         id: commit
         if: always() && steps.prepare.outcome == 'success'
