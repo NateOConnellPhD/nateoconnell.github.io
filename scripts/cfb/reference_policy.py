@@ -1,8 +1,9 @@
 """Side-effect-free reproduction of the archived final-season ordering policy.
 
-This preserves the archive's SCC release rule for the prior comparison. The
-production policy still needs a separately versioned minimal-cycle-release
-implementation and season-specific conference membership.
+This preserves the archive's SCC release rule for the completed 2024 prior
+comparison only. The updated v2 handoff replaces this entire ordering procedure
+with uncertainty-aware soft preferences. Never use this class for production
+rankings; see docs/CFB.md for the pending v2 integration and season policy.
 """
 from collections import defaultdict
 import heapq

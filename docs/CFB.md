@@ -10,8 +10,11 @@ comparison commands. A manual CFBD data-sync workflow is implemented and has
 passed offline checks; live API access has not yet been tested. Exact-LOO
 fallback, historical policy, scheduled updates, automated publication, and the
 public blog section remain unfinished.
-The handoff stays private and unchanged; 2024 is a reference, not the limit of
-the historical archive.
+The updated private Margin of Merit v2 handoff has also been reviewed. It
+replaces the intended production ordering policy, not the statistical model or
+data importer. Its policy is specified below but is not yet integrated into the
+maintained production code. Both handoffs stay private and unchanged; 2024 is
+a reference, not the limit of the historical archive.
 
 ## First GitHub data sync
 
@@ -59,6 +62,74 @@ The importer uses Python's standard library, with no runtime or dependency
 downloads. Its 13 focused offline tests cover request reuse, unchanged data,
 corrections, rejected responses, input eligibility, and credential-safe errors.
 Those checks do not establish that the real provider response or key works.
+
+## Updated ranking policy: v2
+
+The private `Margin_of_Merit_2026_Uncertainty_Ranking_V2` packet supersedes the
+old hard head-to-head/common-opponent precedence and completed-round-robin
+reordering procedure for future publication. `reference_policy.py` remains
+only to reproduce the completed 2024 prior comparison; do not use it as the
+production sorter. The comparison's numerical results have not been recomputed
+under v2.
+
+The v2 likelihood and priors match `model.py`, including the eight-point scale
+floor. Its intended LOO game credit, season merit, and SOS definitions also
+remain unchanged. The saved-data workflow can run independently of this policy
+update, and a policy-only change does not itself require another HMC fit.
+
+The intended official order is:
+
+1. Start from decreasing posterior mean earned merit.
+2. Protect pairwise merit precedence when its posterior probability is strictly
+   greater than 90%. Exactly 90% is eligible for consideration, not an instruction
+   to reverse a comparison.
+3. Consider head-to-head first, then unambiguous common-opponent dominance, only
+   for identical FBS win-loss records and unresolved merit comparisons. Split
+   direct results do not create a direct preference. Common-opponent comparisons
+   use win fractions, with no worse results against every shared opponent and
+   strictly better results against at least one.
+4. Treat those comparisons as finite preferences, not forced swaps. Reversing a
+   baseline pair costs `max(0, 2*p - 1) + epsilon`, where `p` is the posterior
+   probability that the baseline-higher team has greater merit. Every crossed
+   team contributes a separate cost and its own confidence constraint.
+5. Retain the separately disclosed undefeated-P4 exception: at least eight FBS
+   games, no FBS losses, and precedence over teams with at least two FBS losses.
+   Its historical conference policy still needs resolution.
+
+The handoff's provisional editorial weights are 0.50 for head-to-head, 0.20 for
+common-opponent preferences, and 0.04 per crossing. They are policy choices, not
+estimated model parameters or probabilities. Its deterministic best-insertion
+search evaluates every single-team insertion and stops at an insertion-local
+optimum; it does not certify a global optimum.
+
+Keep the official integer order separate from uncertainty about raw merit.
+Rank intervals and top-K probabilities come from raw merit draws, not applying
+the selected editorial rule to each draw. Public labels must say, for example,
+`P(raw merit in top 8)`. These quantities retain the known approximate joint
+dependence from per-game marginal quantile transport.
+
+Integration/replay checks still needed:
+
+- The supplied folder and ZIP contain policy code, tests, and result tables,
+  but not the referenced `2026_merit_draws.npz` or
+  `2026_FBS_completed_games.csv`. Reported 2026 rankings, weight sensitivity, and
+  replay-test results have therefore not been independently reproduced here.
+- Keep the maintained, checked LOO scorer. The new standalone runner uses the
+  same `arviz_stats...psislw(-LL.T)` call pattern as the earlier archive. That
+  alone does not establish its target or invalidate its outputs, but the earlier
+  scoring discrepancy makes a numerical check necessary before reusing them.
+- Explicitly handle tied merit draws, including teams with zero eligible games:
+  the supplied pair matrix sets the reverse probability to `1 - P(A > B)`,
+  which treats equality as strict superiority in the reverse direction.
+- Check confidence locks in both directions even if mean and probability order
+  disagree, and test feasibility when the P4 exception crosses an intermediate
+  team's confidence lock. Do not silently relax an unrelated lock.
+- Use the cached season-specific roster/conferences and stable IDs. Do not copy
+  the standalone runner's team roster inferred only from completed games, its
+  2026-specific filenames, or its separate data downloader into production.
+
+Do not publish the packet's superseded hard-precedence tables. Its v2 tables
+are reference material pending the checks above, not verified live output.
 
 ## One model throughout each season
 

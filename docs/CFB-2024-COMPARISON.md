@@ -18,6 +18,11 @@ not an effect of the new scale prior. The supplied packet remains unchanged.
 These are research results, not published website rankings. No deployment,
 scheduled fetch, historical backfill, or public CFB page was enabled.
 
+Subsequent policy update: the private v2 handoff replaces the ordering policy
+used in this comparison for future production rankings. The results below
+remain the original prior/scoring comparison under the archived policy; they
+are not v2 rankings. See [the current integration plan](CFB.md#updated-ranking-policy-v2).
+
 ## What was held fixed
 
 All three new fits use the shared `scripts/cfb/model.py`, the same data, team
@@ -43,9 +48,9 @@ and its explicit Oregon protection. The policy audit has 119 candidate edges,
 hold, and posterior top-K probabilities sum to K. These checks were performed
 for all five scored cases, including the two archive-draw reconstructions.
 
-This is deliberately not a new historical conference-membership policy or the
-future minimal-cycle-release implementation. Policy and sampler changes must
-not be conflated with the scale-prior comparison.
+This is deliberately not a new historical conference-membership policy or a
+validation of the subsequently supplied v2 ordering. Policy and sampler changes
+must not be conflated with the scale-prior comparison.
 
 ## Ranking and uncertainty sensitivity
 
