@@ -12,6 +12,7 @@ import { streamChat } from '../lib/chat-stream.js';
 import { liveChat } from '../lib/live-chat.js';
 import { cleanupDeletedChat } from '../lib/chat-cleanup.js';
 import { writingTurn, writingAction } from '../lib/writing-chat.js';
+import { trafficReport } from '../lib/traffic.js';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Robots-Tag': 'noindex' } });
 function redirect(location, values = []) {
@@ -26,7 +27,8 @@ async function auth(request, route, config) {
     const url = new URL('https://github.com/login/oauth/authorize');
     url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: `${config.origin}/api/auth/callback`, state,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }).toString();
-    return redirect(url.toString(), [cookie(STATE, seal({ state, verifier }, 'oauth', config, 600), 600)]);
+    const returnTo = new URL(request.url).searchParams.get('returnTo') === '/traffic.html' ? '/traffic.html' : '/';
+    return redirect(url.toString(), [cookie(STATE, seal({ state, verifier, returnTo }, 'oauth', config, 600), 600)]);
   }
   const query = new URL(request.url).searchParams;
   const saved = unseal(cookies(request)[STATE], 'oauth', config);
@@ -43,7 +45,8 @@ async function auth(request, route, config) {
   const user = await github.request('/user');
   if (String(user.id) !== config.ownerId) return redirect(`${config.origin}/?error=account`, [cookie(STATE, '', 0), cookie(SESSION, '', 0)]);
   const age = Math.min(Number(token.expires_in) || 28800, 28800);
-  return redirect(config.origin, [cookie(STATE, '', 0), cookie(SESSION, seal({ id: user.id, login: user.login, token: token.access_token, csrf: nonce() }, 'session', config, age), age)]);
+  const returnTo = saved.returnTo === '/traffic.html' ? '/traffic.html' : '/';
+  return redirect(config.origin + returnTo, [cookie(STATE, '', 0), cookie(SESSION, seal({ id: user.id, login: user.login, token: token.access_token, csrf: nonce() }, 'session', config, age), age)]);
 }
 export async function handle(request) {
   let route;
@@ -64,6 +67,11 @@ export async function handle(request) {
     else if (request.method !== 'GET') throw new HttpError(405, 'Unsupported method.');
     if (route === 'logout' && request.method === 'POST') {
       const response = json({ ok: true }); response.headers.set('Set-Cookie', cookie(SESSION, '', 0)); return response;
+    }
+    // Owner authentication above is mandatory; traffic never opens draft storage or calls GPT.
+    if (route === 'traffic') {
+      if (request.method !== 'GET') throw new HttpError(405, 'Use GET for traffic reports.');
+      return json(await trafficReport(url.searchParams));
     }
     // Fail closed if private storage is ever made public.
     await github.privateRepo();

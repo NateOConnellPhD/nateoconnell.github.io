@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>Website traffic · Nate O’Connell</title>
+  <link rel="stylesheet" href="/editor.css"><link rel="stylesheet" href="/traffic.css">
+  <script type="module" src="/traffic.js"></script>
+</head>
+<body>
+  <a class="skip" href="#traffic-main">Skip to traffic report</a>
+  <header class="masthead"><a class="brand" href="/"><img src="https://nateoconnell.com/assets/images/normal-helix-logo.svg" width="68" height="46" alt=""><span>Nate O’Connell<span class="brand-sub">Website traffic</span></span></a><div class="header-links"><a href="/">← Back to editor</a><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a></div></header>
+  <main id="traffic-main" class="traffic-shell" tabindex="-1">
+    <header class="traffic-heading"><div><p class="eyebrow">nateoconnell.com</p><h1>Traffic</h1><p>See which pages and posts people are reading.</p></div><button id="traffic-reload" class="button" type="button">Reload report</button></header>
+    <section id="traffic-login" class="traffic-panel" hidden><h2>Sign in to see your traffic</h2><p>These reports are available only to your GitHub account.</p><a class="button primary" href="/api/auth/start?returnTo=%2Ftraffic.html">Sign in with GitHub</a></section>
+    <section id="traffic-setup" class="traffic-panel" hidden><h2>Connect website analytics</h2><p>The dashboard is ready. Connect Cloudflare Web Analytics and enable the website’s beacon to start collecting visits.</p><p id="traffic-missing" class="small"></p><a href="https://github.com/NateOConnellPhD/nateoconnell.github.io/blob/main/docs/TRAFFIC.md" target="_blank" rel="noopener noreferrer">Open the setup guide ↗</a><p class="small">Your domain can stay at Namecheap and your site on GitHub Pages. Tracking starts after setup; earlier visits cannot be recovered.</p></section>
+    <form id="traffic-controls" class="traffic-controls" aria-label="Report filters">
+      <label>Report<select id="traffic-scope"><option value="site">Whole website</option><option value="blog">Blog posts</option></select></label>
+      <label>Date range<select id="traffic-days"><option value="1">Today</option><option value="7" selected>Last 7 days</option><option value="28">Last 28 days</option></select></label>
+      <label>Chart and page list<select id="traffic-audience"><option value="notFlagged">Not flagged as bots</option><option value="bots">Detected bots</option><option value="all">All recorded views</option><option value="unclassified">Unclassified</option></select></label>
+    </form>
+    <p id="traffic-status" class="traffic-status" role="status" aria-live="polite">Loading traffic…</p>
+    <div id="traffic-report" hidden>
+      <div id="traffic-focus" class="traffic-focus" hidden><button id="traffic-back" class="quiet" type="button">← All pages in this report</button><h2 id="traffic-page-title"></h2><a id="traffic-page-link" target="_blank" rel="noopener noreferrer">Open page ↗</a></div>
+      <div id="traffic-stats" class="traffic-stats"></div>
+      <p id="traffic-empty" class="traffic-panel" hidden>No page views have been recorded for this selection. If tracking was just enabled, visit a public page and check again after Cloudflare processes the data.</p>
+      <section class="traffic-panel" aria-labelledby="traffic-daily-heading"><div class="traffic-panel-heading"><h2 id="traffic-daily-heading">Daily page views</h2><span class="small">Calendar days in UTC · today is partial</span></div><div id="traffic-chart"></div><details class="traffic-daily-details"><summary>Daily counts</summary><div id="traffic-daily-table" class="traffic-table-wrap"></div></details></section>
+      <section class="traffic-panel" aria-labelledby="traffic-pages-heading"><div class="traffic-panel-heading"><h2 id="traffic-pages-heading">Pages</h2><label class="traffic-search"><span class="sr-only">Find a page or post</span><input id="traffic-search" type="search" placeholder="Find a page or post…"></label></div><p class="small">Select a page to see its daily views.</p><p id="traffic-limited" class="small" hidden>The page list reached the provider’s limit and may be incomplete. The summary and daily chart are queried separately.</p><div id="traffic-pages-table" class="traffic-table-wrap"></div></section>
+      <footer class="traffic-explanation"><p id="traffic-freshness"></p><p><strong>What these numbers mean:</strong> these are recorded browser page loads, not unique people or every server request. “Not flagged as bots” is not proof of a human visitor. Crawlers that do not run JavaScript, blocked tracking, local/embedded previews, and browsers requesting Do Not Track or Global Privacy Control are not counted.</p><p>Cloudflare can sample reports, so counts may be estimates and separately queried totals may differ slightly. Reports are cached for up to five minutes. This dashboard makes no GPT requests.</p></footer>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,5 @@
+---
+layout: null
+permalink: /traffic-posts.json
+---
+{"posts":[{% assign first_post = true %}{% for post in site.posts %}{% unless post.example or post.published == false %}{% unless first_post %},{% endunless %}{"path":{{ post.url | jsonify }},"title":{{ post.title | jsonify }}}{% assign first_post = false %}{% endunless %}{% endfor %}]}

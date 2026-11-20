@@ -1,0 +1,5 @@
+{% if site.data.analytics.enabled and site.data.analytics.beacon_token and site.data.analytics.beacon_token != empty %}
+{% unless site.data.profile.preview_mode or page.example or page.published == false or page.analytics == false %}
+<script src="{{ '/assets/js/analytics.js' | relative_url }}" data-beacon-token="{{ site.data.analytics.beacon_token | escape }}" defer></script>
+{% endunless %}
+{% endif %}

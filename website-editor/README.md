@@ -6,6 +6,8 @@ After publishing the login shortcut, open **https://nateoconnell.com/login**. It
 
 ## Working on the website
 
+The sidebar’s **Traffic** link opens a private analytics dashboard using the same GitHub login. It shows daily page views, individual blog posts, and Cloudflare’s bot classification. Reports are cached for five minutes per running server instance and make no GPT requests. Collection and reporting require a one-time Cloudflare Web Analytics connection; see [Traffic setup](../docs/TRAFFIC.md).
+
 The opening screen is a conversation about the whole website. You can ask questions, discuss options, change which papers are highlighted and their order, add pages and navigation, change layouts, write posts, edit CSS/JavaScript, change build configuration, or work on the editor itself. Your message appears immediately; assistant replies and progress arrive through an authenticated event stream. You can type your next message while it works, stop the response, and continue the conversation after it finishes. Enter sends; Shift+Enter adds a line. Questions and source changes use direct file tools against GitHub and the private proposed changes. A temporary Linux workspace is requested only for commands, computation, binary processing, or a rendered preview. No additional hosting service is required.
 
 Saved conversations appear in the left sidebar. The conversation scrolls independently of the message composer, which stays at the bottom. Replies follow the scroll position only while you are near the latest message; **Latest message** returns you there after reading earlier text. On phones, the menu button opens conversation history.

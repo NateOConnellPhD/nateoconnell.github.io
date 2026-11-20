@@ -1,0 +1,4 @@
+# Public beacon token only. Read-only reporting credentials belong in Vercel.
+# See docs/TRAFFIC.md for setup.
+enabled: false
+beacon_token: ""
