@@ -138,8 +138,10 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     columns = ('rank', 'name', 'conference', 'wins_fbs', 'losses_fbs', 'merit_mean', 'merit_lo90',
                'merit_hi90', 'raw_merit_rank', 'raw_rank_lo90', 'raw_rank_hi90', 'p_raw_merit_top8',
                'p_raw_merit_top10', 'p_raw_merit_top25', 'sos_mean')
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+    # CSV defaults to CRLF. Use repository-safe LF endings so generated rows
+    # pass the workflow's whitespace check, including rows with empty fields.
+    output = io.StringIO(newline='')
+    writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore', lineterminator='\n')
     writer.writeheader()
     writer.writerows(snapshot['teams'])
     index = read_index(destination)

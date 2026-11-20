@@ -1,6 +1,8 @@
 """Targeted offline tests of the live publisher's failure and reuse boundaries."""
 import copy
+import csv
 import datetime as dt
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -96,6 +98,28 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(len(index['snapshots']), 2)
         self.assertEqual(index['latest'], second['id'])
         self.assertTrue((self.public / first['csv']).exists())
+
+    def test_csv_has_lf_endings_and_preserves_empty_fields_and_quoting(self):
+        self.result['teams'][0]['name'] = 'A, "Quoted"'
+        for ident in (3, 4):
+            idle = dict(self.result['teams'][0], id=ident, name=f'Idle {ident}',
+                        rank=None, raw_merit_rank=None, status='no_eligible_games',
+                        wins_fbs=0, losses_fbs=0, sos_mean=None,
+                        p_raw_merit_top8=None, p_raw_merit_top10=None, p_raw_merit_top25=None)
+            self.result['teams'].append(idle)
+            self.inputs['teams'].append({'id': ident})
+        row = self.publish()
+        body = (self.public / row['csv']).read_bytes()
+        self.assertNotIn(b'\r', body)
+        self.assertTrue(body.endswith(b'\n'))
+        self.assertFalse(any(line.endswith((b' ', b'\t')) for line in body.split(b'\n')))
+        records = list(csv.DictReader(io.StringIO(body.decode('utf-8'), newline='')))
+        self.assertEqual(len(records), 4)
+        self.assertEqual(records[0]['name'], 'A, "Quoted"')
+        for record in records[-2:]:
+            self.assertEqual(record['rank'], '')
+            self.assertEqual(record['sos_mean'], '')
+            self.assertNotIn(None, record)  # No accidental extra CSV columns.
 
     def test_backfill_does_not_replace_current_season(self):
         current = self.publish()
