@@ -1,11 +1,15 @@
 # Margin of Merit: model and automated updates
 
-Status, 2026-11-20: the shared NumPyro model and a private 2024 refit entry point
-are in source. Numerical dependencies are not installed and no new fit has been
-run. Data ingestion, LOO scoring, policy ordering, automated publication, and
-the public blog section are still to be implemented. The handoff archive remains
-private and unchanged. Its 2024 results are a reference example, not the limit of
-the historical archive and not results from the new specification.
+Status, 2026-11-20: the three 2024 refits and independent LOO spot checks are
+complete. The canonical and archived-prior refits have identical point ranks
+for all 134 teams. A separate likelihood-weighting error was identified in the
+saved archive; it must not be attributed to the new scale floor. See
+[the numerical comparison](CFB-2024-COMPARISON.md) for results and limitations.
+Maintained source now includes PSIS scoring, a reference ordering policy, and
+comparison commands. Production ingestion, exact-LOO fallback, historical
+policy, automated publication, and the public blog section remain unfinished.
+The handoff stays private and unchanged; 2024 is a reference, not the limit of
+the historical archive.
 
 ## One model throughout each season
 
@@ -125,9 +129,10 @@ The available local Python is 3.9 without numerical packages. The reference
 environment uses Python 3.12 plus the pinned direct dependencies in
 `scripts/cfb/requirements.txt`. The owner approved downloading this environment
 with a 1.5 GB ceiling under `.codex-tmp/cfb-refit`, followed by cleanup after the
-analysis. However, this agent session's sandbox blocked access to
-`api.github.com` and execution of the app's bundled Python. Approval has been
-received; the remaining obstacle is the sandbox's access rules.
+analysis. The owner ran the bootstrap from Terminal because this agent
+session's sandbox blocked the runtime download. Installation and numerical
+execution subsequently succeeded. Task-owned runtime/results are cleaned
+after analysis; the retained results are in the comparison report.
 
 The owner can perform the approved setup from Terminal:
 
@@ -145,8 +150,8 @@ existing task directory. A failed attempt stops its child process and removes
 only the directory it created. Setup monitors its owned output, stops growth at
 1.2 GB to leave headroom below the 1.5 GB approval ceiling, and rejects archives
 whose expanded size would exceed that working budget. The archive checks and
-existing-directory preservation have offline tests; actual downloads and
-numerical execution remain unverified until setup runs successfully.
+existing-directory preservation have offline tests. Actual setup, imports,
+dependency consistency, and the numerical reference fits have now succeeded.
 
 The resulting interpreter is
 `.codex-tmp/cfb-refit/python/bin/python3`; subsequent fits use that executable.
@@ -166,12 +171,17 @@ hashes, seed, dependency versions, diagnostic thresholds, and predictive
 summaries. Sampling diagnostics are necessary but not sufficient for publication.
 The command has no publishing capability.
 
-The required 2024 comparison remains unfinished until the LOO scorer and unified
-ranking policy consume the new draws. Report changes in merit ranks, top-8/10/25
-membership and probabilities, 90% merit/rank intervals, SOS, and policy-driven
-ordering. Evaluate Monte Carlo error before describing small differences as
-substantive. Keep model adequacy, sampling convergence, and ranking stability
-separate. Do not compare latent-strength ranks as if they were merit ranks.
+`scripts/cfb/compare_2024.py` consumes the three new fits and the original
+archive draws. It reports merit ranks, top-8/10/25 membership and probabilities,
+90% merit/rank intervals, SOS, Monte Carlo error, and policy-driven ordering.
+It holds the archived final-season policy fixed to isolate the prior comparison;
+this reference policy is not the future general historical policy.
+`scripts/cfb/check_exact_loo.py` independently omits three selected games and
+refits the canonical model. `scripts/cfb/test_scoring.py` includes an analytical
+normal-model check that catches reversed importance weights. Both comparison
+commands accept the private handoff directory and write only to the approved
+task directory. Neither publishes. Keep model adequacy, sampling convergence,
+and ranking stability separate; latent-strength ranks are not merit ranks.
 
 The archive's marginal-quantile LOO transport is an approximation to joint
 dependence. Preserve and disclose that limitation in any rank uncertainty
