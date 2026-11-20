@@ -70,7 +70,6 @@ description: "My college football rankings: what teams have earned from the game
         <button type="button" class="button button-outline" data-cfb-reset>Official defaults</button>
         <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
       </details>
-      <label class="cfb-compare-update" for="cfb-compare-update">Compare rank changes with<select id="cfb-compare-update" data-cfb-compare-update></select></label>
       <div class="cfb-filters">
         <label for="cfb-search">Find a team<input type="search" id="cfb-search" placeholder="Search all teams…" autocomplete="off" data-cfb-search></label>
         <label for="cfb-conference">Conference<select id="cfb-conference" data-cfb-conference><option value="">All conferences</option></select></label>
@@ -83,12 +82,12 @@ description: "My college football rankings: what teams have earned from the game
           <thead><tr>
             <th scope="col" aria-sort="ascending"><button type="button" data-cfb-sort="rank">Rank <span aria-hidden="true">↑</span></button><small data-cfb-rank-label>Official</small></th>
             <th scope="col"><button type="button" data-cfb-sort="name">Team</button></th>
-            <th scope="col">Change<small data-cfb-change-label>Previous week</small></th>
             <th scope="col"><abbr title="Wins and losses against FBS opponents only">FBS W–L</abbr></th>
             <th scope="col"><button type="button" data-cfb-sort="merit_mean">Merit</button><small>Mean · 90% interval</small></th>
             <th scope="col"><button type="button" data-cfb-sort="sos_mean"><abbr title="Strength of schedule: average loss probability for the reference team against this schedule">SOS</abbr></button><small>Mean · 90% interval</small></th>
             <th scope="col">Raw rank<small>90% interval</small></th>
             <th scope="col"><button type="button" data-cfb-sort="p_raw_merit_top10">P(top 10)</button><small>Raw merit</small></th>
+            <th scope="col">Weekly change<small data-cfb-change-label>Previous week</small></th>
           </tr></thead>
           <tbody data-cfb-rows></tbody>
         </table>
@@ -168,7 +167,7 @@ description: "My college football rankings: what teams have earned from the game
     <h3 id="cfb-reading-ranks">What each table column means</h3>
     <dl class="cfb-glossary">
       <dt>Rank</dt><dd>The final ordering after applying the stated rules for merit, head-to-head results, common opponents, and undefeated teams. Lower is better. Changing a rule shows your alternative ordering and keeps the saved official rank underneath.</dd>
-      <dt>Change</dt><dd>How many places the team moved relative to the comparison week named above the table. An upward arrow means a better rank; a dash means no comparison is available. When you adjust the rules, this instead compares your ordering with the official ranking for the same week.</dd>
+      <dt>Weekly change</dt><dd>How many places the team moved since the immediately preceding week: Week 11 compares with Week 10. ↑ means a higher rank, ↓ means a lower rank, and 0 means unchanged. New means the team had no rank last week. N/A means the previous week is missing or cannot be compared; the note below the table explains why. When you adjust the rules, the same settings are applied to both weeks.</dd>
       <dt>FBS W–L</dt><dd>Wins and losses against other Football Bowl Subdivision teams. Games against FCS teams do not count here. These rankings include regular-season games, conference championships, and Army–Navy; bowls and playoff games are excluded.</dd>
       <dt>Merit</dt><dd>The credit a team has earned across its eligible games. Each win adds between zero and one point; each loss subtracts up to one point. Opponent strength, margin, and venue determine how much. The table shows the mean and a 90% interval. Higher is better. This is accumulated résumé credit, not a predicted score or a per-game average.</dd>
       <dt>SOS: strength of schedule</dt><dd>How often a common reference team would be expected to lose against this schedule, accounting for where the games were played. The reference is the 25th-strongest team in each draw, rather than a particular school. An SOS of 30% means about three expected losses across ten games for that reference team. Higher means a harder schedule; it is not the actual team’s predicted loss rate.</dd>

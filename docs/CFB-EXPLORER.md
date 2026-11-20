@@ -37,7 +37,7 @@ Public labels show weeks and dates (using America/New_York for a consistent date
 
 CFB styles and scripts share a build-time URL revision so new markup does not reuse older cached assets. The header image has no fixed HTML height; it retains its intrinsic proportions even before the CFB stylesheet loads.
 
-Season trajectories use the latest snapshot per week, preserve gaps, and break official-rank lines when ordering policies change. History-table changes require adjacent weeks with the same policy. The ranking table allows an explicit baseline and names its week; different-policy rank comparisons are rejected. Slider comparisons remain relative to the same snapshot's official ranking.
+Season trajectories use the latest snapshot per week, preserve gaps, and break official-rank lines when ordering policies change. Weekly movement requires the immediately preceding week with the same policy; another revision of the selected week or a more distant week is never a substitute. The ranking table puts movement last and shows arrows, an explicit zero for unchanged teams, New for a first ranking, or N/A with an explanation. Sliders apply the same selected rules to both weeks; a conflicting previous-week ordering makes movement unavailable without hiding the selected week's results. Snapshot season/week metadata must agree with the archive index before display.
 
 ## Validation and limitations
 

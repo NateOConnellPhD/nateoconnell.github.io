@@ -30,9 +30,9 @@ const index = {schema: 'margin-of-merit-index-v1', latest: rows[0].id, snapshots
   archive: [{season: 2026, weeks: [0, 1, 10, 11, 12].map(week => ({week}))},
     {season: 2025, weeks: [{week: 1}, {week: 2}]}, {season: 2024, weeks: [{week: 2}, {week: 16}]}]};
 const settle = () => new Promise(resolve => setImmediate(resolve));
-async function page(query = '', data = index) {
+async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const nodes = new Map(), get = key => {
-    if (!nodes.has(key)) nodes.set(key, new Element(['season', 'week', 'update', 'conference', 'compare-update', 'limit'].includes(key)));
+    if (!nodes.has(key)) nodes.set(key, new Element(['season', 'week', 'update', 'conference', 'limit'].includes(key)));
     return nodes.get(key);
   };
   const root = new Element(); root.dataset.index = '/assets/data/cfb/index.json';
@@ -40,16 +40,17 @@ async function page(query = '', data = index) {
   const location = {href: `https://example.test/blog/cfb/${query}`, search: query};
   const requests = [], shown = [];
   const context = {URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
-    cancelAnimationFrame() {}, location,
+    cancelAnimationFrame() {}, requestAnimationFrame(callback) { callback(); return 0; }, location,
     history: {replaceState(_, __, address) { location.href = String(address); location.search = new URL(address).search; }},
     document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element()},
-    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id)})},
+    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id)}), CFBPolicy: policyRun && {run: policyRun}},
     fetch: async address => {
       requests.push(String(address));
       const name = String(address).split('/').pop();
-      const saved = rows.find(r => `${r.id}.json` === name);
+      const saved = data.snapshots.find(r => `${r.id}.json` === name);
       return {ok: true, json: async () => name === 'index.json' ? data : {...saved, publication_ready: true,
-        schema: 'margin-of-merit-snapshot-v1', teams: [], policy_sha256: 'same', data_observed_at: saved.data_cutoff}};
+        schema: 'margin-of-merit-snapshot-v1', teams: [], policy_sha256: 'same', data_observed_at: saved.data_cutoff,
+        ...fixtures[saved.id]}};
     }};
   vm.runInNewContext(source, context);
   await settle();
@@ -64,6 +65,8 @@ async function page(query = '', data = index) {
   assert.equal(p.get('archive').hidden, false);
   assert.equal(p.get('update').options.length, 2);
   assert.equal(p.get('revisions').hidden, false);
+  assert.match(p.get('comparison').textContent, /Week 11 has no saved ranking/);
+  assert.equal(p.requests.some(u => u.endsWith('2026-10-new.json')), false, 'Never skip a missing week for movement');
   for (const label of [p.get('timing').textContent, ...p.get('week').options.map(o => o.textContent), ...p.get('update').options.map(o => o.textContent)]) {
     assert.doesNotMatch(label, /\d{1,2}:\d{2}|\b(?:AM|PM|UTC|GMT|EST|EDT)\b/, 'Public dates should omit times');
   }
@@ -76,9 +79,10 @@ async function page(query = '', data = index) {
   await p.change('season', '2024');
   assert.equal(p.get('week').value, '16');
   assert.deepEqual(p.get('archive-grid').children.map(n => n.textContent), ['Week 2', 'Week 16']);
-  const count = p.requests.length;
   await p.change('week', '2');
+  const count = p.requests.length;
   await p.change('week', '16');
+  await p.change('week', '2');
   assert.equal(p.requests.length, count, 'Revisiting loaded weeks reuses saved data in memory');
   await p.change('season', '2025');
   assert.equal(p.get('results').hidden, true, 'Pending season must hide previous season results');
@@ -101,5 +105,40 @@ async function page(query = '', data = index) {
   assert.equal(empty.get('controls').hidden, false);
   assert.equal(empty.get('results').hidden, true);
   assert.equal(empty.get('latest').disabled, true);
-  console.log('Weekly navigation checks passed: grouping, revisions, week zero, season switching, pending fits, links and cache reuse.');
+
+  const weeklyRows = [row(2026, 11), row(2026, 11, 'old'), row(2026, 10), row(2026, 9)];
+  const weeklyIndex = {...index, latest: weeklyRows[0].id, snapshots: weeklyRows};
+  const teams = ranks => ranks.map((rank, i) => ({id: i + 1, name: `Team ${i + 1}`, rank, wins_fbs: 5, losses_fbs: 2}));
+  const fixtures = {'2026-11-new': {teams: teams([1, 2, 3, 4, null])},
+    '2026-10-new': {teams: teams([3, 1, 2, 4, null])}};
+  const weekly = await page('', weeklyIndex, fixtures);
+  assert.equal(weekly.get('change-label').textContent, 'Week 10 → 11');
+  assert.match(weekly.get('comparison').textContent, /compares week 10 with week 11/);
+  assert.equal(weekly.requests.some(u => u.endsWith('2026-11-old.json')), false, 'Same-week revision is never a baseline');
+  const table = weekly.get('rows').children[0].children;
+  assert.deepEqual(table.map(tr => tr.children.at(-1).textContent), ['↑ 2', '↓ 1', '↓ 1', '0']);
+  assert.equal(table[0].children[2].textContent, '5–2', 'Movement is last, after every statistic');
+  assert.equal(table[3].children.at(-1).children[0].textContent, 'Unchanged');
+
+  const newTeam = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, null, 4])}});
+  assert.equal(newTeam.get('rows').children[0].children[2].children.at(-1).textContent, 'New');
+  const incompatible = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, 2, 4]), policy_sha256: 'older'}});
+  assert.equal(incompatible.get('rows').children[0].children[0].children.at(-1).textContent, 'N/A');
+  assert.match(incompatible.get('comparison').textContent, /different ranking rules/);
+  const malformed = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, 2, 4]), week: 11}});
+  assert.match(malformed.get('comparison').textContent, /Week 10 could not be loaded/);
+
+  const specification = {version: 'margin-of-merit-order-v4', merit_protection: .9,
+    head_to_head: .9, common_opponents: .7, equal_records_only: true, undefeated_p4_protection: true};
+  const policyFixtures = Object.fromEntries(Object.entries(fixtures).map(([id, value]) => [id, {...value,
+    specification, policy_inputs: {schema: 'margin-of-merit-policy-input-v4', id}, order: [1, 2, 3, 4]}]));
+  const calls = [];
+  const custom = await page('', weeklyIndex, policyFixtures, input => {
+    calls.push(input.id); return {order: input.id.includes('-10-') ? [4, 1, 2, 3] : [4, 3, 2, 1]};
+  });
+  custom.get('protect').value = '85'; custom.get('protect').handlers.input();
+  assert.deepEqual(calls, ['2026-11-new', '2026-10-new'], 'Apply custom rules to both weeks');
+  assert.match(custom.get('comparison').textContent, /Both weeks use your selected rules/);
+  assert.deepEqual(custom.get('rows').children[0].children.map(tr => tr.children.at(-1).textContent), ['0', '↑ 2', '0', '↓ 2']);
+  console.log('Navigation and weekly movement checks passed, including gaps, same-week revisions, unchanged/new teams, metadata, rules and cache reuse.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

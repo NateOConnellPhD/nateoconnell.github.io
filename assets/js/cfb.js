@@ -7,7 +7,7 @@
   const snapshots = new Map();
   const explorer = window.CFBExplorer(root, {fetchJSON, url, select});
   let index, current, previous, loadNumber = 0;
-  let comparisonNumber = 0;
+  let previousRanks = new Map(), comparisonUnavailable = '', customComparisonUnavailable = '';
   let viewTeams, policyResult, customPolicy = false, policyError = null, policyFrame = 0;
   let sortKey = 'rank', direction = 1;
   const date = value => new Date(value).toLocaleDateString(undefined, {
@@ -33,7 +33,8 @@
   async function read(row) {
     if (!snapshots.has(row.id)) {
       const value = await fetchJSON(url(row.json));
-      if (!value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams)) {
+      if (!value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams) ||
+          value.season !== row.season || value.week !== row.week) {
         throw new Error('Unpublished or invalid ranking');
       }
       snapshots.set(row.id, value);
@@ -112,16 +113,15 @@
   }
   function comparisonLabel() {
     el('rank-label').textContent = customPolicy ? 'Your rules' : 'Official';
-    el('change-label').textContent = customPolicy ? 'Vs. official' : previous ? `Vs. week ${previous.week}` : 'No baseline';
-    el('compare-update').disabled = customPolicy;
-    el('comparison').textContent = customPolicy
-      ? 'Change compares your selected rules with the official ranking for this same update. Official ranks also appear under your ranks.'
-      : previous ? `Change compares with week ${previous.week}, cutoff ${date(previous.data_cutoff)}. Positive means a higher rank in the selected update.`
-        : 'No compatible comparison selected. Missing weeks are not silently treated as the previous week.';
+    el('change-label').textContent = current.week > 0 ? `Week ${current.week - 1} → ${current.week}` : 'First week';
+    el('comparison').textContent = customComparisonUnavailable || comparisonUnavailable ||
+      `Weekly change compares week ${previous.week} with week ${current.week}. ↑ means a higher rank; ↓ means a lower rank; 0 means unchanged. ${customPolicy ? 'Both weeks use your selected rules.' : 'Both weeks use the official rules.'}`;
   }
   function setOfficialPolicy() {
     cancelAnimationFrame(policyFrame);
     policyError = null; customPolicy = false; viewTeams = current.teams; policyResult = null;
+    previousRanks = new Map((previous?.teams || []).map(t => [t.id, t.rank]));
+    customComparisonUnavailable = '';
     const supported = current.specification?.version === 'margin-of-merit-order-v4' &&
       current.policy_inputs?.schema === 'margin-of-merit-policy-input-v4' && window.CFBPolicy;
     el('policy').hidden = !supported; el('explanations').hidden = !supported;
@@ -164,6 +164,17 @@
       el('policy-error').hidden = false;
       el('policy-error').textContent = `${error.message} No ranking was created for these settings. The table shows the official rankings; adjust a control or use Official defaults.`;
       el('mode').textContent = 'Settings conflict — official rankings shown';
+    }
+    previousRanks = new Map((previous?.teams || []).map(t => [t.id, t.rank]));
+    customComparisonUnavailable = '';
+    if (customPolicy && previous) {
+      try {
+        const priorOrder = window.CFBPolicy.run(previous.policy_inputs, selected).order;
+        previousRanks = new Map(priorOrder.map((id, k) => [id, k + 1]));
+      } catch (_) {
+        previousRanks.clear();
+        customComparisonUnavailable = 'Weekly change is unavailable: these rules could not produce a valid ranking for the previous week. The selected week remains available.';
+      }
     }
     comparisonLabel(); render(); renderAudit();
   }
@@ -250,7 +261,6 @@
       const compare = sortKey === 'name' ? a.name.localeCompare(b.name) : a[sortKey] - b[sortKey];
       return direction * compare || (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name);
     });
-    const oldRanks = new Map((customPolicy ? current.teams : previous?.teams || []).map(r => [r.id, r.rank]));
     const officialRanks = new Map(current.teams.map(r => [r.id, r.rank]));
     const fragment = document.createDocumentFragment();
     for (const r of rows) {
@@ -272,10 +282,6 @@
         button.setAttribute('aria-label', `Explain ${r.name} ranking`);
         button.addEventListener('click', () => explainTeam(r.id)); teamCell.append(button);
       }
-      const oldRank = oldRanks.get(r.id);
-      const change = r.rank != null && oldRank != null ? oldRank - r.rank : null;
-      const movement = cell(change == null ? '—' : change > 0 ? `↑ ${change}` : change < 0 ? `↓ ${-change}` : '·');
-      movement.setAttribute('aria-label', change == null ? 'No comparison' : change === 0 ? 'Unchanged' : `${change > 0 ? 'Up' : 'Down'} ${Math.abs(change)} places`);
       cell(`${r.wins_fbs}–${r.losses_fbs}`);
       cell(r.rank == null ? '—' : fixed(r.merit_mean), r.rank == null ? 'No eligible games' : interval(r.merit_lo90, r.merit_hi90, 2));
       cell(Number.isFinite(r.sos_mean) ? `${(100 * r.sos_mean).toFixed(1)}%` : '—',
@@ -283,6 +289,16 @@
           ? `${(100 * r.sos_lo90).toFixed(1)}–${(100 * r.sos_hi90).toFixed(1)}%` : null);
       cell(r.raw_merit_rank ?? '—', interval(r.raw_rank_lo90, r.raw_rank_hi90));
       cell(Number.isFinite(r.p_raw_merit_top10) ? `${(r.p_raw_merit_top10 * 100).toFixed(1)}%` : '—');
+      const oldRank = previousRanks.get(r.id);
+      const unavailable = customComparisonUnavailable || comparisonUnavailable;
+      const change = !unavailable && r.rank != null && oldRank != null ? oldRank - r.rank : null;
+      const label = unavailable ? 'N/A' : r.rank == null ? 'Unranked' : oldRank == null ? 'New'
+        : change > 0 ? `↑ ${change}` : change < 0 ? `↓ ${-change}` : '0';
+      const description = unavailable || (r.rank == null ? 'No eligible games yet' : oldRank == null ? 'No rank last week'
+        : change === 0 ? 'Unchanged' : `${change > 0 ? 'Up' : 'Down'} ${Math.abs(change)} places`);
+      const movement = cell(label, change === 0 ? 'Unchanged' : label === 'New' ? 'First ranking' : null);
+      movement.title = description;
+      movement.setAttribute('aria-label', description);
       fragment.append(tr);
     }
     if (!rows.length) {
@@ -296,22 +312,22 @@
     const row = index.snapshots.find(r => r.id === id);
     if (!row) return;
     const sequence = ++loadNumber;
-    comparisonNumber++;
     el('status').hidden = false; el('status').textContent = 'Loading saved update…';
     el('results').hidden = true; el('csv').hidden = true;
     root.setAttribute('aria-busy', 'true');
     populateUpdates(row.season, id);
     try {
       const result = await read(row);
-      const older = index.snapshots.find(r => r.season === row.season && r.week < row.week && r.data_cutoff < row.data_cutoff);
+      const older = index.snapshots.find(r => r.season === row.season && r.week === row.week - 1 && r.data_cutoff < row.data_cutoff);
       let prior = null;
       if (older) { try { prior = await read(older); } catch (_) { /* Rankings remain usable without movement. */ } }
       if (sequence !== loadNumber) return;
       current = result;
       previous = prior?.policy_sha256 === current.policy_sha256 ? prior : null;
-      const candidates = index.snapshots.filter(r=>r.season===row.season && r.id!==id);
-      el('compare-update').replaceChildren(option('','No comparison'),...candidates.map(r=>option(r.id,`Week ${r.week} · ${date(r.data_cutoff)}`)));
-      el('compare-update').value=previous ? older.id : '';
+      comparisonUnavailable = previous ? '' : row.week === 0 ? 'This is the first week; there is no previous-week ranking.'
+        : !older ? `Week ${row.week - 1} has no saved ranking yet. Weekly change will appear when that fit is available.`
+        : !prior ? `Week ${row.week - 1} could not be loaded. Reload to try the weekly comparison again.`
+        : 'The previous week used different ranking rules, so weekly change is unavailable for this saved version.';
       setOfficialPolicy();
       el('label').textContent = `${row.season} season / ${id === index.latest ? 'Latest update' : 'Saved update'}`;
       document.getElementById('cfb-title').textContent = `Week ${row.week} rankings`;
@@ -338,7 +354,7 @@
     populateUpdates(season, null, week);
     if (el('update').value) return select(el('update').value, writeURL);
     // A season or linked week awaiting fitting must not retain another week's results.
-    loadNumber++; comparisonNumber++; current = null; previous = null;
+    loadNumber++; current = null; previous = null;
     root.removeAttribute('aria-busy');
     el('results').hidden = true; el('csv').hidden = true; el('notice').hidden = true;
     el('label').textContent = `${season} season`;
@@ -357,17 +373,6 @@
   }
   el('season').addEventListener('change', () => browseSeason(el('season').value));
   el('week').addEventListener('change', () => browseSeason(el('season').value, Number(el('week').value)));
-  el('compare-update').addEventListener('change', async()=> {
-    const sequence=++comparisonNumber, id=el('compare-update').value, snapshot=current;
-    previous=null;comparisonLabel();render();
-    if(!id) return;
-    try {
-      const chosen=await read(index.snapshots.find(r=>r.id===id));
-      if(sequence!==comparisonNumber||snapshot!==current) return;
-      if(chosen.policy_sha256!==current.policy_sha256) {el('comparison').textContent='These updates use different ordering policies. Rank changes are not comparable; choose another update.';return;}
-      previous=chosen;comparisonLabel();render();
-    } catch (_) {if(sequence===comparisonNumber) el('comparison').textContent='The comparison could not be loaded. Choose another saved update.';}
-  });
   el('update').addEventListener('change', () => select(el('update').value));
   function latest() {
     if (!index?.latest) return;
