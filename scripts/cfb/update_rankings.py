@@ -21,7 +21,7 @@ TASK = ROOT / '.codex-tmp' / 'cfb-refit'
 PLAN = TASK / 'update-plan.json'
 SCHEMA = 'margin-of-merit-index-v1'
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
-           'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py')
+           'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py', 'posterior_summary.py')
 
 
 def current_season(now):
@@ -130,6 +130,9 @@ def validate_candidate(result, inputs):
         if not math.isclose(sum(r[f'p_raw_merit_top{k}'] for r in ranked), min(k, len(ranked)), abs_tol=1e-8):
             raise ValueError('Top-K probabilities do not sum to K')
     # Reject nonfinite values anywhere, even outside the displayed fields.
+    if 'posterior' in result:
+        from posterior_summary import validate
+        validate(result)
     encoded(result)
 
 
@@ -149,9 +152,10 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     body = encoded(snapshot)
     if json_path.exists() and json_path.read_bytes() != body:
         raise ValueError('Refusing to replace an immutable historical snapshot')
-    columns = ('rank', 'name', 'conference', 'wins_fbs', 'losses_fbs', 'merit_mean', 'merit_lo90',
+    columns = ('rank', 'name', 'conference', 'wins_fbs', 'losses_fbs', 'merit_mean', 'merit_median', 'merit_sd', 'merit_lo90',
                'merit_hi90', 'raw_merit_rank', 'raw_rank_lo90', 'raw_rank_hi90', 'p_raw_merit_top8',
-               'p_raw_merit_top10', 'p_raw_merit_top25', 'sos_mean')
+               'p_raw_merit_top10', 'p_raw_merit_top25', 'raw_rank_mean', 'raw_rank_median', 'raw_rank_sd',
+               'sos_median', 'sos_sd', 'sos_lo90', 'sos_hi90', 'sos_mean')
     # CSV defaults to CRLF. Use repository-safe LF endings so generated rows
     # pass the workflow's whitespace check, including rows with empty fields.
     output = io.StringIO(newline='')
@@ -205,7 +209,9 @@ def complete(destination=PUBLIC):
         print('Published ranking already matches; no installation, HMC, or LOO calculation needed.')
         return previous
     from fit_saved_season import run
+    from posterior_summary import attach
     result = run(plan['season'], exact_loo=True)
+    attach(result, inputs, TASK)
     row = publish(result, inputs, plan['key'], dt.datetime.now(UTC), destination)
     print(json.dumps({'published': row['id'], 'season': row['season'], 'games': row['games']}))
     return row
