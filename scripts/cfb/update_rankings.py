@@ -21,7 +21,8 @@ TASK = ROOT / '.codex-tmp' / 'cfb-refit'
 PLAN = TASK / 'update-plan.json'
 SCHEMA = 'margin-of-merit-index-v1'
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
-           'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py', 'posterior_summary.py')
+           'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py',
+           'posterior_summary.py', 'historical_rankings.py')
 
 
 def current_season(now):
@@ -31,6 +32,7 @@ def current_season(now):
 def request_key(inputs):
     import hashlib
     return digest({'inputs': inputs['fit_input_sha256'], 'venue_corrections': inputs['venue_corrections_sha256'],
+                   'through_week': inputs.get('through_week'),
                    'sources': {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
                                for name in SOURCES}, 'seed': 20261120, 'exact_loo': True})
 
@@ -50,15 +52,20 @@ def write_index(index, destination=PUBLIC):
     (destination / 'index.json').write_bytes(encoded(index))
 
 
-def matching_snapshot(index, key, destination=PUBLIC):
+def matching_snapshot(index, key, destination=PUBLIC, *, historical=False):
     seen_seasons = set()
     for row in index['snapshots']:
         # Only the newest published result for a season can make an update a
         # no-op. If a provider correction restores an older input set, rerun the
         # cache-aware pipeline so the newer, incorrect result is superseded.
-        if row['season'] in seen_seasons:
+        window = (row['season'], row['week']) if historical else row['season']
+        if window in seen_seasons:
             continue
-        seen_seasons.add(row['season'])
+        # Historical reconstructions and observed live updates are separate
+        # windows, even when their included game sets happen to coincide.
+        if historical and row.get('kind') != 'reconstruction':
+            continue
+        seen_seasons.add(window)
         if row['request_key'] != key:
             continue
         path = destination / row['json']
@@ -138,12 +145,16 @@ def validate_candidate(result, inputs):
 
 def publish(result, inputs, key, now, destination=PUBLIC):
     validate_candidate(result, inputs)
-    week = max(g['week'] for g in inputs['games'])
+    week = inputs.get('through_week')
+    kind = 'reconstruction' if week is not None else 'observed'
+    if week is None:
+        week = max(g['week'] for g in inputs['games'])
     snapshot = {**result, 'schema': 'margin-of-merit-snapshot-v1',
                 'status': 'published', 'publication_ready': True, 'request_key': key,
                 'published_at': now.isoformat(), 'data_observed_at': inputs['source']['games']['retrieved_at'],
                 'latest_game_kickoff': max(g['start_date'] for g in inputs['games']),
-                'week': week, 'scope': 'Completed regular-season FBS–FBS games, including conference championships; no bowls/CFP.',
+                'week': week, 'kind': kind,
+                'scope': 'Completed regular-season FBS–FBS games, including conference championships; no bowls/CFP.',
                 'game_ids': [g['id'] for g in inputs['games']]}
     checksum = digest(snapshot)
     ident = f"{inputs['season']}-w{week:02d}-{checksum[:16]}"
@@ -163,17 +174,20 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     writer.writeheader()
     writer.writerows(snapshot['teams'])
     index = read_index(destination)
-    row = {'id': ident, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']),
+    row = {'id': ident, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']), 'kind': kind,
            'published_at': snapshot['published_at'], 'data_observed_at': snapshot['data_observed_at'],
            'data_cutoff': snapshot['data_cutoff'], 'request_key': key, 'sha256': checksum,
            'json': relative.with_suffix('.json').as_posix(), 'csv': relative.with_suffix('.csv').as_posix()}
     index['snapshots'] = [r for r in index['snapshots'] if r['id'] != ident] + [row]
     index['snapshots'].sort(key=lambda r: (r['season'], instant(r['data_cutoff']), instant(r['published_at'])), reverse=True)
     index['latest'] = index['snapshots'][0]['id']
-    index['last_attempt'] = {'season': inputs['season'], 'at': now.isoformat(), 'status': 'updated'}
+    if kind == 'observed':
+        index['last_attempt'] = {'season': inputs['season'], 'at': now.isoformat(), 'status': 'updated'}
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_bytes(body)
     (destination / relative.with_suffix('.csv')).write_text(output.getvalue())
+    from historical_rankings import write_series
+    write_series(index, inputs['season'], destination)
     write_index(index, destination)
     return row
 
@@ -198,11 +212,12 @@ def prepare(season, refresh_metadata=False):
 
 def complete(destination=PUBLIC):
     plan = json.loads(PLAN.read_text())
-    inputs = load_inputs(plan['season'])
+    week = plan.get('through_week')
+    inputs = load_inputs(plan['season'], through_week=week)
     if request_key(inputs) != plan['key']:
         raise ValueError('Inputs or implementation changed after preparing the update')
     index = read_index(destination)
-    previous = matching_snapshot(index, plan['key'], destination)
+    previous = matching_snapshot(index, plan['key'], destination, historical=week is not None)
     if previous:
         index['last_attempt'] = {'season': plan['season'], 'at': dt.datetime.now(UTC).isoformat(), 'status': 'unchanged'}
         write_index(index, destination)
@@ -210,16 +225,17 @@ def complete(destination=PUBLIC):
         return previous
     from fit_saved_season import run
     from posterior_summary import attach
-    result = run(plan['season'], exact_loo=True)
+    result = run(plan['season'], through_week=week, exact_loo=True)
     attach(result, inputs, TASK)
     row = publish(result, inputs, plan['key'], dt.datetime.now(UTC), destination)
     print(json.dumps({'published': row['id'], 'season': row['season'], 'games': row['games']}))
     return row
 
 
-def record_failure(season, destination=PUBLIC):
+def record_failure(season, destination=PUBLIC, *, historical=False):
     index = read_index(destination)
-    index['last_attempt'] = {'season': season, 'at': dt.datetime.now(UTC).isoformat(), 'status': 'failed'}
+    index['backfill' if historical else 'last_attempt'] = {
+        'season': season, 'at': dt.datetime.now(UTC).isoformat(), 'status': 'failed'}
     write_index(index, destination)
 
 
@@ -228,12 +244,21 @@ def main():
     parser.add_argument('phase', choices=('prepare', 'complete', 'failed'))
     parser.add_argument('--season', default='current')
     parser.add_argument('--refresh-metadata', action='store_true')
+    parser.add_argument('--history', action='store_true', help='Resume one missing weekly reconstruction, 2024 onward')
     args = parser.parse_args()
     if args.phase == 'prepare':
-        prepare(args.season, args.refresh_metadata)
+        if args.history:
+            from historical_rankings import prepare_history
+            prepare_history()
+        else:
+            prepare(args.season, args.refresh_metadata)
     elif args.phase == 'failed':
-        record_failure(json.loads(PLAN.read_text())['season'])
+        plan = json.loads(PLAN.read_text())
+        record_failure(plan['season'], historical=plan.get('through_week') is not None)
     else:
+        if not json.loads(PLAN.read_text()).get('needs_fit', True) and json.loads(PLAN.read_text()).get('history_done'):
+            print('All eligible historical weeks are saved; nothing to fit.')
+            return
         row = complete()
         if os.environ.get('GITHUB_STEP_SUMMARY'):
             with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as handle:

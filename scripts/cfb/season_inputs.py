@@ -77,7 +77,7 @@ def load_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections
                            sources['games']['payload'], observed)
     cutoff = instant(as_of) if as_of else observed
     if through_week is not None:
-        if type(through_week) is not int or through_week < 1:
+        if type(through_week) is not int or through_week < 0:
             raise ValueError('Invalid week')
         weeks = [w for w in sources['calendar']['payload']
                  if w['seasonType'] == 'regular' and w['week'] == through_week]

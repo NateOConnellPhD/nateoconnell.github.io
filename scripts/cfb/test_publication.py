@@ -4,6 +4,7 @@ import csv
 import datetime as dt
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import types
@@ -45,7 +46,7 @@ def fixture(season=2026):
 class PublicationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.base = ROOT / '.codex-tmp' / 'cfb-live'
+        cls.base = Path(os.environ.get('CFB_TEST_TMP', ROOT / '.codex-tmp' / 'cfb-live'))
         cls.created_base = not cls.base.exists()
         cls.base.mkdir(parents=True, exist_ok=True)
 

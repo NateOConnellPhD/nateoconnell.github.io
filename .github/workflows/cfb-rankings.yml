@@ -3,6 +3,11 @@ name: Update and publish CFB rankings
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Current rankings, or resume historical weekly backfill'
+        default: current
+        type: choice
+        options: [current, history]
       season:
         description: 'Season: current, or a year from 2024 onward'
         default: 'current'
@@ -25,6 +30,7 @@ on:
 permissions:
   contents: write
   pages: write
+  actions: write
 
 concurrency:
   group: cfb-data
@@ -50,16 +56,23 @@ jobs:
         with:
           ref: main
       - name: Check v4 ranking rules and browser parity without fitting
-        run: python3 -B scripts/cfb/check_policy_v4.py
+        run: |
+          python3 -B scripts/cfb/check_policy_v4.py
+          python3 -B scripts/cfb/test_posterior_summary.py
+          python3 -B scripts/cfb/test_history.py
       - name: Fetch the season once and check for changed inputs
         id: prepare
         env:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
           CFB_SEASON: ${{ inputs.season || 'current' }}
           CFB_REFRESH_METADATA: ${{ inputs.refresh_metadata }}
+          CFB_MODE: ${{ inputs.mode || 'current' }}
         run: |
           mkdir -p "$TMPDIR"
           args=(prepare --season "$CFB_SEASON")
+          if [ "$CFB_MODE" = history ]; then
+            args+=(--history)
+          fi
           if [ "$CFB_REFRESH_METADATA" = true ]; then
             args+=(--refresh-metadata)
           fi
@@ -124,6 +137,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
+      - name: Continue the historical queue one checked week at a time
+        if: success() && steps.commit.outcome == 'success' && (inputs.mode != 'history' || steps.prepare.outputs.continue_history == 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run cfb-rankings.yml --ref main -f mode=history
       - uses: actions/cache/save@v6
         if: success() && steps.prepare.outputs.needs_fit == 'true' && steps.cache.outputs.cache-hit != 'true'
         with:
