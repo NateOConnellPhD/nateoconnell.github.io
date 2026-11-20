@@ -12,7 +12,7 @@ description: "My college football rankings: what teams have earned from the game
     <p class="eyebrow">Out-of-Bag Thoughts / College football</p>
     <h1>Margin of Merit<span class="accent">.</span></h1>
     <p class="page-deck">My take on college football rankings: what has a team earned from the games it’s actually played? I use a Bayesian model to put results in the context of opponents, scoring margins, and home advantage.</p>
-    <div class="cfb-jumps"><a href="#rankings" data-cfb-current>Current rankings</a><a href="#cfb-history">Past updates</a><a href="#cfb-method">How it works</a></div>
+    <div class="cfb-jumps"><a href="#rankings" data-cfb-current>Current rankings</a><a href="#cfb-history">Seasons &amp; weekly archive</a><a href="#cfb-method">How it works</a></div>
   </header>
 
   <section id="rankings" aria-labelledby="cfb-title">
@@ -26,8 +26,20 @@ description: "My college football rankings: what teams have earned from the game
       <label for="cfb-update">Saved update<select id="cfb-update" data-cfb-update></select></label>
       <button type="button" class="button button-outline" data-cfb-latest>Latest rankings</button>
     </div>
+    <details class="cfb-archive" data-cfb-archive>
+      <summary>Browse every season and week</summary>
+      <p class="small-note" data-cfb-archive-status></p>
+      <div data-cfb-archive-grid></div>
+      <p class="small-note">Historical weeks are reconstructed using games through that week’s cutoff. They are not rankings that were published at the time. Coverage starts in 2024, when the current Power Four policy applies.</p>
+    </details>
 
     <div data-cfb-results hidden>
+      <div class="cfb-tabs" role="tablist" aria-label="Explore this update">
+        <button type="button" role="tab" id="cfb-tab-rankings" aria-controls="cfb-panel-rankings" aria-selected="true" data-cfb-tab="rankings">Rankings &amp; rules</button>
+        <button type="button" role="tab" id="cfb-tab-posterior" aria-controls="cfb-panel-posterior" aria-selected="false" tabindex="-1" data-cfb-tab="posterior">Posterior explorer</button>
+        <button type="button" role="tab" id="cfb-tab-history" aria-controls="cfb-panel-history" aria-selected="false" tabindex="-1" data-cfb-tab="history">Week by week</button>
+      </div>
+      <div id="cfb-panel-rankings" role="tabpanel" aria-labelledby="cfb-tab-rankings" data-cfb-panel="rankings">
       <p class="cfb-mode" data-cfb-mode role="status" aria-live="polite"></p>
       <details class="cfb-policy" data-cfb-policy hidden>
         <summary>Explore the ranking rules</summary>
@@ -51,6 +63,7 @@ description: "My college football rankings: what teams have earned from the game
         <button type="button" class="button button-outline" data-cfb-reset>Official defaults</button>
         <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
       </details>
+      <label class="cfb-compare-update" for="cfb-compare-update">Compare rank changes with<select id="cfb-compare-update" data-cfb-compare-update></select></label>
       <div class="cfb-filters">
         <label for="cfb-search">Find a team<input type="search" id="cfb-search" placeholder="Search all teams…" autocomplete="off" data-cfb-search></label>
         <label for="cfb-conference">Conference<select id="cfb-conference" data-cfb-conference><option value="">All conferences</option></select></label>
@@ -87,6 +100,45 @@ description: "My college football rankings: what teams have earned from the game
         <details data-cfb-intermediaries hidden><summary>Protected comparisons between their raw ranks</summary><div data-cfb-intermediary-list></div></details>
         <button type="button" class="button button-outline" data-cfb-audit-download>Download rules and decision audit</button>
       </details>
+      </div>
+      <section id="cfb-panel-posterior" role="tabpanel" aria-labelledby="cfb-tab-posterior" data-cfb-panel="posterior" hidden>
+        <h3>Look beyond the point estimate</h3>
+        <p class="small-note">Explore the saved distributions, compare teams, and inspect the model. Every summary uses all retained draws; changing the ranking rules does not change these distributions.</p>
+        <div class="cfb-explorer-controls">
+          <label for="cfb-stat-team">Team<select id="cfb-stat-team" data-cfb-stat-team></select></label>
+          <label for="cfb-stat-other">Compare team<select id="cfb-stat-other" data-cfb-stat-other></select></label>
+          <label for="cfb-metric">Quantity<select id="cfb-metric" data-cfb-metric>
+            <option value="merit">Earned merit</option><option value="raw_rank">Raw merit rank</option>
+            <option value="strength">Team strength (θ)</option><option value="sos">Schedule strength</option>
+            <option value="home_adv">Home advantage</option><option value="sigma">Residual scale (σ)</option><option value="nu">Student-t degrees of freedom (ν)</option>
+          </select></label>
+          <label for="cfb-chart-mode">Distribution view<select id="cfb-chart-mode" data-cfb-chart-mode><option value="density">Density / probability mass</option><option value="cdf">Cumulative probability</option></select></label>
+        </div>
+        <p class="small-note" data-cfb-stat-context></p>
+        <div class="cfb-plot" data-cfb-distribution></div>
+        <p class="cfb-chart-legend" data-cfb-stat-legend></p>
+        <div class="cfb-table-scroll" tabindex="0" role="region" aria-label="Posterior summary statistics">
+          <table class="cfb-summary-table"><caption>Posterior summaries</caption><thead><tr><th scope="col">Quantity / team</th><th scope="col">Mean</th><th scope="col">Median</th><th scope="col">SD</th><th scope="col">50% interval</th><th scope="col">90% interval</th><th scope="col">Draws</th></tr></thead><tbody data-cfb-stat-summary></tbody></table>
+        </div>
+        <div data-cfb-probabilities class="cfb-probabilities"></div>
+        <p class="small-note" data-cfb-stat-note></p>
+        <details class="cfb-diagnostics"><summary>Fit and leave-one-out diagnostics</summary><div data-cfb-diagnostics></div></details>
+      </section>
+      <section id="cfb-panel-history" role="tabpanel" aria-labelledby="cfb-tab-history" data-cfb-panel="history" hidden>
+        <h3>A season, one week at a time</h3>
+        <p class="small-note">Follow a team’s official rank or posterior summaries through this season. Gaps stay visible. Click a week in the table to open its full rankings and distributions.</p>
+        <div class="cfb-explorer-controls">
+          <label for="cfb-history-team">Team<select id="cfb-history-team" data-cfb-history-team></select></label>
+          <label for="cfb-history-other">Compare team<select id="cfb-history-other" data-cfb-history-other></select></label>
+          <label for="cfb-history-metric">Show<select id="cfb-history-metric" data-cfb-history-metric><option value="rank">Official rank</option><option value="raw_rank">Raw rank mean &amp; 90% interval</option><option value="merit">Merit mean &amp; 90% interval</option></select></label>
+        </div>
+        <p class="small-note" data-cfb-history-status role="status"></p>
+        <div class="cfb-plot" data-cfb-trajectory></div>
+        <p class="cfb-chart-legend" data-cfb-history-legend></p>
+        <div class="cfb-table-scroll" tabindex="0" role="region" aria-label="Weekly team history">
+          <table class="cfb-summary-table"><caption data-cfb-history-caption>Weekly history</caption><thead><tr><th scope="col">Week</th><th scope="col">Team</th><th scope="col">Official rank</th><th scope="col">Change</th><th scope="col">FBS W–L</th><th scope="col">Merit mean / median</th><th scope="col">90% merit interval</th></tr></thead><tbody data-cfb-history-rows></tbody></table>
+        </div>
+      </section>
     </div>
     <noscript><p>Enable JavaScript to browse the table, or <a href="{{ '/assets/data/cfb/index.json' | relative_url }}">open the saved ranking index</a> for links to JSON and CSV downloads.</p></noscript>
   </section>

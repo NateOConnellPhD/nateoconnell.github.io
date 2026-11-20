@@ -95,5 +95,7 @@ are unavailable for historical snapshots without v4 inputs. Display controls
 never alter the stored snapshot or raw uncertainty.
 
 JavaScript syntax, unique HTML IDs, labels, control references, and policy-script
-load order passed source checks. A rendered browser review is pending permission;
-these source checks do not establish desktop/mobile rendering behavior.
+load order passed source checks. A rendered browser review was authorized but
+blocked by browser startup and sandbox failures; no desktop/mobile rendering
+pass is claimed. See [CFB-EXPLORER.md](CFB-EXPLORER.md) for the subsequent
+posterior explorer, historical queue, and validation record.

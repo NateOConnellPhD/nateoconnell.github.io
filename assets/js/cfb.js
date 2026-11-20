@@ -5,7 +5,9 @@
   const el = key => root.querySelector(`[data-cfb-${key}]`);
   const base = new URL('./', new URL(root.dataset.index, location.href));
   const snapshots = new Map();
+  const explorer = window.CFBExplorer(root, {fetchJSON, url, select});
   let index, current, previous, loadNumber = 0;
+  let comparisonNumber = 0;
   let viewTeams, policyResult, customPolicy = false, policyError = null, policyFrame = 0;
   let sortKey = 'rank', direction = 1;
   const date = value => new Date(value).toLocaleString(undefined, {
@@ -45,8 +47,35 @@
   function populateUpdates(season, selected) {
     el('season').value = String(season);
     el('update').replaceChildren(...index.snapshots.filter(r => r.season === Number(season)).map(r =>
-      option(r.id, `Week ${r.week} · ${date(r.data_observed_at)} · ${r.games} games`)));
+      option(r.id, `Week ${r.week} · ${r.kind === 'reconstruction' ? 'Reconstructed through ' : 'Cutoff '}${date(r.data_cutoff)} · ${r.games} games`)));
     if (selected) el('update').value = selected;
+  }
+  function renderArchive() {
+    const grid = el('archive-grid'); grid.replaceChildren();
+    const years = [...new Set([...(index.archive || []).map(s=>s.season), ...index.snapshots.map(r=>r.season)])].sort((a,b)=>b-a);
+    if (!years.length) {
+      el('archive-status').textContent = 'No weekly snapshots have been published. Historical fitting has to finish before the archive can display results.';
+      return;
+    }
+    el('archive-status').textContent = index.backfill?.status === 'failed'
+      ? 'Historical fitting stopped on a failed check. Completed weeks remain available; missing weeks are not estimated or filled in.'
+      : index.backfill?.status === 'pending' ? 'Historical reconstruction is in progress. Completed weeks become available as they pass the model checks.'
+      : 'Open a saved week to explore its rankings and posterior. Every revision is also available in the Saved update selector.';
+    for (const year of years) {
+      const section=document.createElement('section'), title=document.createElement('h3'), weeks=document.createElement('div');
+      title.textContent=year; weeks.className='cfb-week-grid'; section.append(title,weeks);
+      const rows=index.snapshots.filter(r=>r.season===year);
+      const expected=(index.archive||[]).find(s=>s.season===year)?.weeks.map(w=>w.week)||[];
+      const available=[...new Set([...rows.map(r=>r.week),...expected])].sort((a,b)=>a-b);
+      for (const week of available) {
+        const row=rows.find(r=>r.week===week), button=document.createElement('button');
+        button.type='button'; button.textContent=`Week ${week}`; button.disabled=!row;
+        const small=document.createElement('small');small.textContent=row?'View rankings':'Awaiting fit';button.append(small);
+        if(row) {button.addEventListener('click',()=>select(row.id));if(el('update').value===row.id)button.setAttribute('aria-current','true');}
+        weeks.append(button);
+      }
+      grid.append(section);
+    }
   }
   function notice() {
     const attempt = index.last_attempt;
@@ -73,11 +102,12 @@
   }
   function comparisonLabel() {
     el('rank-label').textContent = customPolicy ? 'Your rules' : 'Official';
-    el('change-label').textContent = customPolicy ? 'Vs. official' : 'Previous week';
+    el('change-label').textContent = customPolicy ? 'Vs. official' : previous ? `Vs. week ${previous.week}` : 'No baseline';
+    el('compare-update').disabled = customPolicy;
     el('comparison').textContent = customPolicy
       ? 'Change compares your selected rules with the official ranking for this same update. Official ranks also appear under your ranks.'
-      : previous ? `Change compares with the saved week ${previous.week} update from ${date(previous.data_observed_at)}.`
-        : 'No earlier saved week with the same ordering policy is available for comparison.';
+      : previous ? `Change compares with week ${previous.week}, cutoff ${date(previous.data_cutoff)}. Positive means a higher rank in the selected update.`
+        : 'No compatible comparison selected. Missing weeks are not silently treated as the previous week.';
   }
   function setOfficialPolicy() {
     cancelAnimationFrame(policyFrame);
@@ -225,6 +255,8 @@
       }
       cell(r.rank ?? '—', customPolicy && r.rank != null ? `Official ${officialRanks.get(r.id)}` : null);
       const teamCell = cell(r.name, r.conference || 'Independent', true);
+      const explore = document.createElement('button'); explore.type='button';explore.className='cfb-explain';explore.textContent='Explore posterior';
+      explore.setAttribute('aria-label',`Explore ${r.name} posterior`);explore.addEventListener('click',()=>explorer.team(r.id));teamCell.append(explore);
       if (policyResult && r.rank != null) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = 'cfb-explain'; button.textContent = 'Explain rank';
@@ -252,6 +284,7 @@
     const row = index.snapshots.find(r => r.id === id);
     if (!row) return;
     const sequence = ++loadNumber;
+    comparisonNumber++;
     el('status').hidden = false; el('status').textContent = 'Loading saved update…';
     el('results').hidden = true; el('csv').hidden = true;
     root.setAttribute('aria-busy', 'true');
@@ -264,12 +297,15 @@
       if (sequence !== loadNumber) return;
       current = result;
       previous = prior?.policy_sha256 === current.policy_sha256 ? prior : null;
+      const candidates = index.snapshots.filter(r=>r.season===row.season && r.id!==id);
+      el('compare-update').replaceChildren(option('','No comparison'),...candidates.map(r=>option(r.id,`Week ${r.week} · ${date(r.data_cutoff)}`)));
+      el('compare-update').value=previous ? older.id : '';
       setOfficialPolicy();
       el('label').textContent = `${row.season} season / ${id === index.latest ? 'Latest update' : 'Saved update'}`;
       document.getElementById('cfb-title').textContent = `Week ${row.week} rankings`;
       const checked = index.last_attempt?.season === row.season && id === index.latest && index.last_attempt.status !== 'failed'
         ? ` Last checked ${date(index.last_attempt.at)}.` : '';
-      el('timing').textContent = `${current.games} completed FBS–FBS games. Data observed ${date(current.data_observed_at)}. Published ${date(current.published_at)}.${checked} Unplayed games in this week are not included.`;
+      el('timing').textContent = `${current.games} completed FBS–FBS games through ${date(current.data_cutoff)}. ${current.kind==='reconstruction'?'Retrospective reconstruction; the model only uses games through this cutoff.':'Unplayed games are not included.'} Source observed ${date(current.data_observed_at)}. Published ${date(current.published_at)}.${checked}`;
       el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, data observed ${date(current.data_observed_at)}`;
       const chosenConference = el('conference').value;
       el('conference').replaceChildren(option('', 'All conferences'), ...[...new Set(current.teams.map(r => r.conference).filter(Boolean))].sort().map(c => option(c, c)));
@@ -280,7 +316,7 @@
       el('csv').href = url(row.csv); el('csv').hidden = false;
       el('json').href = url(row.json);
       if (writeURL) history.replaceState(null, '', address);
-      notice(); render(); el('results').hidden = false;
+      notice(); render(); el('results').hidden = false; explorer.show(current,index); renderArchive();
       el('status').textContent = `Loaded ${row.season} week ${row.week}.`;
       el('status').hidden = true;
     } catch (_) {
@@ -288,7 +324,20 @@
     } finally { if (sequence === loadNumber) root.removeAttribute('aria-busy'); }
   }
   el('season').addEventListener('change', () => {
-    populateUpdates(el('season').value); select(el('update').value);
+    populateUpdates(el('season').value);
+    if(el('update').value) select(el('update').value);
+    else {loadNumber++;comparisonNumber++;el('results').hidden=true;el('csv').hidden=true;el('status').hidden=false;el('status').textContent=`No checked rankings are published for ${el('season').value} yet. Its historical weeks are awaiting fitting.`;}
+  });
+  el('compare-update').addEventListener('change', async()=> {
+    const sequence=++comparisonNumber, id=el('compare-update').value, snapshot=current;
+    previous=null;comparisonLabel();render();
+    if(!id) return;
+    try {
+      const chosen=await read(index.snapshots.find(r=>r.id===id));
+      if(sequence!==comparisonNumber||snapshot!==current) return;
+      if(chosen.policy_sha256!==current.policy_sha256) {el('comparison').textContent='These updates use different ordering policies. Rank changes are not comparable; choose another update.';return;}
+      previous=chosen;comparisonLabel();render();
+    } catch (_) {if(sequence===comparisonNumber) el('comparison').textContent='The comparison could not be loaded. Choose another saved update.';}
   });
   el('update').addEventListener('change', () => select(el('update').value));
   function latest() {
@@ -336,6 +385,7 @@
     try {
       index = await fetchJSON(root.dataset.index, 'no-store');
       if (index.schema !== 'margin-of-merit-index-v1' || !Array.isArray(index.snapshots)) throw new Error('Invalid archive');
+      renderArchive();
       if (!index.snapshots.length) {
         el('status').textContent = index.last_attempt?.status === 'failed'
           ? 'The first ranking update did not finish. No rankings have been published yet.'
@@ -343,7 +393,7 @@
         return;
       }
       el('controls').hidden = false;
-      el('season').replaceChildren(...[...new Set(index.snapshots.map(r => r.season))].sort((a,b) => b-a).map(s => option(s, s)));
+      el('season').replaceChildren(...[...new Set([...index.snapshots.map(r => r.season),...(index.archive||[]).map(s=>s.season)])].sort((a,b) => b-a).map(s => option(s, `${s}${index.snapshots.some(r=>r.season===s)?'':' · awaiting fits'}`)));
       const query = new URLSearchParams(location.search);
       const requested = index.snapshots.find(r => r.id === query.get('snapshot')) ||
         index.snapshots.find(r => String(r.season) === query.get('season')) || index.snapshots.find(r => r.id === index.latest);

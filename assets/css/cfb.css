@@ -52,6 +52,36 @@
 .cfb-explanations details p,.cfb-explanations details li{font-size:.8rem;line-height:1.6;margin:10px 0}
 .cfb-explain{display:block;border:0;border-bottom:1px solid var(--line);background:transparent;padding:2px 0;color:var(--blue);font-size:.7rem;cursor:pointer;text-align:left;margin-top:4px}
 .cfb-page button:focus-visible,.cfb-page summary:focus-visible,.cfb-page input:focus-visible,.cfb-page select:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
+.cfb-tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin:30px 0;overflow-x:auto}
+.cfb-tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:14px 0;color:var(--muted);font-size:.88rem;white-space:nowrap}
+.cfb-tabs [aria-selected=true]{border-bottom-color:var(--blue);color:var(--ink);font-weight:600}
+.cfb-archive{margin:20px 0 30px;border-bottom:1px solid var(--line);padding-bottom:18px}
+.cfb-archive>summary,.cfb-diagnostics>summary{cursor:pointer;color:var(--blue);font-size:.9rem;font-weight:600;min-height:34px}
+.cfb-archive h3{font-size:1.3rem;margin:18px 0 10px}
+.cfb-week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:24px}
+.cfb-week-grid button{padding:10px 8px;border:1px solid var(--line);background:transparent;color:var(--blue);font-size:.85rem;text-align:left}
+.cfb-week-grid button small{display:block;font-size:.65rem;color:var(--muted)}
+.cfb-week-grid button[aria-current]{border-color:var(--blue);background:var(--tint)}
+.cfb-week-grid button:disabled{opacity:.6;cursor:default;border-style:dashed}
+.cfb-explorer-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:24px 0}
+.cfb-explorer-controls select{min-width:0}
+.cfb-compare-update{max-width:420px;margin:20px 0}
+.cfb-plot{width:100%;min-height:100px;background:rgba(255,255,255,.4);border:1px solid var(--line);padding:12px 8px;margin:22px 0 12px}
+.cfb-plot svg{width:100%;height:auto;overflow:visible}
+.cfb-plot svg text{font:11px var(--sans);fill:var(--muted)}
+.cfb-plot>p{padding:20px;font-size:.9rem}
+.cfb-chart-legend{display:flex;flex-wrap:wrap;gap:12px 24px;font-size:.82rem;margin-bottom:24px}
+.cfb-chart-legend>span{border-left:14px solid;padding-left:8px}
+.cfb-chart-legend small{display:block;flex-basis:100%;font-size:.75rem;color:var(--muted)}
+.cfb-summary-table{border-collapse:collapse;width:100%;font-size:.8rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cfb-summary-table caption{text-align:left;font-size:.8rem;padding:12px 8px;color:var(--muted)}
+.cfb-summary-table th,.cfb-summary-table td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:right}
+.cfb-summary-table th{font-weight:600;background:var(--tint);color:var(--blue)}
+.cfb-summary-table th:first-child,.cfb-summary-table td:first-child{text-align:left}
+.cfb-inline-button{border:0;border-bottom:1px solid var(--blue);padding:3px 0;background:none;color:var(--blue);font:inherit}
+.cfb-probabilities{font-size:.84rem;margin:24px 0;line-height:1.8}
+.cfb-diagnostics{font-size:.83rem;padding:18px 0;border-top:1px solid var(--line);margin-top:25px}
+@media(max-width:600px){.cfb-explorer-controls{grid-template-columns:1fr}.cfb-tabs{gap:18px}.cfb-tabs button{font-size:.8rem}.cfb-plot{padding:8px 0}.cfb-week-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:800px){.cfb-sliders{grid-template-columns:1fr;gap:20px}.cfb-toggles{grid-template-columns:1fr;gap:16px}}
 @media(max-width:500px){.cfb-pair-controls{grid-template-columns:1fr}.cfb-policy,.cfb-explanations{padding:15px}}
 @media(max-width:700px){.cfb-history{grid-template-columns:1fr 2fr}.cfb-history .button{grid-column:1/-1}.cfb-filters{grid-template-columns:1fr 1fr}.cfb-filters label:first-child{grid-column:1/-1}.cfb-page .section-heading{align-items:start;flex-direction:column;gap:10px}.cfb-heading{margin-bottom:35px}.cfb-table th,.cfb-table td{padding:13px 10px}.cfb-method{margin-top:48px}}
