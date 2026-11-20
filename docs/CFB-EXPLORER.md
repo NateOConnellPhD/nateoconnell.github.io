@@ -35,6 +35,8 @@ Primary navigation is **Season → Week of season**. The selected season's week 
 
 Public labels show weeks and dates (using America/New_York for a consistent date), without times of day. Exact timestamps and internal model identifiers remain in saved data for reproducibility. Public rule labels omit implementation version numbers. The rankings page reuses the CFB blog post's cover image, links to that article for the full model and rationale, and provides an on-page plain-language guide to every column, posterior summaries, plots, controls, weekly trajectories, and diagnostics.
 
+CFB styles and scripts share a build-time URL revision so new markup does not reuse older cached assets. The header image has no fixed HTML height; it retains its intrinsic proportions even before the CFB stylesheet loads.
+
 Season trajectories use the latest snapshot per week, preserve gaps, and break official-rank lines when ordering policies change. History-table changes require adjacent weeks with the same policy. The ranking table allows an explicit baseline and names its week; different-policy rank comparisons are rejected. Slider comparisons remain relative to the same snapshot's official ranking.
 
 ## Validation and limitations
