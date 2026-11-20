@@ -79,13 +79,14 @@ description: "My college football rankings: what teams have earned from the game
             <th scope="col">Change<small data-cfb-change-label>Previous week</small></th>
             <th scope="col"><abbr title="Wins and losses against FBS opponents only">FBS W–L</abbr></th>
             <th scope="col"><button type="button" data-cfb-sort="merit_mean">Merit</button><small>Mean · 90% interval</small></th>
+            <th scope="col"><button type="button" data-cfb-sort="sos_mean"><abbr title="Strength of schedule: average loss probability for the reference team against this schedule">SOS</abbr></button><small>Mean · 90% interval</small></th>
             <th scope="col">Raw rank<small>90% interval</small></th>
             <th scope="col"><button type="button" data-cfb-sort="p_raw_merit_top10">P(top 10)</button><small>Raw merit</small></th>
           </tr></thead>
           <tbody data-cfb-rows></tbody>
         </table>
       </div>
-      <p class="small-note cfb-table-note">Records include FBS opponents only. Raw rank, its interval, and top-10 probabilities describe raw merit. They do not change when you adjust the ordering rules. <a href="#cfb-method">What do these numbers mean?</a></p>
+      <p class="small-note cfb-table-note">Records include FBS opponents only. Higher SOS means a harder schedule: it is the reference team’s average loss probability against those opponents, accounting for venue. Raw rank, its interval, and top-10 probabilities describe raw merit. These posterior summaries do not change when you adjust the ordering rules. <a href="#cfb-method">What do these numbers mean?</a></p>
       <p class="small-note" data-cfb-comparison></p>
       <p class="small-note"><a data-cfb-permalink>Link to official update</a> · <a data-cfb-json>Download official results</a></p>
       <details id="cfb-explanations" class="cfb-explanations" data-cfb-explanations hidden>
@@ -109,7 +110,7 @@ description: "My college football rankings: what teams have earned from the game
           <label for="cfb-stat-other">Compare team<select id="cfb-stat-other" data-cfb-stat-other></select></label>
           <label for="cfb-metric">Quantity<select id="cfb-metric" data-cfb-metric>
             <option value="merit">Earned merit</option><option value="raw_rank">Raw merit rank</option>
-            <option value="strength">Team strength (θ)</option><option value="sos">Schedule strength</option>
+            <option value="strength">Team strength (θ)</option><option value="sos">Strength of schedule (SOS)</option>
             <option value="home_adv">Home advantage</option><option value="sigma">Residual scale (σ)</option><option value="nu">Student-t degrees of freedom (ν)</option>
           </select></label>
           <label for="cfb-chart-mode">Distribution view<select id="cfb-chart-mode" data-cfb-chart-mode><option value="density">Density / probability mass</option><option value="cdf">Cumulative probability</option></select></label>
@@ -150,6 +151,9 @@ description: "My college football rankings: what teams have earned from the game
     <h3>Each game contributes to a team’s résumé</h3>
     <p>The model estimates team strength and home advantage from scoring margins. For each game, it asks how a reference team—the 25th-strongest team in that posterior draw—would be expected to perform against that opponent, in that location. The actual margin is converted into a percentile of that distribution. Wins contribute between zero and one point; losses contribute between minus one and zero. A team’s season merit is the sum of those game credits.</p>
     <p>The game being scored is left out when estimating its opponents and reference standard, so it does not help grade itself. The rankings use completed regular-season FBS-versus-FBS games, including conference championships and Army–Navy. FCS games and bowls/CFP are excluded.</p>
+    <h3>Strength of schedule, with uncertainty</h3>
+    <p>The same model lets me ask how difficult each team’s schedule has been. For each game, I estimate the probability that the reference team—the 25th-strongest team in that draw—would lose against that opponent, in that location. I average those probabilities across the team’s eligible games to get strength of schedule (SOS). Everyone is evaluated using the same reference rule, and higher values mean a harder schedule.</p>
+    <p>An SOS of 30% means the reference team would be expected to lose 30% of the games on that schedule: three losses over ten games, for example. That is different from predicting how the actual team would perform. The rankings table shows the posterior mean and 90% interval; select “Strength of schedule (SOS)” in the posterior explorer for its distribution, median, standard deviation, and team comparisons. As with merit, the uncertainty uses the saved marginal-quantile leave-one-out approximation.</p>
     <h3>Let the uncertainty tell us when results should decide</h3>
     <p>V4 starts with posterior mean merit. I don’t define “close” by how many places separate two teams. I use the probability that one has earned more merit than the other. Two teams twelve places apart can qualify for a head-to-head adjustment; two neighboring teams can have enough evidence separating them to keep their order protected.</p>
     <p>At the official defaults, a merit comparison above 90% probability is protected. For teams with the same FBS record, a decisive head-to-head winner must go ahead unless the model gives the loser more than a 90% chance of higher merit, or another required ordering prevents it. Common opponents are considered only when the teams never played each other. A team that did at least as well against every shared opponent and better against one must go ahead unless opposing merit confidence exceeds 70%, or that ordering conflicts with an earlier requirement. A split direct series never sends us looking for a common-opponent tiebreak.</p>

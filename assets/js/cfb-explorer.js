@@ -9,7 +9,7 @@ window.CFBExplorer = (root, api) => {
     merit: ['Earned merit', 'Sum of leave-one-game-out game credits. Higher is better.'],
     raw_rank: ['Raw merit rank', 'Posterior midrank among teams with eligible games; lower is better. The ordering rules are not applied to these draws.'],
     strength: ['Team strength (points)', 'Full-data posterior for θ on the scoring-margin scale. Strength is different from earned merit.'],
-    sos: ['Schedule strength', 'Average probability that the reference team would lose against this schedule, accounting for venue. Higher means a harder schedule.'],
+    sos: ['Strength of schedule (loss probability)', 'Average probability that the reference team—the 25th-strongest team in each draw—would lose against this schedule, accounting for venue. The scale is 0 to 1: 0.30 means 30%. Higher means a harder schedule. Each game is left out when estimating its difficulty.'],
     home_adv: ['Home advantage (points)', 'Full-data posterior for the common home-field advantage.'],
     sigma: ['Residual scale (points)', 'Student-t scale, not its standard deviation. The model imposes an eight-point lower bound.'],
     nu: ['Degrees of freedom', 'Student-t tail parameter. Smaller values indicate heavier tails.']
