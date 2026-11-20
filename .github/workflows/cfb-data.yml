@@ -1,0 +1,64 @@
+name: Sync CFB data
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season year to save (first connection check: 2024)'
+        required: true
+        default: '2024'
+        type: string
+      refresh_metadata:
+        description: 'Refresh the saved FBS team list and calendar (two extra requests)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cfb-data
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'NateOConnellPhD/nateoconnell.github.io' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Fetch and validate the season
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+          CFB_SEASON: ${{ inputs.season }}
+          CFB_REFRESH_METADATA: ${{ inputs.refresh_metadata }}
+        run: |
+          args=(--season "$CFB_SEASON")
+          if [ "$CFB_REFRESH_METADATA" = true ]; then
+            args+=(--refresh-metadata)
+          fi
+          python3 -B scripts/cfb/sync_data.py "${args[@]}"
+      - name: Save validated source data
+        run: |
+          git add -- _cfb_data/seasons
+          if git diff --cached --quiet; then
+            echo 'Saved season already matches CFBD; no commit needed.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Refresh saved CFB season data'
+          # Preserve concurrent website/editor/publications changes. Never force push.
+          # Retrying a Git push does not repeat the CFBD request.
+          for attempt in 1 2 3; do
+            git pull --no-rebase --no-edit origin main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          echo 'Could not save after concurrent repository updates; rerun the workflow.' >&2
+          exit 1

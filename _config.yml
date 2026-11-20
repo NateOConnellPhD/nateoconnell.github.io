@@ -26,6 +26,7 @@ exclude:
   - vendor
   - .codex
   - .codex-tmp
+  - _cfb_data
   - Context_not_for_upload
   - context_not_for_upload
   - .bundle

@@ -6,10 +6,59 @@ for all 134 teams. A separate likelihood-weighting error was identified in the
 saved archive; it must not be attributed to the new scale floor. See
 [the numerical comparison](CFB-2024-COMPARISON.md) for results and limitations.
 Maintained source now includes PSIS scoring, a reference ordering policy, and
-comparison commands. Production ingestion, exact-LOO fallback, historical
-policy, automated publication, and the public blog section remain unfinished.
+comparison commands. A manual CFBD data-sync workflow is implemented and has
+passed offline checks; live API access has not yet been tested. Exact-LOO
+fallback, historical policy, scheduled updates, automated publication, and the
+public blog section remain unfinished.
 The handoff stays private and unchanged; 2024 is a reference, not the limit of
 the historical archive.
+
+## First GitHub data sync
+
+The owner has saved `CFBD_API_KEY` as a repository Actions secret. The workflow
+reads it only through its environment; do not put the key in source or data files.
+After pushing the source, open:
+https://github.com/NateOConnellPhD/nateoconnell.github.io/actions/workflows/cfb-data.yml
+
+Select **Run workflow**, use branch **main**, leave the season at **2024**, and
+leave **Refresh the saved FBS team list and calendar** unchecked. Start the run
+and inspect its summary. This checks the connection and saves data; it does not
+run inference, publish rankings, or enable a schedule.
+
+The first successful sync makes three API requests and commits four files under
+`_cfb_data/seasons/2024/`:
+
+- `teams.json`: the season-specific FBS roster and source provenance.
+- `calendar.json`: the season calendar and source provenance.
+- `games.json`: the season's returned game records and source provenance.
+- `normalized.json`: normalized records, exclusion reasons, validation counts,
+  and an eligible-data hash for the future model pipeline.
+
+These are public football data saved in the repository, not the private handoff.
+The data directory is excluded from the Jekyll website. Each source envelope
+records its endpoint, query, retrieval time, and payload hash. A byte-identical
+payload retains its original envelope rather than creating a timestamp-only
+commit; the workflow log records the later check.
+
+Later runs for that season reuse the saved roster and calendar and make only
+**one games request**. Explicitly refreshing metadata adds two requests. The
+importer validates the complete response before writing files, rejects missing
+previously eligible final games, and does not commit a failed sync. It retains
+scheduled/non-final games for inspection but excludes them from model inputs;
+changing an in-progress score does not change the eligible-data hash. That hash
+is not a complete fit identity: future fit caching must also include model,
+policy, and implementation versions.
+
+After the 2024 import succeeds, compare its eligibility and game set against the
+reference before connecting inference. Use a separate manual run for season
+**2026** to seed current-season files; that season's first run also needs three
+requests. The eventual Sunday job will reuse these saved inputs. Visitors will
+read published result files and will never call CFBD.
+
+The importer uses Python's standard library, with no runtime or dependency
+downloads. Its 13 focused offline tests cover request reuse, unchanged data,
+corrections, rejected responses, input eligibility, and credential-safe errors.
+Those checks do not establish that the real provider response or key works.
 
 ## One model throughout each season
 
@@ -116,8 +165,9 @@ https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-t
 GitHub-token commits do not trigger a Pages build automatically. The eventual
 publication workflow must explicitly request a build, as the existing
 publications workflow does. Concurrent publication jobs must handle repository
-changes without force pushing or losing unrelated edits. No CFB workflow is
-enabled yet. Model computation requires no OpenAI API calls.
+changes without force pushing or losing unrelated edits. The data-sync workflow
+is manual only; no automatic CFB schedule is enabled yet. Model computation
+requires no OpenAI API calls.
 
 ## Historical and live data
 
