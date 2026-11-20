@@ -160,6 +160,10 @@ h3{font-size:1.65rem;line-height:1.28;letter-spacing:-.025em}
 .filter-buttons button[aria-pressed=true]{background:var(--blue);color:var(--paper);border-color:var(--blue)}
 .filter-buttons button:hover{border-color:var(--blue)}
 .blog-toolbar{padding:0 0 12px}
+.blog-nav{display:flex;flex-wrap:wrap;gap:28px;border-bottom:1px solid var(--line);margin:0 0 32px}
+.blog-nav a{padding:10px 0 13px;text-decoration:none;font-size:.9rem;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.blog-nav a[aria-current]{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.blog-nav a:hover{color:var(--blue)}
 .blog-toolbar input,.blog-toolbar select{border:1px solid var(--line);background:transparent;color:var(--ink);padding:12px 15px;border-radius:0;font-size:.85rem;min-height:46px;width:100%}
 .blog-toolbar input{min-width:310px}
 .blog-toolbar select{min-width:170px}

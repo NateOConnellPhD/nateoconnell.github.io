@@ -1,0 +1,76 @@
+---
+layout: default
+title: Margin of Merit — CFB rankings
+section: blog
+permalink: /blog/cfb/
+cfb: true
+description: "My college football rankings: what teams have earned from the games they've played. Current standings, saved weekly updates, and the method behind them."
+---
+<div class="wrap page-shell cfb-page" data-cfb data-index="{{ '/assets/data/cfb/index.json' | relative_url }}">
+  <nav class="blog-nav" aria-label="Blog sections"><a href="{{ '/blog/' | relative_url }}">Posts</a><a href="{{ '/blog/cfb/' | relative_url }}" aria-current="page">CFB rankings</a></nav>
+  <header class="page-heading cfb-heading">
+    <p class="eyebrow">Out-of-Bag Thoughts / College football</p>
+    <h1>Margin of Merit<span class="accent">.</span></h1>
+    <p class="page-deck">My take on college football rankings: what has a team earned from the games it’s actually played? I use a Bayesian model to put results in the context of opponents, scoring margins, and home advantage.</p>
+    <div class="cfb-jumps"><a href="#rankings" data-cfb-current>Current rankings</a><a href="#cfb-history">Past updates</a><a href="#cfb-method">How it works</a></div>
+  </header>
+
+  <section id="rankings" aria-labelledby="cfb-title">
+    <div class="section-heading"><div><p class="eyebrow" data-cfb-label>Rankings</p><h2 id="cfb-title">Latest saved update</h2></div><a data-cfb-csv class="text-link" hidden download>Download CSV <span aria-hidden="true">↓</span></a></div>
+    <p class="small-note" data-cfb-timing>Scheduled for Sunday mornings during the season. Each update shows the games and data cutoff it includes.</p>
+    <p class="cfb-notice" data-cfb-notice hidden></p>
+    <p class="cfb-state" data-cfb-status role="status" aria-live="polite">Loading rankings…</p>
+
+    <div id="cfb-history" class="cfb-history" data-cfb-controls hidden>
+      <label for="cfb-season">Season<select id="cfb-season" data-cfb-season></select></label>
+      <label for="cfb-update">Saved update<select id="cfb-update" data-cfb-update></select></label>
+      <button type="button" class="button button-outline" data-cfb-latest>Latest rankings</button>
+    </div>
+
+    <div data-cfb-results hidden>
+      <div class="cfb-filters">
+        <label for="cfb-search">Find a team<input type="search" id="cfb-search" placeholder="Search all teams…" autocomplete="off" data-cfb-search></label>
+        <label for="cfb-conference">Conference<select id="cfb-conference" data-cfb-conference><option value="">All conferences</option></select></label>
+        <label for="cfb-limit">Show<select id="cfb-limit" data-cfb-limit><option value="25">Top 25</option><option value="all">All teams</option></select></label>
+      </div>
+      <p class="small-note" data-cfb-count aria-live="polite"></p>
+      <div class="cfb-table-scroll" role="region" aria-label="Football rankings; scroll horizontally for more columns" tabindex="0">
+        <table class="cfb-table">
+          <caption class="sr-only" data-cfb-caption>Margin of Merit rankings</caption>
+          <thead><tr>
+            <th scope="col" aria-sort="ascending"><button type="button" data-cfb-sort="rank">Rank <span aria-hidden="true">↑</span></button></th>
+            <th scope="col"><button type="button" data-cfb-sort="name">Team</button></th>
+            <th scope="col"><abbr title="Change from the previous saved week, when the ordering policy is unchanged">Change</abbr></th>
+            <th scope="col"><abbr title="Wins and losses against FBS opponents only">FBS W–L</abbr></th>
+            <th scope="col"><button type="button" data-cfb-sort="merit_mean">Merit</button><small>Mean · 90% interval</small></th>
+            <th scope="col">Raw rank<small>90% interval</small></th>
+            <th scope="col"><button type="button" data-cfb-sort="p_raw_merit_top10">P(top 10)</button><small>Raw merit</small></th>
+          </tr></thead>
+          <tbody data-cfb-rows></tbody>
+        </table>
+      </div>
+      <p class="small-note cfb-table-note">Records include FBS opponents only. Rank intervals and top-10 probabilities describe raw merit; the displayed order also applies the v2 ranking rules. <a href="#cfb-method">What do these numbers mean?</a></p>
+      <p class="small-note" data-cfb-comparison></p>
+      <p class="small-note"><a data-cfb-permalink>Link to this update</a> · <a data-cfb-json>Download full results</a></p>
+    </div>
+    <noscript><p>Enable JavaScript to browse the table, or <a href="{{ '/assets/data/cfb/index.json' | relative_url }}">open the saved ranking index</a> for links to JSON and CSV downloads.</p></noscript>
+  </section>
+
+  <section id="cfb-method" class="cfb-method prose" aria-labelledby="cfb-method-title">
+    <p class="eyebrow">Behind the rankings</p>
+    <h2 id="cfb-method-title">How it works</h2>
+    <p>I wanted a ranking that starts with what happened on the field. A win over a strong opponent should mean something different from a win over a weak one, and the margin and location should matter too. Margin of Merit adds up what a team earns from each game, using a common reference opponent standard across the season.</p>
+    <h3>Each game contributes to a team’s résumé</h3>
+    <p>The model estimates team strength and home advantage from scoring margins. For each game, it asks how a reference team—the 25th-strongest team in that posterior draw—would be expected to perform against that opponent, in that location. The actual margin is converted into a percentile of that distribution. Wins contribute between zero and one point; losses contribute between minus one and zero. A team’s season merit is the sum of those game credits.</p>
+    <p>The game being scored is left out when estimating its opponents and reference standard, so it does not help grade itself. The rankings use completed regular-season FBS-versus-FBS games, including conference championships and Army–Navy. FCS games and bowls/CFP are excluded.</p>
+    <h3>Close comparisons can use football evidence</h3>
+    <p>V2 starts with posterior mean merit. When teams have the same FBS record and their merit comparison is uncertain, head-to-head results or a clear advantage against common opponents can influence the order. Those preferences have to outweigh the merit cost of passing every team in between. Pairwise merit comparisons above 90% probability are protected, apart from an explicit rule placing undefeated ACC, Big Ten, Big 12, or SEC teams with at least eight FBS wins above teams with two or more FBS losses.</p>
+    <h3>The uncertainty is part of the result</h3>
+    <p>The intervals show how much the underlying merit and rank vary across posterior draws. “P(top 10)” is the probability that a team’s raw merit falls in the top ten. It is not a playoff probability, and it does not apply the editorial ordering rules to each draw. The joint uncertainty uses a marginal-quantile approximation, so these probabilities should not be read as exact.</p>
+    <details><summary>Model and update details</summary>
+      <p>Scoring margins follow a Student-t model with team-strength differences and home advantage. Team strengths have Normal(0, 14) priors; home advantage has a Normal(2, 2.5) prior. The residual scale is 8 + exp(η), with η distributed Normal(log 6, 0.75). Degrees of freedom are 2 + exp(ζ), with ζ distributed Normal(log 5, 0.9). Normal scales here are standard deviations. The eight-point floor is on the Student-t scale, not its standard deviation, and stays the same all season.</p>
+      <p>Fits use four sequential NUTS chains and checked leave-one-game-out scoring. Unreliable importance-sampling approximations require individual omitted-game refits. V2 uses preference weights of 0.50 for head-to-head, 0.20 for common opponents, and a 0.04 cost per crossing. These are declared policy choices. The ordering search finds a local optimum under single-team insertions.</p>
+      <p>Game data come from <a href="https://collegefootballdata.com/">CollegeFootballData</a>. Updates are scheduled for Sunday mornings, with additional refreshes when needed. A week may still have unplayed games: use the displayed observation time and game count to see what an update includes. If an update fails its checks, the last successful rankings stay available. Historical reconstructions use observed final scores and kickoff cutoffs, rather than an exact record of when each game finished.</p>
+    </details>
+  </section>
+</div>

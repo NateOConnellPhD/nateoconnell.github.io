@@ -18,6 +18,15 @@ build. It does not use OpenAI or require the owner's computer to remain on.
 The first current-season import makes three API requests; subsequent imports
 normally make one. Visitors only read stored files.
 
+`/blog/cfb/` is linked from the blog's CFB rankings tab. It reads the public
+index and selected snapshot, with season/update selection, searches across all
+teams, conference filtering, sorting, raw-rank uncertainty, CSV/JSON downloads,
+and links to specific snapshots. Movement compares against the previous saved
+week only when the policy identity matches. Missing results and failed updates
+are labeled explicitly. The page retains the site's original blue palette.
+JavaScript syntax and page/selector/anchor checks passed; a rendered browser
+review was unavailable because the computer-use tool could not initialize.
+
 Every successful snapshot is immutable. The index retains earlier weeks and
 revisions and selects the newest season/cutoff as current. Results include the
 actual observation time and games used; an in-progress week is not described
