@@ -84,6 +84,17 @@ def validate_candidate(result, inputs):
             or loo.get('psis_unreliable_games', 0) != loo.get('exact_refits', 0)
             or loo.get('max_transport_mean_error', math.inf) > .005):
         raise ValueError('Candidate failed LOO/transport requirements')
+    # Reproduce the published policy from its saved browser inputs. A snapshot
+    # must not publish an order that the reader controls cannot reproduce.
+    from ranking_policy import CANONICAL, order_policy, prepare_policy
+    policy_input = result['policy_inputs']
+    expected = order_policy(prepare_policy(inputs['teams'], inputs['games'], policy_input['means'],
+                                          policy_input['probabilities'], season=inputs['season'],
+                                          specification=CANONICAL))
+    for field in ('specification', 'policy_sha256', 'policy_inputs', 'order', 'raw_order',
+                  'unranked', 'confidence_lock_count', 'protected_team_ids', 'protection_exceptions', 'audit'):
+        if result[field] != expected[field]:
+            raise ValueError('Candidate v4 policy replay failed: ' + field)
     rows = result['teams']
     if len(rows) != len(inputs['teams']) or {r['id'] for r in rows} != {t['id'] for t in inputs['teams']}:
         raise ValueError('Candidate roster does not match the season roster')
@@ -93,11 +104,14 @@ def validate_candidate(result, inputs):
     if [r['id'] for r in sorted(ranked, key=lambda r: r['rank'])] != result['order']:
         raise ValueError('Candidate rank order is inconsistent')
     counts = {t['id']: [0, 0] for t in inputs['teams']}
+    means = dict(zip((t['id'] for t in inputs['teams']), policy_input['means']))
     for g in inputs['games']:
         home_won = g['home_points'] > g['away_points']
         counts[g['home_id']][int(not home_won)] += 1
         counts[g['away_id']][int(home_won)] += 1
     for row in rows:
+        if not math.isclose(row['merit_mean'], means[row['id']], rel_tol=0, abs_tol=1e-12):
+            raise ValueError('Policy means do not match published merit summaries')
         if [row['wins_fbs'], row['losses_fbs']] != counts[row['id']]:
             raise ValueError('Published records do not match eligible games')
         if row['status'] != 'ranked':

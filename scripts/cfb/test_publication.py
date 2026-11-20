@@ -11,13 +11,17 @@ import unittest
 from unittest.mock import patch
 
 import update_rankings as live
+from ranking_policy import order_policy, prepare_policy
+from test_ranking_policy import probability
 from sync_data import ROOT, UTC
 
 
 def fixture(season=2026):
     at = f'{season}-11-20T12:00:00+00:00'
-    inputs = {'season': season, 'fit_input_sha256': 'fixture', 'teams': [{'id': 1}, {'id': 2}],
+    inputs = {'season': season, 'fit_input_sha256': 'fixture',
+              'teams': [{'id': i, 'name': name, 'conference': 'ACC'} for i, name in ((1, 'A'), (2, 'B'))],
               'games': [{'id': 1, 'week': 12, 'start_date': at, 'home_id': 1, 'away_id': 2,
+                         'season': season, 'eligible': True, 'completed': True, 'season_type': 'regular',
                          'home_points': 7, 'away_points': 0}], 'source': {'games': {'retrieved_at': at}}}
     rows = []
     for i, name in enumerate(('A', 'B'), 1):
@@ -34,6 +38,7 @@ def fixture(season=2026):
                                        'tree_depth_limit_hits': 0, 'bfmi_by_chain': [1.]*4},
               'loo_diagnostics': {'unreliable_games': 0, 'psis_unreliable_games': 0,
                                   'exact_refits': 0, 'max_transport_mean_error': .0001}}
+    result.update(order_policy(prepare_policy(inputs['teams'], inputs['games'], [1., 0.], probability(2), season=season)))
     return result, inputs
 
 
@@ -101,13 +106,16 @@ class PublicationTests(unittest.TestCase):
 
     def test_csv_has_lf_endings_and_preserves_empty_fields_and_quoting(self):
         self.result['teams'][0]['name'] = 'A, "Quoted"'
+        self.inputs['teams'][0]['name'] = 'A, "Quoted"'
         for ident in (3, 4):
             idle = dict(self.result['teams'][0], id=ident, name=f'Idle {ident}',
                         rank=None, raw_merit_rank=None, status='no_eligible_games',
                         wins_fbs=0, losses_fbs=0, sos_mean=None,
                         p_raw_merit_top8=None, p_raw_merit_top10=None, p_raw_merit_top25=None)
             self.result['teams'].append(idle)
-            self.inputs['teams'].append({'id': ident})
+            self.inputs['teams'].append({'id': ident, 'name': idle['name'], 'conference': 'ACC'})
+        self.result.update(order_policy(prepare_policy(self.inputs['teams'], self.inputs['games'],
+                           [r['merit_mean'] for r in self.result['teams']], probability(4), season=2026)))
         row = self.publish()
         body = (self.public / row['csv']).read_bytes()
         self.assertNotIn(b'\r', body)
@@ -120,6 +128,18 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(record['rank'], '')
             self.assertEqual(record['sos_mean'], '')
             self.assertNotIn(None, record)  # No accidental extra CSV columns.
+
+    def test_browser_policy_inputs_and_audit_must_reproduce_official_order(self):
+        for field in ('order', 'audit', 'policy_inputs'):
+            bad = copy.deepcopy(self.result)
+            if field == 'order':
+                bad['order'].reverse()
+            elif field == 'audit':
+                bad['audit'].append({'type': 'invented'})
+            else:
+                bad['policy_inputs']['games'][0]['home_points'] = 99
+            with self.assertRaises(ValueError):
+                live.publish(bad, self.inputs, 'bad-policy', self.now, self.public)
 
     def test_backfill_does_not_replace_current_season(self):
         current = self.publish()

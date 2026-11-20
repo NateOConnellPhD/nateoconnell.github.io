@@ -1,10 +1,8 @@
-"""Focused stdlib checks of v2 ordering; no fitting, network, or files."""
-from dataclasses import replace
-import itertools
-import math
+"""Focused v4 decision checks: no model fits, downloads, network, or files."""
+from dataclasses import asdict, replace
 import unittest
 
-from ranking_policy import CANONICAL, objective, optimize, prepare_policy
+from ranking_policy import CANONICAL, PolicyConflict, order_policy, prepare_policy
 
 
 def teams(n):
@@ -18,136 +16,124 @@ def games(pairs):
 
 
 def probability(n, pairs=None):
-    p = [[0 if i == j else .5 for j in range(n)] for i in range(n)]
+    p = [[.5] * n for _ in range(n)]
     for (i, j), value in (pairs or {}).items():
         p[i - 1][j - 1], p[j - 1][i - 1] = value, 1 - value
     return p
 
 
+def case(n=2, pairs=((2, 1),), means=None, probabilities=None, **settings):
+    spec = replace(CANONICAL, equal_records_only=False, undefeated_p4_protection=False, **settings)
+    state = prepare_policy(teams(n), games(pairs), list(range(n, 0, -1)) if means is None else means,
+                           probability(n, probabilities), season=2024, specification=spec)
+    return state
+
+
 class RankingTests(unittest.TestCase):
-    def make(self, roster=None, g=None, means=None, p=None, **opts):
-        roster = teams(4) if roster is None else roster
-        g = games([(1, 2), (3, 1), (2, 4)]) if g is None else g  # A,B both 1-1
-        means = [2, 4, 3, 1] if means is None else means  # B,C,A,D
-        p = probability(4, {(2, 1): .7, (2, 3): .8, (3, 1): .8}) if p is None else p
-        return prepare_policy(roster, g, means, p, season=2024, **opts)
+    def result(self, **kwargs):
+        return order_policy(case(**kwargs))
 
-    def test_all_intermediate_crossing_costs_are_paid(self):
-        state = self.make()
-        result = optimize(state)
-        self.assertEqual(result['order'], [2, 3, 1, 4])  # endpoint cost .44 < .5, total 1.08 > .5
-        stronger = self.make(specification=replace(CANONICAL, h2h_bonus=1.5))
-        moved = optimize(stronger)
-        self.assertEqual(len(moved['moves']), 1)
-        self.assertEqual(len(moved['moves'][0]['crossed_team_ids']), 2)
-        self.assertAlmostEqual(moved['moves'][0]['objective_change'], -0.42)
+    def test_threshold_is_inclusive_and_protection_is_strict(self):
+        for p, expected in ((.9, [2, 1]), (.900001, [1, 2])):
+            self.assertEqual(self.result(probabilities={(1, 2): p})['order'], expected)
 
-    def test_intermediate_confidence_locks_block_large_bonus(self):
-        state = self.make(p=probability(4, {(2, 1): .9, (2, 3): .95, (3, 1): .95}),
-                          specification=replace(CANONICAL, h2h_bonus=100))
-        result = optimize(state)
-        self.assertEqual(result['order'], [2, 3, 1, 4])
-        self.assertFalse(result['moves'])
+    def test_independent_merit_protection_overrides_higher_h2h_threshold(self):
+        r = self.result(probabilities={(1, 2): .85}, merit_protection=.8, head_to_head=.95)
+        self.assertEqual(r['order'], [1, 2])
+        blocked = next(a for a in r['audit'] if a['type'] == 'head_to_head')
+        self.assertEqual(blocked['conflict_path'], [1, 2])
 
-    def test_exact_ninety_is_eligible_but_above_ninety_is_locked(self):
-        for p_value, allowed in ((.90, True), (.900001, False)):
-            state = self.make(p=probability(4, {(2, 1): p_value}),
-                              specification=replace(CANONICAL, h2h_bonus=100))
-            result = optimize(state)
-            self.assertEqual(result['order'].index(1) < result['order'].index(2), allowed)
+    def test_intervening_team_is_not_position_swapped(self):
+        r = self.result(n=4, pairs=((3, 1), (2, 4), (4, 2)))
+        self.assertEqual(r['order'], [2, 3, 1, 4])
 
-    def test_zero_bonuses_keep_mean_order_without_hard_conflicts(self):
-        state = self.make(specification=replace(CANONICAL, h2h_bonus=0, common_bonus=0))
-        result = optimize(state)
-        self.assertEqual(result['order'], result['raw_order'])
-        self.assertFalse(result['moves'])
+    def test_full_protected_path_blocks_direct_rule(self):
+        r = self.result(n=4, pairs=((3, 1), (2, 4), (4, 2)), merit_protection=.7,
+                        probabilities={(1, 2): .71, (2, 3): .73, (1, 3): .65})
+        blocked = next(a for a in r['audit'] if a['type'] == 'head_to_head')
+        self.assertEqual(blocked['conflict_path'], [1, 2, 3])
+        self.assertEqual([a['type'] for a in blocked['conflict_requirements']], ['merit_protection'] * 2)
+        self.assertEqual(r['order'], [1, 2, 3, 4])
 
-    def test_unequal_records_do_not_get_direct_preference(self):
-        state = self.make(teams(2), games([(1, 2)]), [0, 1], probability(2))
-        self.assertFalse(state['evidence'])
-        self.assertEqual(optimize(state)['order'], [2, 1])
+    def test_large_rank_gap_is_eligible(self):
+        pairs = [(8, 1)] + [(a, b) for i in range(2, 8) for a, b in ((i, 8), (8, i))]
+        r = self.result(n=8, pairs=pairs, probabilities={(1, 8): .7})
+        self.assertEqual(r['order'], [2, 3, 4, 5, 6, 7, 8, 1])
 
-    def test_split_direct_results_do_not_create_direct_preference(self):
-        state = self.make(teams(2), games([(1, 2), (2, 1)]), [0, 1], probability(2))
-        self.assertFalse(state['evidence'])
+    def test_adjacent_confident_pair_is_protected(self):
+        self.assertEqual(self.result(probabilities={(1, 2): .99})['order'], [1, 2])
 
-    def test_common_opponent_dominance_and_mixed_results(self):
-        g = games([(1, 3), (4, 1), (3, 2), (2, 5)])
-        state = self.make(teams(5), g, [1, 2, 0, 3, -1], probability(5))
-        self.assertTrue(any(e['winner_id'] == 1 and e['loser_id'] == 2
-                            and e['type'] == 'common_opponents' for e in state['evidence']))
-        g = games([(1, 3), (4, 1), (3, 2), (2, 4)])
-        state = self.make(teams(4), g, [1, 2, 0, 3], probability(4))
-        self.assertFalse(any({e['winner_id'], e['loser_id']} == {1, 2} for e in state['evidence']))
+    def test_alphabetical_conflict_priority_not_rank_distance(self):
+        r = self.result(n=3, pairs=((1, 2), (2, 3), (3, 1)), means=[3, 1, 2])
+        self.assertEqual(r['order'], [1, 2, 3])
+        blocked = [a for a in r['audit'] if a['status'] == 'blocked_by_conflict']
+        self.assertEqual(len(blocked), 1)
+        self.assertEqual(blocked[0]['conflict_path'], [1, 2, 3])
 
-    def test_soft_h2h_cycles_are_not_hard_constraints(self):
-        state = self.make(teams(3), games([(1, 2), (2, 3), (3, 1)]), [3, 2, 1], probability(3))
-        result = optimize(state)
-        self.assertEqual(sorted(result['order']), [1, 2, 3])
-        self.assertEqual(len(result['evidence']), 3)
-        self.assertFalse(all(e['honored'] for e in result['evidence']))
+    def test_common_threshold_crossing(self):
+        for threshold, before in ((.7, True), (.699, False)):
+            r = self.result(n=3, pairs=((1, 3), (3, 2)), means=[2, 3, 1],
+                            probabilities={(2, 1): .7, (1, 3): .99, (2, 3): .99}, common_opponents=threshold)
+            self.assertEqual(r['order'].index(1) < r['order'].index(2), before)
 
-    def test_confidence_lock_also_applies_against_the_mean_order(self):
-        state = self.make(teams(2), games([(1, 2), (2, 1)]), [2, 1], probability(2, {(2, 1): .95}))
-        result = optimize(state)
-        self.assertEqual(result['raw_order'], [1, 2])
-        self.assertEqual(result['order'], [2, 1])
-        self.assertNotEqual(result['initial_feasible_order'], result['raw_order'])
+    def test_direct_split_never_falls_back_to_common(self):
+        r = self.result(n=3, pairs=((1, 2), (2, 1), (1, 3), (3, 2)))
+        self.assertFalse(any({a['winner_id'], a['loser_id']} == {1, 2} for a in r['audit']))
 
-    def test_equal_draws_do_not_create_reverse_certainty(self):
-        state = self.make(teams(2), games([(1, 2), (2, 1)]), [0, 0], [[0, 0], [0, 0]])
-        self.assertFalse(state['locks'])
-        self.assertEqual(optimize(state)['order'], [1, 2])
+    def test_threshold_blocked_direct_never_falls_back_to_common(self):
+        r = self.result(n=3, pairs=((2, 1), (1, 3), (3, 2)),
+                        probabilities={(1, 2): .7}, head_to_head=.5, common_opponents=.99)
+        pair = [a for a in r['audit'] if {a['winner_id'], a['loser_id']} == {1, 2}]
+        self.assertEqual([(a['type'], a['status']) for a in pair], [('head_to_head', 'blocked_by_threshold')])
 
-    def test_no_game_teams_are_unranked(self):
-        state = self.make(teams(3), games([(1, 2)]), [1, -1, 0], probability(3))
-        result = optimize(state)
-        self.assertEqual(result['order'], [1, 2])
-        self.assertEqual(result['unranked'], [3])
+    def test_equal_record_toggle(self):
+        state = case()
+        state['specification']['equal_records_only'] = True
+        self.assertEqual(order_policy(state)['order'], [1, 2])
+        self.assertEqual(self.result()['order'], [2, 1])
 
-    def test_p4_exception_is_explicit_and_does_not_protect_independents(self):
-        roster = teams(2)
-        roster[0]['conference'] = 'ACC'
-        g = games([(1, 2)] * 8)
-        p = probability(2, {(2, 1): .99})
-        result = optimize(self.make(roster, g, [0, 1], p))
-        self.assertEqual(result['order'], [1, 2])
-        self.assertEqual(result['protected_team_ids'], [1])
-        self.assertEqual(len(result['protection_exceptions']), 1)
-        roster[0]['conference'] = 'FBS Independents'
-        self.assertEqual(optimize(self.make(roster, g, [0, 1], p))['order'], [2, 1])
-        roster[0]['conference'] = None
-        with self.assertRaisesRegex(ValueError, 'Missing season conference'):
-            self.make(roster, g, [0, 1], p)
+    def test_p4_override_and_toggle(self):
+        roster = teams(2); roster[0]['conference'] = 'ACC'
+        for enabled, expected in ((True, [1, 2]), (False, [2, 1])):
+            r = order_policy(prepare_policy(roster, games([(1, 2)] * 8), [0, 1],
+                probability(2, {(2, 1): .99}), season=2024,
+                specification=replace(CANONICAL, undefeated_p4_protection=enabled)))
+            self.assertEqual(r['order'], expected)
+            self.assertEqual(len(r['protection_exceptions']), int(enabled))
 
-    def test_p4_does_not_silently_remove_an_intermediate_lock(self):
-        roster = teams(4)
-        roster[0]['conference'] = 'ACC'
-        g = games([(1, 2)] * 2 + [(1, 4)] * 6 + [(3, 2), (4, 3)])
-        p = probability(4, {(2, 3): .95, (3, 1): .95, (2, 1): .95})
-        with self.assertRaisesRegex(ValueError, 'constraints conflict'):
-            optimize(self.make(roster, g, [2, 4, 3, 1], p))
+    def test_p4_does_not_remove_intermediary_locks(self):
+        roster = teams(4); roster[0]['conference'] = 'ACC'
+        with self.assertRaises(PolicyConflict) as error:
+            order_policy(prepare_policy(roster, games([(1, 2)] * 2 + [(1, 4)] * 6 + [(3, 2), (4, 3)]),
+                [2, 4, 3, 1], probability(4, {(2, 3): .95, (3, 1): .95, (2, 1): .95}), season=2024))
+        self.assertGreater(len(error.exception.decision['conflict_path']), 1)
 
-    def test_unknown_historical_policy_and_bad_probabilities_fail(self):
-        with self.assertRaisesRegex(ValueError, 'historical policy'):
-            prepare_policy(teams(2), games([(1, 2)]), [1, 0], probability(2), season=2023)
-        for p in ([[0, .9], [.9, 0]], [[0, math.nan], [.5, 0]]):
+    def test_hard_majority_cycle_fails_with_audit(self):
+        with self.assertRaises(PolicyConflict) as error:
+            self.result(n=3, pairs=((1, 2), (2, 3), (3, 1)), merit_protection=.5,
+                        probabilities={(1, 2): .6, (2, 3): .6, (3, 1): .6})
+        self.assertEqual(error.exception.decision['status'], 'blocked_by_conflict')
+
+    def test_ties_no_game_teams_and_stable_names(self):
+        r = self.result(n=3, pairs=((1, 2), (2, 1)), means=[0, 0, 100])
+        self.assertEqual(r['order'], [1, 2])
+        self.assertEqual(r['unranked'], [3])
+        self.assertEqual(r['confidence_lock_count'], 0)
+
+    def test_only_declared_controls(self):
+        self.assertEqual(set(asdict(CANONICAL)) - {'version'},
+            {'merit_protection', 'head_to_head', 'common_opponents', 'equal_records_only', 'undefeated_p4_protection'})
+        for value in (.49, 1., float('nan'), True):
             with self.assertRaises(ValueError):
-                self.make(teams(2), games([(1, 2)]), [1, 0], p)
+                replace(CANONICAL, head_to_head=value)
 
-    def test_reproducible_local_optimum_checked_by_independent_permutations(self):
-        state = self.make(specification=replace(CANONICAL, h2h_bonus=1.5))
-        result = optimize(state)
-        self.assertEqual(result, optimize(state))
-        order = [state['ids'].index(i) for i in result['order']]
-        # Exhaustive four-team enumeration is an independent oracle for this fixture.
-        self.assertAlmostEqual(result['objective'], min(objective(state['cost'], p)
-                               for p in itertools.permutations(range(4))))
-        for start in range(4):
-            for end in range(4):
-                candidate = list(order)
-                candidate.insert(end, candidate.pop(start))
-                self.assertGreaterEqual(objective(state['cost'], candidate), result['objective'] - 1e-9)
+    def test_invalid_probability_or_missing_conference_fails(self):
+        p = probability(2); p[0][1] = .9
+        with self.assertRaises(ValueError):
+            prepare_policy(teams(2), games([(1, 2)]), [1, 0], p, season=2024)
+        roster = teams(2); roster[0]['conference'] = None
+        with self.assertRaisesRegex(ValueError, 'Missing season conference'):
+            prepare_policy(roster, games([(1, 2)] * 8), [1, 0], probability(2), season=2024)
 
 
 if __name__ == '__main__':
