@@ -1,0 +1,132 @@
+name: Update and publish CFB rankings
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season: current, or a year from 2024 onward'
+        default: 'current'
+        required: true
+        type: string
+      refresh_metadata:
+        description: 'Refresh roster/calendar too (two additional requests)'
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/cfb/**'
+      - '.github/workflows/cfb-rankings.yml'
+  schedule:
+    - cron: '17 8 * 8-12 0'
+      timezone: 'America/New_York'
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: cfb-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'NateOConnellPhD/nateoconnell.github.io' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      JAX_PLATFORMS: cpu
+      MPLBACKEND: Agg
+      XDG_CACHE_HOME: ${{ github.workspace }}/.codex-tmp/cfb-refit/cache
+      MPLCONFIGDIR: ${{ github.workspace }}/.codex-tmp/cfb-refit/matplotlib
+      JAX_COMPILATION_CACHE_DIR: ${{ github.workspace }}/.codex-tmp/cfb-refit/jax-cache
+      TMPDIR: ${{ github.workspace }}/.codex-tmp/cfb-refit/tmp
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Fetch the season once and check for changed inputs
+        id: prepare
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+          CFB_SEASON: ${{ inputs.season || 'current' }}
+          CFB_REFRESH_METADATA: ${{ inputs.refresh_metadata }}
+        run: |
+          mkdir -p "$TMPDIR"
+          args=(prepare --season "$CFB_SEASON")
+          if [ "$CFB_REFRESH_METADATA" = true ]; then
+            args+=(--refresh-metadata)
+          fi
+          python3 -B scripts/cfb/update_rankings.py "${args[@]}"
+      - uses: actions/setup-python@v7
+        if: steps.prepare.outputs.needs_fit == 'true'
+        with:
+          python-version: '3.12'
+      - uses: actions/cache/restore@v6
+        if: steps.prepare.outputs.needs_fit == 'true'
+        id: cache
+        with:
+          path: |
+            .codex-tmp/cfb-refit/fits
+            .codex-tmp/cfb-refit/scores
+            .codex-tmp/cfb-refit/exact
+          key: cfb-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}
+          restore-keys: |
+            cfb-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
+      - name: Install pinned numerical packages into the disposable environment
+        if: steps.prepare.outputs.needs_fit == 'true'
+        run: |
+          python3 -m venv .codex-tmp/cfb-refit/venv
+          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --disable-pip-version-check --no-cache-dir --no-compile --only-binary=:all: -r scripts/cfb/requirements.txt
+      - name: Check scoring and publication boundaries
+        if: steps.prepare.outputs.needs_fit == 'true'
+        run: |
+          (cd scripts/cfb && ../../.codex-tmp/cfb-refit/venv/bin/python -B -m unittest test_scoring.CreditTests test_exact_scoring)
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_publication.py
+      - name: Fit if needed and save checked rankings
+        id: complete
+        run: |
+          runner=python3
+          if [ -x .codex-tmp/cfb-refit/venv/bin/python ]; then
+            runner=.codex-tmp/cfb-refit/venv/bin/python
+          fi
+          python3 -B scripts/cfb/run_bounded.py "$runner" -B scripts/cfb/update_rankings.py complete
+      - name: Record an unsuccessful update without replacing rankings
+        if: failure() && steps.prepare.outcome == 'success'
+        run: python3 -B scripts/cfb/update_rankings.py failed
+      - name: Commit saved data and ranking snapshots
+        id: commit
+        if: always() && steps.prepare.outcome == 'success'
+        run: |
+          git add -- _cfb_data/seasons assets/data/cfb
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git diff --cached --check
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Update current CFB rankings and saved season data'
+          for attempt in 1 2 3; do
+            git pull --no-rebase --no-edit origin main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          exit 1
+      - name: Rebuild the public website
+        if: always() && steps.commit.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
+      - uses: actions/cache/save@v6
+        if: success() && steps.prepare.outputs.needs_fit == 'true' && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            .codex-tmp/cfb-refit/fits
+            .codex-tmp/cfb-refit/scores
+            .codex-tmp/cfb-refit/exact
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Remove this job's temporary environment and arrays
+        if: always()
+        run: rm -rf -- .codex-tmp/cfb-refit

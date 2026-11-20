@@ -40,16 +40,10 @@ def checked_cache(folder, filename):
     return report
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--season', type=int, required=True)
-    parser.add_argument('--through-week', type=int)
-    parser.add_argument('--as-of', help='ISO8601 timestamp with timezone; at or before saved data observation')
-    parser.add_argument('--seed', type=int, default=20261120)
-    args = parser.parse_args()
-    if args.season < 2024:
+def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False):
+    if season < 2024:
         raise ValueError('Historical protection policy must be selected before pre-2024 ranking runs')
-    inputs = load_inputs(args.season, through_week=args.through_week, as_of=args.as_of)
+    inputs = load_inputs(season, through_week=through_week, as_of=as_of)
     packages = {name: version(name) for name in ('numpy', 'scipy', 'jax', 'jaxlib', 'numpyro', 'arviz')}
     # Check dependency availability before creating output. Do not install anything.
     for key, leaf in (('XDG_CACHE_HOME', 'cache'), ('MPLCONFIGDIR', 'matplotlib'),
@@ -60,7 +54,7 @@ def main():
                        ('OPENBLAS_NUM_THREADS', '1'), ('OMP_NUM_THREADS', '1')):
         os.environ[key] = value
     import numpy as np
-    from loo_scoring import score
+    from loo_scoring import score, flatten, game_values
     from ranking_policy import rank_merit
     from refit_2024 import describe, predictive_summary
 
@@ -69,7 +63,7 @@ def main():
     fit_identity = {'model': asdict(MODEL), 'model_source': source_hash('model.py'),
                     'diagnostic_source': source_hash('refit_2024.py'),
                     'model_data_sha256': digest(model_data), 'packages': packages,
-                    'seed': args.seed, 'warmup': 1000, 'draws': 1000, 'chains': 4}
+                    'seed': seed, 'warmup': 1000, 'draws': 1000, 'chains': 4}
     fit_key = digest(fit_identity)
     fitted = TASK / 'fits' / fit_key
     reused_fit = fitted.exists()
@@ -82,11 +76,11 @@ def main():
     else:
         fitted.mkdir(parents=True)
         sampler = fit(len(inputs['teams']), **inputs['data'], specification=MODEL,
-                      seed=args.seed, warmup=1000, draws=1000)
+                      seed=seed, warmup=1000, draws=1000)
         samples, diagnostics, parameters = describe(sampler)
         np.savez_compressed(fitted / 'posterior.npz', **samples)
         report = {'identity': fit_identity, 'diagnostics': diagnostics, 'parameters': parameters,
-                  'posterior_predictive': predictive_summary(samples, inputs['data'], args.seed + 1),
+                  'posterior_predictive': predictive_summary(samples, inputs['data'], seed + 1),
                   'array_sha256': file_hash(fitted / 'posterior.npz')}
         write_json(fitted / 'report.json', report)
         if not diagnostics['sampling_checks_passed']:
@@ -95,6 +89,7 @@ def main():
 
     score_identity = {'fit_key': fit_key, 'posterior_sha256': report['array_sha256'],
                       'scorer_source': source_hash('loo_scoring.py'), 'reference_rank': 25,
+                      'exact_loo': exact_loo, 'exact_runner_source': source_hash('fit_saved_season.py') if exact_loo else None,
                       'game_ids': [g['id'] for g in inputs['games']]}
     score_key = digest(score_identity)
     scored_folder = TASK / 'scores' / score_key
@@ -106,7 +101,32 @@ def main():
         with np.load(scored_folder / 'merit.npz', allow_pickle=False) as saved:
             merit, sos = saved['merit'], saved['sos']
     else:
-        scored = score(samples, inputs['data'])  # Unreliable PSIS stops here; no approximate fallback.
+        def refit_game(game):
+            ident = {'fit_key': fit_key, 'game_id': inputs['games'][game]['id'],
+                     'runner_source': source_hash('fit_saved_season.py'),
+                     'scorer_source': source_hash('loo_scoring.py'), 'seed': seed + game + 100}
+            folder = TASK / 'exact' / digest(ident)
+            if folder.exists():
+                saved_report = checked_cache(folder, 'quantities.npz')
+                if saved_report['identity'] != ident or not saved_report['diagnostics']['sampling_checks_passed']:
+                    raise ValueError('Exact LOO cache validation failed')
+                with np.load(folder / 'quantities.npz', allow_pickle=False) as saved:
+                    return dict(saved)
+            print(json.dumps({'exact_loo_game': ident['game_id']}), flush=True)
+            omitted = {key: values[:game] + values[game+1:] for key, values in inputs['data'].items()}
+            sampler = fit(len(inputs['teams']), **omitted, specification=MODEL,
+                          seed=ident['seed'], warmup=1000, draws=1000)
+            exact_samples, diagnostics, _ = describe(sampler)
+            if not diagnostics['sampling_checks_passed']:
+                raise ValueError('Exact LOO failed sampling diagnostics; last published ranking is preserved')
+            quantities = game_values(flatten(exact_samples), inputs['data'], game)
+            folder.mkdir(parents=True)
+            np.savez_compressed(folder / 'quantities.npz', **quantities)
+            write_json(folder / 'report.json', {'identity': ident, 'diagnostics': diagnostics,
+                       'array_sha256': file_hash(folder / 'quantities.npz')})
+            return quantities
+
+        scored = score(samples, inputs['data'], exact_refitter=refit_game if exact_loo else None)
         merit, sos = scored['merit'], scored['sos']
         scored_folder.mkdir(parents=True)
         np.savez_compressed(scored_folder / 'merit.npz', merit=merit, sos=sos)
@@ -114,7 +134,7 @@ def main():
                         'game_audit': [{**row, 'game_id': inputs['games'][row['game']]['id']} for row in scored['audit']],
                         'array_sha256': file_hash(scored_folder / 'merit.npz')}
         write_json(scored_folder / 'report.json', score_report)
-    result = rank_merit(inputs['teams'], inputs['games'], merit, season=args.season)
+    result = rank_merit(inputs['teams'], inputs['games'], merit, season=season)
     index = {t['id']: i for i, t in enumerate(inputs['teams'])}
     for row in result['teams']:
         values = sos[:, index[row['id']]]
@@ -126,7 +146,7 @@ def main():
                         'input_preparation_source': source_hash('season_inputs.py'),
                         'runner_source': source_hash('fit_saved_season.py'),
                         'inputs': {k: v for k, v in inputs.items() if k not in ('data', 'games', 'teams')}}
-    result.update(identity=ranking_identity, season=args.season, status='candidate_for_review',
+    result.update(identity=ranking_identity, season=season, status='candidate_for_review',
                   sampling_diagnostics=report['diagnostics'], loo_diagnostics=score_report['diagnostics'],
                   data_cutoff=inputs['cutoff'], games=len(inputs['games']))
     output = TASK / 'rankings' / digest(ranking_identity)
@@ -135,6 +155,17 @@ def main():
     print(json.dumps({'candidate': str(output / 'candidate.json'), 'fit_reused': reused_fit,
                       'scores_reused': reused_score, 'seconds': round(time.monotonic() - started, 2),
                       'publication_ready': False}), flush=True)
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--season', type=int, required=True)
+    parser.add_argument('--through-week', type=int)
+    parser.add_argument('--as-of', help='ISO8601 timestamp with timezone; at or before saved data observation')
+    parser.add_argument('--seed', type=int, default=20261120)
+    parser.add_argument('--exact-loo', action='store_true', help='Refit and diagnose games with unreliable PSIS')
+    run(**vars(parser.parse_args()))
 
 
 if __name__ == '__main__':

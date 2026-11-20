@@ -1,5 +1,55 @@
 # Margin of Merit: model and automated updates
 
+## Current-season publishing
+
+The production entry point is now `.github/workflows/cfb-rankings.yml`, named
+**Update and publish CFB rankings**. Pushing changes to that workflow or
+`scripts/cfb/` starts a current-season update automatically. It also runs Sundays
+at 8:17 a.m. America/New_York, August–December, and supports **Run workflow**
+with season `current` (or a specified year from 2024). January–July selects the
+previous season for manual updates. The older data-only workflow is for
+maintenance; it does not publish rankings.
+
+The new workflow uses the existing `CFBD_API_KEY` repository secret, saves the
+source responses, installs the pinned numerical dependencies on GitHub only
+when a new ranking is needed, runs the canonical model and v2 policy, commits
+JSON/CSV snapshots under `assets/data/cfb/`, and explicitly requests a Pages
+build. It does not use OpenAI or require the owner's computer to remain on.
+The first current-season import makes three API requests; subsequent imports
+normally make one. Visitors only read stored files.
+
+Every successful snapshot is immutable. The index retains earlier weeks and
+revisions and selects the newest season/cutoff as current. Results include the
+actual observation time and games used; an in-progress week is not described
+as complete. An unchanged input/implementation identity reuses the published
+snapshot without installing packages or fitting, even if numerical caches
+have expired. A separate Actions cache can reuse posterior/LOO arrays after
+policy changes. Numerical caches are expendable; website history lives in Git.
+
+Unreliable PSIS games now get sequential omitted-game NUTS refits, each checked
+against the same sampling requirements. The exact marginal replaces the PSIS
+marginal while retaining the disclosed approximate joint quantile coupling.
+Failed sampling, failed exact refits, unresolved ranking constraints, or failed
+publication validation preserve the last successful ranking. The public index
+records an unsuccessful numerical update. Failed data fetching leaves all
+previous files intact. Publication also checks roster/record parity, unique
+ranks, finite summaries, and top-K probability accounting.
+
+The job has a 45-minute timeout and bounds its numerical steps to 35 minutes
+and 1.5 GB under `.codex-tmp/cfb-refit`. It uses one sequential sampling process
+and cleans the disposable environment after saving numerical caches. It never
+force-pushes; concurrent repository changes are merged before saving results.
+
+Local validation of this connection: nine focused publication/reuse/failure
+tests passed; the Python sources and workflow syntax were reviewed. The new
+exact-refit integration is checked by focused numerical tests in the workflow
+before fitting. It has not yet run locally or on GitHub. This session cannot
+push or dispatch through its blocked GitHub connection, so **current-season
+results are not yet live**. The next owner push starts the job; inspect its run
+and Pages build before claiming successful deployment.
+
+## Earlier validation and remaining historical work
+
 Status, 2026-11-20: the three 2024 refits and independent LOO spot checks are
 complete. The canonical and archived-prior refits have identical point ranks
 for all 134 teams. A separate likelihood-weighting error was identified in the
@@ -8,9 +58,9 @@ saved archive; it must not be attributed to the new scale floor. See
 Maintained source now includes PSIS scoring, a reference ordering policy, and
 comparison commands. The first live CFBD sync succeeded for 2024; the saved
 inputs have been audited against the reference, including documented venue
-corrections. See [the data audit](CFB-2024-DATA-AUDIT.md). Exact-LOO
-fallback, historical policy, scheduled updates, automated publication, and the
-public blog section remain unfinished.
+corrections. See [the data audit](CFB-2024-DATA-AUDIT.md). The new production
+connection is described above; pre-2024 conference policy and historical
+backfills still need separate work.
 The updated private Margin of Merit v2 handoff replaces the production ordering
 policy, not the statistical model or importer. The maintained v2 implementation
 and saved-data fitting command are now present. The 2024 saved-data run passed
@@ -175,7 +225,8 @@ or publication-performance estimates.
 Candidates include sampling/LOO diagnostics, source provenance, venue corrections,
 the data cutoff, policy identity, official and raw ranks, raw top-K probabilities,
 and ordering audits. Failed sampling or unreliable PSIS produces no candidate.
-The latter still requires the planned exact-LOO fallback. A candidate remains
+The standalone command can enable exact refits with `--exact-loo`; the production
+workflow enables them automatically. A candidate remains
 `publication_ready: false` pending the complete publication review.
 
 ## One model throughout each season
@@ -284,7 +335,7 @@ GitHub-token commits do not trigger a Pages build automatically. The eventual
 publication workflow must explicitly request a build, as the existing
 publications workflow does. Concurrent publication jobs must handle repository
 changes without force pushing or losing unrelated edits. The data-sync workflow
-is manual only; no automatic CFB schedule is enabled yet. Model computation
+is manual only; the separate rankings workflow now defines the Sunday schedule. Model computation
 requires no OpenAI API calls.
 
 ## Historical and live data
