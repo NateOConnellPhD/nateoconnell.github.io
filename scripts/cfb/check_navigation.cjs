@@ -32,9 +32,12 @@ const index = {schema: 'margin-of-merit-index-v1', latest: rows[0].id, snapshots
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const nodes = new Map(), get = key => {
-    if (!nodes.has(key)) nodes.set(key, new Element(['season', 'week', 'update', 'conference', 'limit'].includes(key)));
+    if (!nodes.has(key)) nodes.set(key, new Element(['season', 'week', 'update', 'conference', 'limit', 'poll', 'poll-edition'].includes(key)));
     return nodes.get(key);
   };
+  for (const [key, values] of [['poll', ['', 'ap', 'cfp']], ['limit', ['25', 'all']]]) {
+    get(key).replaceChildren(...values.map(value => { const option = new Element(); option.value = value; return option; }));
+  }
   const root = new Element(); root.dataset.index = '/assets/data/cfb/index.json';
   root.querySelector = selector => get(selector.match(/data-cfb-([^\]]+)/)[1]);
   const location = {href: `https://example.test/blog/cfb/${query}`, search: query};
@@ -47,6 +50,10 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
     fetch: async address => {
       requests.push(String(address));
       const name = String(address).split('/').pop();
+      if (name === 'polls.json') {
+        const season = String(address).split('/').at(-2), value = fixtures[`polls-${season}`];
+        return {ok: Boolean(value), status: value ? 200 : 404, json: async () => value};
+      }
       const saved = data.snapshots.find(r => `${r.id}.json` === name);
       return {ok: true, json: async () => name === 'index.json' ? data : {...saved, publication_ready: true,
         schema: 'margin-of-merit-snapshot-v1', teams: [], policy_sha256: 'same', data_observed_at: saved.data_cutoff,
@@ -140,5 +147,44 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.deepEqual(calls, ['2026-11-new', '2026-10-new'], 'Apply custom rules to both weeks');
   assert.match(custom.get('comparison').textContent, /Both weeks use your selected rules/);
   assert.deepEqual(custom.get('rows').children[0].children.map(tr => tr.children.at(-1).textContent), ['0', '↑ 2', '0', '↓ 2']);
-  console.log('Navigation and weekly movement checks passed, including gaps, same-week revisions, unchanged/new teams, metadata, rules and cache reuse.');
+
+  const pollArchive = {schema: 'margin-of-merit-polls-v1', season: 2026, retrieved_at: '2026-11-20T00:00:00Z', editions: [
+    {id: 'ap-regular-12', poll: 'ap', season_type: 'regular', week: 12, ranks: [{id: 1, rank: 3}, {id: 2, rank: 1}, {id: 6, rank: 25}]},
+    {id: 'ap-regular-11', poll: 'ap', season_type: 'regular', week: 11, ranks: [{id: 1, rank: 1}]},
+    {id: 'cfp-regular-13', poll: 'cfp', season_type: 'regular', week: 13, ranks: [{id: 3, rank: 1}]},
+    {id: 'cfp-regular-16-final', poll: 'cfp', season_type: 'regular', week: 16, final: true, ranks: [{id: 1, rank: 1}]}]};
+  const withPolls = {...fixtures, 'polls-2026': pollArchive,
+    '2026-11-new': {teams: teams([1, 2, 3, 4, null, 30])}};
+  const compared = await page('', weeklyIndex, withPolls);
+  assert.equal(compared.requests.some(u => u.endsWith('/polls.json')), false, 'Do not fetch polls until requested');
+  await compared.change('poll', 'ap');
+  assert.equal(compared.get('poll-edition').value, 'ap-regular-12');
+  let comparedRows = compared.get('rows').children[0].children;
+  assert.equal(comparedRows.length, 5, 'Include poll Top 25 teams outside the merit Top 25');
+  assert.equal(comparedRows[0].children[2].textContent, 3);
+  assert.equal(comparedRows[0].children[3].textContent, '+2');
+  assert.equal(comparedRows[1].children[3].textContent, '-1');
+  assert.equal(comparedRows[2].children[2].textContent, 'NR');
+  assert.equal(comparedRows[2].children[3].textContent, 'N/A', 'NR is not rank 26');
+  assert.equal(comparedRows[0].children.at(-1).textContent, '↑ 2', 'Weekly movement stays last and independent of polls');
+  assert.match(compared.get('poll-note').textContent, /week 12/);
+  await compared.change('poll', 'cfp');
+  assert.equal(compared.get('poll-edition').value, '', 'Do not substitute a future CFP edition');
+  assert.match(compared.get('poll-note').textContent, /no saved edition/);
+  assert.equal(compared.get('rows').children[0].children[0].children[2].textContent, 'N/A');
+  await compared.change('poll-edition', 'cfp-regular-16-final');
+  assert.match(compared.get('poll-note').textContent, /week 16 \(final\)/);
+  await compared.change('week', '10');
+  await compared.change('poll', 'ap');
+  assert.equal(compared.get('poll-edition').value, 'ap-regular-11', 'Week change selects the matching suggested edition');
+  assert.equal(compared.requests.filter(u => u.endsWith('/polls.json')).length, 1, 'Weeks and poll choices reuse one static season file');
+  assert.equal(compared.requests.every(u => u.startsWith('https://example.test/') || u === '/assets/data/cfb/index.json'), true);
+  await compared.change('poll', '');
+  assert.equal(compared.get('poll-rank-heading').hidden, true);
+  assert.equal(compared.get('rows').children[0].children[0].children.length, 8);
+  const missingPolls = await page('', weeklyIndex, fixtures);
+  await missingPolls.change('poll', 'ap');
+  assert.match(missingPolls.get('poll-note').textContent, /could not be loaded/);
+  assert.equal(missingPolls.get('results').hidden, false, 'Missing polls never hide merit rankings');
+  console.log('Navigation, weekly movement and poll checks passed: editions, gaps, ties/NR, rank differences, rules and cache reuse.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

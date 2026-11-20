@@ -5,6 +5,8 @@
   const el = key => root.querySelector(`[data-cfb-${key}]`);
   const base = new URL('./', new URL(root.dataset.index, location.href));
   const snapshots = new Map();
+  const pollSeasons = new Map();
+  let pollData = null, activePoll = null, pollLoadNumber = 0;
   const explorer = window.CFBExplorer(root, {fetchJSON, url, select});
   let index, current, previous, loadNumber = 0;
   let previousRanks = new Map(), comparisonUnavailable = '', customComparisonUnavailable = '';
@@ -44,6 +46,59 @@
   function option(value, label) {
     const node = document.createElement('option');
     node.value = value; node.textContent = label; return node;
+  }
+  function pollName() { return el('poll').value === 'cfp' ? 'CFP' : 'AP'; }
+  function renderPollEdition() {
+    if (!current) return;
+    activePoll = pollData?.editions.find(p => p.poll === el('poll').value && p.id === el('poll-edition').value) || null;
+    const expected = current.week + 1;
+    const shown = activePoll ? `${activePoll.season_type === 'postseason' ? 'postseason' : 'regular-season'} week ${activePoll.week}${activePoll.final ? ' (final)' : ''}` : `regular-season week ${expected}`;
+    el('poll-note').textContent = `${pollName()} ${shown}: ${activePoll ? 'saved' : 'no saved edition available'}. Margin of Merit uses results through week ${current.week}. Poll weeks use the provider’s labels; exact release dates are not supplied. The following poll week is suggested, and you can select another edition. Differences compare the rank shown here with the poll: positive means higher here. NR means outside that poll’s Top 25; N/A means the edition is unavailable. Saved ${date(pollData.retrieved_at)}.`;
+    render();
+  }
+  async function loadPolls() {
+    const sequence = ++pollLoadNumber, snapshot = current, chosen = el('poll').value;
+    pollData = null; activePoll = null;
+    const enabled = Boolean(chosen);
+    if (!enabled && ['poll_rank', 'poll_gap'].includes(sortKey)) sortBy('rank', 1);
+    el('poll-edition-control').hidden = !enabled;
+    el('poll-note').hidden = !enabled;
+    el('poll-rank-heading').hidden = !enabled; el('poll-gap-heading').hidden = !enabled;
+    el('poll-rank-label').textContent = `${pollName()} rank`;
+    el('poll-gap-label').textContent = `Vs. ${pollName()}`;
+    if (el('limit').options[0]) el('limit').options[0].textContent = enabled ? 'Either Top 25' : 'Top 25';
+    if (!enabled || !snapshot) { render(); return; }
+    el('poll-edition').replaceChildren(option('', 'Loading poll editions…'));
+    el('poll-edition').disabled = true;
+    el('poll-note').textContent = 'Loading saved poll editions…'; render();
+    try {
+      if (!pollSeasons.has(snapshot.season)) {
+        const pending = fetchJSON(url(`seasons/${snapshot.season}/polls.json`), 'no-cache').then(data => {
+          if (data.schema !== 'margin-of-merit-polls-v1' || data.season !== snapshot.season || !Array.isArray(data.editions)) throw new Error('Invalid poll archive');
+          return data;
+        });
+        pollSeasons.set(snapshot.season, pending);
+        pending.catch(() => pollSeasons.delete(snapshot.season));
+      }
+      const data = await pollSeasons.get(snapshot.season);
+      if (sequence !== pollLoadNumber || snapshot !== current) return;
+      pollData = data;
+      const editions = data.editions.filter(p => p.poll === chosen);
+      // A provider poll week is not an observed game cutoff. Keep the exact
+      // edition visible and adjustable instead of claiming date alignment.
+      const suggested = editions.filter(p => p.season_type === 'regular' && p.week === current.week + 1);
+      const preferred = suggested.find(p => p.final) || suggested[0];
+      el('poll-edition').replaceChildren(...(preferred ? [] : [option('', `Week ${current.week + 1} · not available`)]),
+        ...editions.map(p => option(p.id, `${p.season_type === 'postseason' ? 'Postseason week' : 'Week'} ${p.week}${p.final ? ' · final' : ''}`)));
+      el('poll-edition').value = preferred?.id || '';
+      el('poll-edition').disabled = !editions.length;
+      renderPollEdition();
+    } catch (_) {
+      if (sequence !== pollLoadNumber || snapshot !== current) return;
+      el('poll-edition').replaceChildren(option('', 'Poll archive unavailable'));
+      el('poll-note').textContent = `Saved ${pollName()} polls for ${snapshot.season} could not be loaded. Rankings remain available. The poll archive appears after its first successful scheduled update; reload to try again.`;
+      render();
+    }
   }
   function seasonWeeks(season) {
     const rows = index.snapshots.filter(r => r.season === Number(season));
@@ -252,9 +307,11 @@
     if (!current) return;
     const query = el('search').value.trim().toLocaleLowerCase();
     const conference = el('conference').value;
-    const rows = (viewTeams || current.teams).filter(r => (!query || r.name.toLocaleLowerCase().includes(query)) &&
+    const pollRanks = new Map((activePoll?.ranks || []).map(r => [r.id, r.rank]));
+    const rows = (viewTeams || current.teams).map(r => ({...r, poll_rank: pollRanks.get(r.id) ?? null,
+      poll_gap: r.rank != null && pollRanks.has(r.id) ? pollRanks.get(r.id) - r.rank : null})).filter(r => (!query || r.name.toLocaleLowerCase().includes(query)) &&
       (!conference || r.conference === conference) &&
-      (query || conference || el('limit').value === 'all' || (r.rank != null && r.rank <= 25)));
+      (query || conference || el('limit').value === 'all' || (r.rank != null && r.rank <= 25) || (r.poll_rank != null && r.poll_rank <= 25)));
     rows.sort((a, b) => {
       if (a[sortKey] == null) return b[sortKey] == null ? a.name.localeCompare(b.name) : 1;
       if (b[sortKey] == null) return -1;
@@ -282,6 +339,11 @@
         button.setAttribute('aria-label', `Explain ${r.name} ranking`);
         button.addEventListener('click', () => explainTeam(r.id)); teamCell.append(button);
       }
+      if (el('poll').value) {
+        cell(!activePoll ? 'N/A' : r.poll_rank ?? 'NR');
+        cell(r.poll_gap == null ? 'N/A' : r.poll_gap > 0 ? `+${r.poll_gap}` : String(r.poll_gap),
+          r.poll_gap == null ? null : r.poll_gap === 0 ? 'Same rank' : r.poll_gap > 0 ? 'Higher here' : 'Lower here');
+      }
       cell(`${r.wins_fbs}–${r.losses_fbs}`);
       cell(r.rank == null ? '—' : fixed(r.merit_mean), r.rank == null ? 'No eligible games' : interval(r.merit_lo90, r.merit_hi90, 2));
       cell(Number.isFinite(r.sos_mean) ? `${(100 * r.sos_mean).toFixed(1)}%` : '—',
@@ -303,15 +365,16 @@
     }
     if (!rows.length) {
       const tr = document.createElement('tr'), td = document.createElement('td');
-      td.colSpan = 8; td.textContent = 'No matching teams. Try another search or conference.'; tr.append(td); fragment.append(tr);
+      td.colSpan = el('poll').value ? 10 : 8; td.textContent = 'No matching teams. Try another search or conference.'; tr.append(td); fragment.append(tr);
     }
     el('rows').replaceChildren(fragment);
-    el('count').textContent = `${rows.length} of ${current.teams.length} teams shown.${query || conference ? ' Search and conference filters include all ranks.' : ''}`;
+    el('count').textContent = `${rows.length} of ${current.teams.length} teams shown.${query || conference ? ' Search and conference filters include all ranks.' : activePoll && el('limit').value !== 'all' ? ' Includes teams in either Top 25.' : ''}`;
   }
   async function select(id, writeURL = true) {
     const row = index.snapshots.find(r => r.id === id);
     if (!row) return;
     const sequence = ++loadNumber;
+    pollLoadNumber++; activePoll = null;
     el('status').hidden = false; el('status').textContent = 'Loading saved update…';
     el('results').hidden = true; el('csv').hidden = true;
     root.setAttribute('aria-busy', 'true');
@@ -344,6 +407,7 @@
       el('json').href = url(row.json);
       if (writeURL) history.replaceState(null, '', address);
       notice(); render(); el('results').hidden = false; explorer.show(current,index); renderArchive();
+      loadPolls();
       el('status').textContent = `Loaded ${row.season} week ${row.week}.`;
       el('status').hidden = true;
     } catch (_) {
@@ -354,7 +418,7 @@
     populateUpdates(season, null, week);
     if (el('update').value) return select(el('update').value, writeURL);
     // A season or linked week awaiting fitting must not retain another week's results.
-    loadNumber++; current = null; previous = null;
+    loadNumber++; pollLoadNumber++; current = null; previous = null; activePoll = null;
     root.removeAttribute('aria-busy');
     el('results').hidden = true; el('csv').hidden = true; el('notice').hidden = true;
     el('label').textContent = `${season} season`;
@@ -373,6 +437,8 @@
   }
   el('season').addEventListener('change', () => browseSeason(el('season').value));
   el('week').addEventListener('change', () => browseSeason(el('season').value, Number(el('week').value)));
+  el('poll').addEventListener('change', loadPolls);
+  el('poll-edition').addEventListener('change', renderPollEdition);
   el('update').addEventListener('change', () => select(el('update').value));
   function latest() {
     if (!index?.latest) return;
@@ -402,18 +468,23 @@
     document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(address), 1000);
   });
   for (const key of ['search', 'conference', 'limit']) el(key).addEventListener(key === 'search' ? 'input' : 'change', render);
+  function sortBy(key, nextDirection) {
+    direction = nextDirection;
+    sortKey = key;
+    root.querySelectorAll('[data-cfb-sort]').forEach(button => {
+      const th = button.closest('th');
+      th.removeAttribute('aria-sort');
+      const oldArrow = button.querySelector('[aria-hidden]'); if (oldArrow) oldArrow.remove();
+      if (button.dataset.cfbSort !== key) return;
+      th.setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
+      const arrow = document.createElement('span'); arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = direction === 1 ? ' ↑' : ' ↓'; button.append(arrow);
+    });
+    render();
+  }
   root.querySelectorAll('[data-cfb-sort]').forEach(button => button.addEventListener('click', () => {
     const key = button.dataset.cfbSort;
-    direction = sortKey === key ? -direction : key === 'rank' || key === 'name' ? 1 : -1;
-    sortKey = key;
-    root.querySelectorAll('[data-cfb-sort]').forEach(other => {
-      const th = other.closest('th');
-      th.removeAttribute('aria-sort');
-      const arrow = other.querySelector('span'); if (arrow) arrow.remove();
-    });
-    button.closest('th').setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
-    const arrow = document.createElement('span'); arrow.setAttribute('aria-hidden', 'true');
-    arrow.textContent = direction === 1 ? ' ↑' : ' ↓'; button.append(arrow); render();
+    sortBy(key, sortKey === key ? -direction : ['rank', 'name', 'poll_rank'].includes(key) ? 1 : -1);
   }));
   async function start() {
     try {

@@ -66,7 +66,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def fetch(path, parameters, key):
-    if path not in ('/games', '/teams/fbs', '/calendar'):
+    if path not in ('/games', '/teams/fbs', '/calendar', '/rankings'):
         raise ValueError('Unsupported data endpoint')
     url = API + path + '?' + urllib.parse.urlencode(parameters)
     request = urllib.request.Request(url, headers={

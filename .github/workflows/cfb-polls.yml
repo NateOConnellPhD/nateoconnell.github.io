@@ -1,0 +1,64 @@
+name: Update AP and CFP comparisons
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/cfb/sync_polls.py'
+      - 'scripts/cfb/test_polls.py'
+      - '.github/workflows/cfb-polls.yml'
+  schedule:
+    - cron: '17 17 * 8-12 0'
+      timezone: 'America/New_York'
+    - cron: '17 8 * 11,12 3'
+      timezone: 'America/New_York'
+    - cron: '17 8 1 2 *'
+      timezone: 'America/New_York'
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: cfb-polls
+  cancel-in-progress: false
+
+jobs:
+  polls:
+    if: github.repository == 'NateOConnellPhD/nateoconnell.github.io' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Check poll validation and cache reuse without API calls
+        run: python3 -B scripts/cfb/test_polls.py
+      - name: Fetch active and uncached season polls
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+        run: python3 -B scripts/cfb/sync_polls.py
+      - name: Commit saved poll editions
+        id: commit
+        run: |
+          git add -- _cfb_data/seasons/*/polls.json assets/data/cfb/seasons/*/polls.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Refresh saved AP and CFP poll comparisons'
+          for attempt in 1 2 3; do
+            git pull --no-rebase --no-edit origin main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          exit 1
+      - name: Rebuild the public website
+        if: steps.commit.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
