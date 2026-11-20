@@ -42,8 +42,9 @@
 .cfb-method details p{font-size:.93rem}
 .cfb-mode{font-size:.86rem;font-weight:600;color:var(--blue);padding:12px 0;margin:0}
 .cfb-policy,.cfb-explanations{border:1px solid var(--line);padding:20px;margin:14px 0 26px;background:var(--paper);scroll-margin-top:24px}
-.cfb-policy>summary,.cfb-explanations>summary{font-size:.95rem;font-weight:600;color:var(--blue);cursor:pointer;min-height:30px}
-.cfb-policy[open]>summary,.cfb-explanations[open]>summary{margin-bottom:14px}
+.cfb-policy>h3,.cfb-explanations>summary{font-size:.95rem;font-weight:600;color:var(--blue);min-height:30px;margin-top:0}
+.cfb-explanations>summary{cursor:pointer}
+.cfb-explanations[open]>summary{margin-bottom:14px}
 .cfb-sliders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:22px 0}
 .cfb-sliders label{flex-direction:row;justify-content:space-between;font-size:.86rem}
 .cfb-sliders output{color:var(--blue);font-variant-numeric:tabular-nums}

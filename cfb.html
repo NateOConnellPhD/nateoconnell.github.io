@@ -42,34 +42,13 @@ description: "My college football rankings: what teams have earned from the game
 
     <div data-cfb-results hidden>
       <div class="cfb-tabs" role="tablist" aria-label="Explore this update">
-        <button type="button" role="tab" id="cfb-tab-rankings" aria-controls="cfb-panel-rankings" aria-selected="true" data-cfb-tab="rankings">Rankings &amp; rules</button>
+        <button type="button" role="tab" id="cfb-tab-rankings" aria-controls="cfb-panel-rankings" aria-selected="true" data-cfb-tab="rankings">Rankings</button>
+        <button type="button" role="tab" id="cfb-tab-rules" aria-controls="cfb-panel-rules" aria-selected="false" tabindex="-1" data-cfb-tab="rules">Rules</button>
         <button type="button" role="tab" id="cfb-tab-posterior" aria-controls="cfb-panel-posterior" aria-selected="false" tabindex="-1" data-cfb-tab="posterior">Posterior explorer</button>
         <button type="button" role="tab" id="cfb-tab-history" aria-controls="cfb-panel-history" aria-selected="false" tabindex="-1" data-cfb-tab="history">Week by week</button>
       </div>
-      <div id="cfb-panel-rankings" role="tabpanel" aria-labelledby="cfb-tab-rankings" data-cfb-panel="rankings">
       <p class="cfb-mode" data-cfb-mode role="status" aria-live="polite"></p>
-      <details class="cfb-policy" data-cfb-policy hidden>
-        <summary>Explore the ranking rules</summary>
-        <p class="small-note">Try different cutoffs and see which teams move. The saved merit estimates and uncertainty stay the same. Your choices affect this view only. <a href="#cfb-reading-rules">What do the controls mean?</a></p>
-        <div class="cfb-sliders">
-          <div><label for="cfb-protect">Merit protection <output for="cfb-protect" data-cfb-protect-value>90%</output></label>
-            <input id="cfb-protect" data-cfb-protect type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-protect-rule">
-            <p id="cfb-protect-rule" data-cfb-protect-rule></p></div>
-          <div><label for="cfb-direct">Head-to-head rule <output for="cfb-direct" data-cfb-direct-value>90%</output></label>
-            <input id="cfb-direct" data-cfb-direct type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-direct-rule">
-            <p id="cfb-direct-rule" data-cfb-direct-rule></p></div>
-          <div><label for="cfb-common">Common-opponent rule <output for="cfb-common" data-cfb-common-value>70%</output></label>
-            <input id="cfb-common" data-cfb-common type="range" min="50" max="99" step="1" value="70" aria-describedby="cfb-common-rule">
-            <p id="cfb-common-rule" data-cfb-common-rule></p></div>
-        </div>
-        <div class="cfb-toggles">
-          <label for="cfb-equal"><input id="cfb-equal" data-cfb-equal type="checkbox" checked><span>Compare only equal-record teams<small>Only use direct and common-opponent rules when teams have the same FBS wins and losses.</small></span></label>
-          <label for="cfb-p4"><input id="cfb-p4" data-cfb-p4 type="checkbox" checked><span>Undefeated Power Four protection<small>After eight FBS games, keep undefeated ACC, Big Ten, Big 12 and SEC teams ahead of teams with two or more FBS losses. This separate policy can override merit protection.</small></span></label>
-        </div>
-        <p class="small-note">Each cutoff is independent. Exactly at a cutoff, a game-result rule qualifies; merit protection requires a probability above its cutoff. Rank distance never determines eligibility.</p>
-        <button type="button" class="button button-outline" data-cfb-reset>Official defaults</button>
-        <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
-      </details>
+      <div id="cfb-panel-rankings" role="tabpanel" aria-labelledby="cfb-tab-rankings" data-cfb-panel="rankings">
       <div class="cfb-poll-controls">
         <label for="cfb-poll">Compare with a poll<select id="cfb-poll" data-cfb-poll><option value="">No poll</option><option value="ap">AP Top 25</option><option value="cfp">CFP rankings</option></select></label>
         <label for="cfb-poll-edition" data-cfb-poll-edition-control hidden>Poll edition<select id="cfb-poll-edition" data-cfb-poll-edition aria-describedby="cfb-poll-note"></select></label>
@@ -102,19 +81,45 @@ description: "My college football rankings: what teams have earned from the game
       <p class="small-note cfb-table-note">Higher merit means more earned credit; higher SOS means a harder schedule. The ranges show uncertainty, and P(top 10) describes merit rather than a playoff prediction. <a href="#cfb-reading-ranks">What does each column mean?</a></p>
       <p class="small-note" data-cfb-comparison></p>
       <p class="small-note"><a data-cfb-permalink>Link to official update</a> · <a data-cfb-json>Download official results</a></p>
+      <button type="button" class="button button-outline" data-cfb-open-rules>Explore the ranking rules</button>
+      </div>
+      <section id="cfb-panel-rules" role="tabpanel" aria-labelledby="cfb-tab-rules" data-cfb-panel="rules" hidden>
+        <p class="small-note" data-cfb-rules-unavailable hidden>This saved ranking does not include the information needed to explore its rules.</p>
+      <section class="cfb-policy" data-cfb-policy hidden>
+        <h3>Explore the ranking rules</h3>
+        <p class="small-note">Try different cutoffs and see which teams move. The saved merit estimates and uncertainty stay the same. Your choices affect this view only. <a href="#cfb-reading-rules">What do the controls mean?</a></p>
+        <div class="cfb-sliders">
+          <div><label for="cfb-protect">Merit protection <output for="cfb-protect" data-cfb-protect-value>90%</output></label>
+            <input id="cfb-protect" data-cfb-protect type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-protect-rule">
+            <p id="cfb-protect-rule" data-cfb-protect-rule></p></div>
+          <div><label for="cfb-direct">Head-to-head rule <output for="cfb-direct" data-cfb-direct-value>90%</output></label>
+            <input id="cfb-direct" data-cfb-direct type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-direct-rule">
+            <p id="cfb-direct-rule" data-cfb-direct-rule></p></div>
+          <div><label for="cfb-common">Common-opponent rule <output for="cfb-common" data-cfb-common-value>70%</output></label>
+            <input id="cfb-common" data-cfb-common type="range" min="50" max="99" step="1" value="70" aria-describedby="cfb-common-rule">
+            <p id="cfb-common-rule" data-cfb-common-rule></p></div>
+        </div>
+        <div class="cfb-toggles">
+          <label for="cfb-equal"><input id="cfb-equal" data-cfb-equal type="checkbox" checked><span>Compare only equal-record teams<small>Only use direct and common-opponent rules when teams have the same FBS wins and losses.</small></span></label>
+          <label for="cfb-p4"><input id="cfb-p4" data-cfb-p4 type="checkbox" checked><span>Undefeated Power Four protection<small>After eight FBS games, keep undefeated ACC, Big Ten, Big 12 and SEC teams ahead of teams with two or more FBS losses. This separate policy can override merit protection.</small></span></label>
+        </div>
+        <p class="small-note">Each cutoff is independent. Exactly at a cutoff, a game-result rule qualifies; merit protection requires a probability above its cutoff. Rank distance never determines eligibility.</p>
+        <button type="button" class="button button-outline" data-cfb-reset>Official defaults</button>
+        <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
+      </section>
       <details id="cfb-explanations" class="cfb-explanations" data-cfb-explanations hidden>
         <summary>Why is a team ranked here?</summary>
-        <p class="small-note">Inspect an actual pairwise decision, its probability, and any chain that prevents it. “Not directly constrained” means the order follows the highest available raw-merit team after all accepted requirements are respected.</p>
+        <p class="small-note">Start with the team directly above this one, or choose another opponent. This shows only that matchup: the merit comparison, the relevant game results, and any rule that affects their order.</p>
         <div class="cfb-pair-controls">
           <label for="cfb-team-a">Team<select id="cfb-team-a" data-cfb-team-a></select></label>
           <label for="cfb-team-b">Compare with<select id="cfb-team-b" data-cfb-team-b></select></label>
         </div>
         <div class="cfb-pair-summary" data-cfb-pair-summary></div>
         <div class="cfb-decisions" data-cfb-decisions></div>
-        <details data-cfb-intermediaries hidden><summary>Protected comparisons between their raw ranks</summary><div data-cfb-intermediary-list></div></details>
         <button type="button" class="button button-outline" data-cfb-audit-download>Download rules and decision audit</button>
       </details>
-      </div>
+        <button type="button" class="button button-outline" data-cfb-open-rankings>View rankings with these rules</button>
+      </section>
       <section id="cfb-panel-posterior" role="tabpanel" aria-labelledby="cfb-tab-posterior" data-cfb-panel="posterior" hidden>
         <h3>Look beyond the point estimate</h3>
         <p class="small-note">A posterior shows the range of values supported by the results and the model, rather than pretending one number is certain. Compare teams below, or start with <a href="#cfb-reading-posterior">what a posterior means and how to read these plots</a>.</p>

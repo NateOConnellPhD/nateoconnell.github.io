@@ -1,6 +1,8 @@
 # Posterior exploration and weekly archives
 
-The CFB page has three views: Rankings & rules, Posterior explorer, and Week by week. All reads are static site files. No reader action calls CFBD, runs HMC, or requests an external chart service.
+The CFB page has four views: Rankings, Rules, Posterior explorer, and Week by week. Rankings contains the standings and poll comparisons. Rules contains the sliders and focused team explanations, with a button back to the resulting rankings. All reads are static site files. No reader action calls CFBD, runs HMC, or requests an external chart service.
+
+“Explain rank” opens Rules with one opponent selected: the team immediately above the selected team, or immediately below the number-one team. Changing the team resets that nearby comparison; any other opponent can be selected explicitly. Only the chosen pair's decisions are rendered. There is no all-opponents default or list of every protected pair between their ranks. A long blocking chain shows at most eight requirements, with the complete audit available as a deliberate download.
 
 ## Statistical output
 

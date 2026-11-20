@@ -204,6 +204,7 @@ window.CFBExplorer = (root, api) => {
   let resizeFrame;
   new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{renderPosterior();renderHistory();});}).observe(root);
   return {
+    tab,
     show(value, index) {
       current=value; archive=index; historySequence++;
       const teams=[...current.teams].sort((a,b)=>a.name.localeCompare(b.name));

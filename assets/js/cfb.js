@@ -180,6 +180,7 @@
     const supported = current.specification?.version === 'margin-of-merit-order-v4' &&
       current.policy_inputs?.schema === 'margin-of-merit-policy-input-v4' && window.CFBPolicy;
     el('policy').hidden = !supported; el('explanations').hidden = !supported;
+    el('rules-unavailable').hidden = Boolean(supported);
     el('policy-error').hidden = true;
     if (supported) {
       for (const [key, field] of Object.entries(thresholdControls)) el(key).value = Math.round(current.specification[field] * 100);
@@ -188,8 +189,8 @@
       policyResult = current;
       const active = current.teams.filter(t => t.rank != null).sort((a,b) => a.name.localeCompare(b.name));
       el('team-a').replaceChildren(...active.map(t => option(t.id, t.name)));
-      el('team-b').replaceChildren(option('', 'All comparisons'), ...active.map(t => option(t.id, t.name)));
       if (current.order.length) el('team-a').value = String(current.order[0]);
+      chooseOpponent();
       el('mode').textContent = 'Official rankings';
       ruleSentences(); renderAudit();
     } else {
@@ -236,6 +237,15 @@
   function paragraph(parent, text) {
     const p = document.createElement('p'); p.textContent = text; parent.append(p); return p;
   }
+  function chooseOpponent() {
+    const active = (viewTeams || current.teams).filter(t => t.rank != null).sort((a, b) => a.rank - b.rank);
+    const position = active.findIndex(t => t.id === Number(el('team-a').value));
+    const neighbor = active[position - 1] || active[position + 1];
+    el('team-b').replaceChildren(...active.filter(t => t.id !== Number(el('team-a').value))
+      .sort((a, b) => a.name.localeCompare(b.name)).map(t => option(t.id, t.name)));
+    el('team-b').value = neighbor ? String(neighbor.id) : '';
+    el('team-b').disabled = !neighbor;
+  }
   function decisionNode(row) {
     const details = document.createElement('details'), summary = document.createElement('summary');
     const state = row.status === 'blocked_by_threshold' ? 'Threshold not met'
@@ -250,16 +260,17 @@
     if (row.shared_results) paragraph(details, row.shared_results.map(r =>
       `Against ${teamName(r.opponent_id)}: ${teamName(row.winner_id)} ${r.winner_wins}/${r.winner_games} wins; ${teamName(row.loser_id)} ${r.loser_wins}/${r.loser_games} wins.`).join(' '));
     if (row.conflict_path) {
-      paragraph(details, `Blocking chain: ${row.conflict_path.map(teamName).join(' → ')}. Adding the requested reverse ordering would close a cycle.`);
+      paragraph(details, `Blocking chain: ${row.conflict_path.slice(0, 9).map(teamName).join(' → ')}${row.conflict_path.length > 9 ? ' → …' : ''}. Adding the requested reverse ordering would close a cycle.`);
       const list = document.createElement('ul');
       const ids = current.policy_inputs.teams.map(t => t.id), p = current.policy_inputs.probabilities;
-      for (const edge of row.conflict_requirements) {
+      for (const edge of row.conflict_requirements.slice(0, 8)) {
         const item = document.createElement('li');
         const probability = p[ids.indexOf(edge.winner_id)][ids.indexOf(edge.loser_id)];
         item.textContent = `${teamName(edge.winner_id)} → ${teamName(edge.loser_id)}: ${ruleNames[edge.type]}; ${percent(probability)} probability of higher merit.`;
         list.append(item);
       }
       details.append(list);
+      if (row.conflict_requirements.length > 8) paragraph(details, `Showing the first 8 of ${row.conflict_requirements.length} requirements in this chain. The full chain is in the downloadable decision audit.`);
     }
     if (row.winner_rank != null) paragraph(details, `Result: ${teamName(row.winner_id)} #${row.winner_rank}; ${teamName(row.loser_id)} #${row.loser_rank}. Raw merit ranks: #${row.winner_raw_rank} and #${row.loser_raw_rank}.`);
     return details;
@@ -274,8 +285,8 @@
       const original = current.teams.find(t => t.id === id), shown = viewTeams.find(t => t.id === id);
       if (original) paragraph(summary, `${original.name}: ${original.wins_fbs}–${original.losses_fbs} FBS record. Official #${original.rank}; shown #${shown.rank}; raw merit #${original.raw_merit_rank}.`);
     }
-    const relevant = audit.filter(r => b == null ? r.winner_id === a || r.loser_id === a
-      : (r.winner_id === a && r.loser_id === b) || (r.winner_id === b && r.loser_id === a));
+    const relevant = audit.filter(r => b != null && a !== b &&
+      ((r.winner_id === a && r.loser_id === b) || (r.winner_id === b && r.loser_id === a)));
     if (b != null && a !== b) {
       const ids = current.policy_inputs.teams.map(t => t.id);
       paragraph(summary, `Probability that ${teamName(a)} has higher earned merit than ${teamName(b)}: ${percent(current.policy_inputs.probabilities[ids.indexOf(a)][ids.indexOf(b)])}. This is not the probability of winning a future game.`);
@@ -287,18 +298,12 @@
       }
     }
     el('decisions').replaceChildren(...relevant.map(decisionNode));
-    if (!relevant.length) paragraph(el('decisions'), a === b ? 'Choose a different second team.'
+    if (!relevant.length) paragraph(el('decisions'), b == null || a === b ? 'Choose a second team to inspect one matchup.'
       : 'Not directly constrained: no rule establishes an ordering for this pair. Stable merit-first completion respects any requirements involving other teams.');
-    const rawRanks = new Map(current.teams.map(t => [t.id, t.raw_merit_rank]));
-    const low = Math.min(rawRanks.get(a), rawRanks.get(b)), high = Math.max(rawRanks.get(a), rawRanks.get(b));
-    const between = b != null && a !== b ? audit.filter(r => ['merit_protection', 'undefeated_p4'].includes(r.type) &&
-      ['accepted', 'already_satisfied'].includes(r.status) && [r.winner_id, r.loser_id].every(id => rawRanks.get(id) >= low && rawRanks.get(id) <= high)) : [];
-    el('intermediaries').hidden = !between.length;
-    el('intermediary-list').replaceChildren(...(el('intermediaries').open ? between.map(decisionNode) : []));
     el('audit-download').disabled = Boolean(policyError);
   }
   function explainTeam(id) {
-    el('team-a').value = String(id); el('team-b').value = '';
+    el('team-a').value = String(id); chooseOpponent(); explorer.tab('rules', true);
     el('explanations').open = true; renderAudit();
     el('explanations').scrollIntoView({behavior: 'smooth', block: 'start'});
     el('team-a').focus({preventScroll: true});
@@ -454,9 +459,11 @@
     ruleSentences(); cancelAnimationFrame(policyFrame); policyFrame = requestAnimationFrame(applyPolicy);
   });
   el('reset').addEventListener('click', () => { setOfficialPolicy(); render(); });
-  for (const key of ['team-a', 'team-b']) el(key).addEventListener('change', renderAudit);
+  el('team-a').addEventListener('change', () => { chooseOpponent(); renderAudit(); });
+  el('team-b').addEventListener('change', renderAudit);
+  el('open-rules').addEventListener('click', () => explorer.tab('rules', true));
+  el('open-rankings').addEventListener('click', () => explorer.tab('rankings', true));
   el('explanations').addEventListener('toggle', renderAudit);
-  el('intermediaries').addEventListener('toggle', () => { if (el('intermediaries').open) renderAudit(); });
   el('audit-download').addEventListener('click', () => {
     if (!policyResult || policyError) return;
     const blob = new Blob([JSON.stringify({snapshot: el('update').value, official: !customPolicy,

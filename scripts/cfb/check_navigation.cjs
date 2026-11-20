@@ -18,6 +18,8 @@ class Element {
   removeAttribute(key) { delete this.attributes[key]; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
   querySelectorAll() { return []; }
+  focus() {}
+  scrollIntoView() {}
 }
 
 function row(season, week, version = 'new') {
@@ -41,12 +43,12 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const root = new Element(); root.dataset.index = '/assets/data/cfb/index.json';
   root.querySelector = selector => get(selector.match(/data-cfb-([^\]]+)/)[1]);
   const location = {href: `https://example.test/blog/cfb/${query}`, search: query};
-  const requests = [], shown = [];
+  const requests = [], shown = [], tabs = [];
   const context = {URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
     cancelAnimationFrame() {}, requestAnimationFrame(callback) { callback(); return 0; }, location,
     history: {replaceState(_, __, address) { location.href = String(address); location.search = new URL(address).search; }},
     document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element()},
-    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id)}), CFBPolicy: policyRun && {run: policyRun}},
+    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id), tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun}},
     fetch: async address => {
       requests.push(String(address));
       const name = String(address).split('/').pop();
@@ -61,7 +63,7 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
     }};
   vm.runInNewContext(source, context);
   await settle();
-  return {get, root, location, requests, shown, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
+  return {get, root, location, requests, shown, tabs, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
 }
 
 (async () => {
@@ -147,6 +149,27 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.deepEqual(calls, ['2026-11-new', '2026-10-new'], 'Apply custom rules to both weeks');
   assert.match(custom.get('comparison').textContent, /Both weeks use your selected rules/);
   assert.deepEqual(custom.get('rows').children[0].children.map(tr => tr.children.at(-1).textContent), ['0', '↑ 2', '0', '↓ 2']);
+
+  const roster = teams(Array.from({length: 138}, (_, i) => i + 1));
+  const auditFixture = {...policyFixtures['2026-11-new'], teams: roster, order: roster.map(t => t.id),
+    policy_inputs: {schema: 'margin-of-merit-policy-input-v4', teams: roster, games: [],
+      probabilities: roster.map(() => roster.map(() => .5))},
+    audit: roster.slice(1).map(t => ({winner_id: 1, loser_id: t.id, type: 'merit_protection', status: 'accepted', p_loser_higher_merit: .05}))};
+  const focused = await page('', weeklyIndex, {...fixtures, '2026-11-new': auditFixture}, () => {});
+  assert.equal(focused.get('team-b').value, '2', 'Default explanation compares the adjacent ranked team');
+  assert.equal(focused.get('team-b').options.some(o => o.value === ''), false, 'No all-opponents option');
+  focused.get('explanations').open = true; focused.get('explanations').handlers.toggle();
+  assert.equal(focused.get('decisions').children.length, 1, 'Opening explanations must not render 137 comparisons');
+  await focused.change('team-b', '138');
+  assert.equal(focused.get('decisions').children.length, 1, 'A distant opponent still shows only that pair');
+  await focused.change('team-a', '50');
+  assert.equal(focused.get('team-b').value, '49');
+  focused.get('open-rules').handlers.click();
+  focused.get('open-rankings').handlers.click();
+  assert.deepEqual(focused.tabs, ['rules', 'rankings']);
+  focused.get('rows').children[0].children[0].children[1].children.at(-1).handlers.click();
+  assert.equal(focused.tabs.at(-1), 'rules', 'Explain rank opens the separate Rules tab');
+  assert.equal(focused.get('team-b').value, '2');
 
   const pollArchive = {schema: 'margin-of-merit-polls-v1', season: 2026, retrieved_at: '2026-11-20T00:00:00Z', editions: [
     {id: 'ap-regular-12', poll: 'ap', season_type: 'regular', week: 12, ranks: [{id: 1, rank: 3}, {id: 2, rank: 1}, {id: 6, rank: 25}]},
