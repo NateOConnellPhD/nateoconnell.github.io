@@ -40,7 +40,7 @@ and 1.5 GB under `.codex-tmp/cfb-refit`. It uses one sequential sampling process
 and cleans the disposable environment after saving numerical caches. It never
 force-pushes; concurrent repository changes are merged before saving results.
 
-Local validation of this connection: nine focused publication/reuse/failure
+Local validation of this connection: ten focused publication/reuse/failure
 tests passed; the Python sources and workflow syntax were reviewed. The new
 exact-refit integration is checked by focused numerical tests in the workflow
 before fitting. It has not yet run locally or on GitHub. This session cannot

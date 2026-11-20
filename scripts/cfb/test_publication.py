@@ -122,6 +122,14 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             live.matching_snapshot(live.read_index(self.public), 'one', self.public)
 
+    def test_restored_older_inputs_cannot_leave_the_wrong_latest_result(self):
+        self.publish('original')
+        self.now += dt.timedelta(hours=1)
+        self.publish('changed')
+        index = live.read_index(self.public)
+        self.assertIsNone(live.matching_snapshot(index, 'original', self.public))
+        self.assertIsNotNone(live.matching_snapshot(index, 'changed', self.public))
+
     def test_failure_status_preserves_existing_current_result(self):
         row = self.publish()
         content = (self.public / row['json']).read_bytes()

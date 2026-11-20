@@ -51,7 +51,14 @@ def write_index(index, destination=PUBLIC):
 
 
 def matching_snapshot(index, key, destination=PUBLIC):
+    seen_seasons = set()
     for row in index['snapshots']:
+        # Only the newest published result for a season can make an update a
+        # no-op. If a provider correction restores an older input set, rerun the
+        # cache-aware pipeline so the newer, incorrect result is superseded.
+        if row['season'] in seen_seasons:
+            continue
+        seen_seasons.add(row['season'])
         if row['request_key'] != key:
             continue
         path = destination / row['json']
