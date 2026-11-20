@@ -1,4 +1,6 @@
 .cfb-heading{max-width:850px;margin-bottom:48px}
+.cfb-hero{margin:24px 0}
+.cfb-hero img{display:block;width:100%;height:auto}
 .cfb-jumps{display:flex;flex-wrap:wrap;gap:12px 28px;font-size:.9rem}
 .cfb-jumps a{min-height:40px;padding:6px 0}
 .cfb-page .section-heading{align-items:center}
@@ -24,7 +26,11 @@
 .cfb-table tr:hover{background:var(--tint)}
 .cfb-table abbr{text-decoration:underline dotted;text-underline-offset:3px}
 .cfb-table-note{margin-top:20px;max-width:780px}
-.cfb-method{border-top:1px solid var(--line);margin-top:72px;padding-top:38px;max-width:800px}
+.cfb-guide,.cfb-method{border-top:1px solid var(--line);margin-top:72px;padding-top:38px;max-width:800px}
+.cfb-guide,.cfb-guide h3{scroll-margin-top:24px}
+.cfb-guide h2{margin-top:0}
+.cfb-glossary dt{font-weight:600;color:var(--blue);margin:20px 0 5px}
+.cfb-glossary dd{margin:0 0 18px}
 .cfb-method .eyebrow{margin-bottom:14px}
 .cfb-method h2{margin-top:0}
 .cfb-method details{padding:18px 0;border-top:1px solid var(--line)}
@@ -56,7 +62,9 @@
 .cfb-tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:14px 0;color:var(--muted);font-size:.88rem;white-space:nowrap}
 .cfb-tabs [aria-selected=true]{border-bottom-color:var(--blue);color:var(--ink);font-weight:600}
 .cfb-archive{margin:20px 0 30px;border-bottom:1px solid var(--line);padding-bottom:18px}
-.cfb-archive>summary,.cfb-diagnostics>summary{cursor:pointer;color:var(--blue);font-size:.9rem;font-weight:600;min-height:34px}
+.cfb-revisions>summary,.cfb-diagnostics>summary{cursor:pointer;color:var(--blue);font-size:.9rem;font-weight:600;min-height:34px}
+.cfb-revisions{margin:18px 0}
+.cfb-revisions label{max-width:650px;margin-top:12px}
 .cfb-archive h3{font-size:1.3rem;margin:18px 0 10px}
 .cfb-week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:24px}
 .cfb-week-grid button{padding:10px 8px;border:1px solid var(--line);background:transparent;color:var(--blue);font-size:.85rem;text-align:left}

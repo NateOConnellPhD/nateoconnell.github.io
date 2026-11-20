@@ -4,15 +4,18 @@ title: Margin of Merit — CFB rankings
 section: blog
 permalink: /blog/cfb/
 cfb: true
+cover: /assets/images/editor-77c20c5f-6ae6-4a9b-ab76-1eb6da83e862.jpg
 description: "My college football rankings: what teams have earned from the games they've played. Current standings, saved weekly updates, and the method behind them."
 ---
+{% assign cfb_story_url = '/blog/2026/11/20/college-football-has-a-rankings-problem-so-i-built-my-own/' | relative_url %}
 <div class="wrap page-shell cfb-page" data-cfb data-index="{{ '/assets/data/cfb/index.json' | relative_url }}">
   <nav class="blog-nav" aria-label="Blog sections"><a href="{{ '/blog/' | relative_url }}">Posts</a><a href="{{ '/blog/cfb/' | relative_url }}" aria-current="page">CFB rankings</a></nav>
   <header class="page-heading cfb-heading">
     <p class="eyebrow">Out-of-Bag Thoughts / College football</p>
     <h1>Margin of Merit<span class="accent">.</span></h1>
     <p class="page-deck">My take on college football rankings: what has a team earned from the games it’s actually played? I use a Bayesian model to put results in the context of opponents, scoring margins, and home advantage.</p>
-    <div class="cfb-jumps"><a href="#rankings" data-cfb-current>Current rankings</a><a href="#cfb-history">Seasons &amp; weekly archive</a><a href="#cfb-method">How it works</a></div>
+    <figure class="cfb-hero"><img src="{{ page.cover | relative_url }}" width="1600" height="901" alt="Margin of Merit college football rankings: wins, head-to-head results, score margins, and uncertainty."></figure>
+    <div class="cfb-jumps"><a href="#rankings" data-cfb-current>Current rankings</a><a href="#cfb-history">Seasons &amp; weekly archive</a><a href="#cfb-guide">How to read the rankings</a><a href="{{ cfb_story_url }}">How it works</a></div>
   </header>
 
   <section id="rankings" aria-labelledby="cfb-title">
@@ -23,15 +26,19 @@ description: "My college football rankings: what teams have earned from the game
 
     <div id="cfb-history" class="cfb-history" data-cfb-controls hidden>
       <label for="cfb-season">Season<select id="cfb-season" data-cfb-season></select></label>
-      <label for="cfb-update">Saved update<select id="cfb-update" data-cfb-update></select></label>
+      <label for="cfb-week">Week of season<select id="cfb-week" data-cfb-week></select></label>
       <button type="button" class="button button-outline" data-cfb-latest>Latest rankings</button>
     </div>
-    <details class="cfb-archive" data-cfb-archive>
-      <summary>Browse every season and week</summary>
+    <section class="cfb-archive" data-cfb-archive aria-labelledby="cfb-archive-title" hidden>
+      <h3 id="cfb-archive-title" data-cfb-archive-title>Weeks in this season</h3>
       <p class="small-note" data-cfb-archive-status></p>
       <div data-cfb-archive-grid></div>
       <p class="small-note">Historical weeks are reconstructed using games through that week’s cutoff. They are not rankings that were published at the time. Coverage starts in 2024, when the current Power Four policy applies.</p>
-    </details>
+      <details class="cfb-revisions" data-cfb-revisions hidden>
+        <summary>Earlier saved versions of this week</summary>
+        <label for="cfb-update">Saved version<select id="cfb-update" data-cfb-update></select></label>
+      </details>
+    </section>
 
     <div data-cfb-results hidden>
       <div class="cfb-tabs" role="tablist" aria-label="Explore this update">
@@ -43,7 +50,7 @@ description: "My college football rankings: what teams have earned from the game
       <p class="cfb-mode" data-cfb-mode role="status" aria-live="polite"></p>
       <details class="cfb-policy" data-cfb-policy hidden>
         <summary>Explore the ranking rules</summary>
-        <p class="small-note">Try different cutoffs and see which teams move. The saved merit estimates and uncertainty stay the same. Your choices affect this view only.</p>
+        <p class="small-note">Try different cutoffs and see which teams move. The saved merit estimates and uncertainty stay the same. Your choices affect this view only. <a href="#cfb-reading-rules">What do the controls mean?</a></p>
         <div class="cfb-sliders">
           <div><label for="cfb-protect">Merit protection <output for="cfb-protect" data-cfb-protect-value>90%</output></label>
             <input id="cfb-protect" data-cfb-protect type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-protect-rule">
@@ -86,7 +93,7 @@ description: "My college football rankings: what teams have earned from the game
           <tbody data-cfb-rows></tbody>
         </table>
       </div>
-      <p class="small-note cfb-table-note">Records include FBS opponents only. Higher SOS means a harder schedule: it is the reference team’s average loss probability against those opponents, accounting for venue. Raw rank, its interval, and top-10 probabilities describe raw merit. These posterior summaries do not change when you adjust the ordering rules. <a href="#cfb-method">What do these numbers mean?</a></p>
+      <p class="small-note cfb-table-note">Higher merit means more earned credit; higher SOS means a harder schedule. The ranges show uncertainty, and P(top 10) describes merit rather than a playoff prediction. <a href="#cfb-reading-ranks">What does each column mean?</a></p>
       <p class="small-note" data-cfb-comparison></p>
       <p class="small-note"><a data-cfb-permalink>Link to official update</a> · <a data-cfb-json>Download official results</a></p>
       <details id="cfb-explanations" class="cfb-explanations" data-cfb-explanations hidden>
@@ -104,7 +111,7 @@ description: "My college football rankings: what teams have earned from the game
       </div>
       <section id="cfb-panel-posterior" role="tabpanel" aria-labelledby="cfb-tab-posterior" data-cfb-panel="posterior" hidden>
         <h3>Look beyond the point estimate</h3>
-        <p class="small-note">Explore the saved distributions, compare teams, and inspect the model. Every summary uses all retained draws; changing the ranking rules does not change these distributions.</p>
+        <p class="small-note">A posterior shows the range of values supported by the results and the model, rather than pretending one number is certain. Compare teams below, or start with <a href="#cfb-reading-posterior">what a posterior means and how to read these plots</a>.</p>
         <div class="cfb-explorer-controls">
           <label for="cfb-stat-team">Team<select id="cfb-stat-team" data-cfb-stat-team></select></label>
           <label for="cfb-stat-other">Compare team<select id="cfb-stat-other" data-cfb-stat-other></select></label>
@@ -123,11 +130,11 @@ description: "My college football rankings: what teams have earned from the game
         </div>
         <div data-cfb-probabilities class="cfb-probabilities"></div>
         <p class="small-note" data-cfb-stat-note></p>
-        <details class="cfb-diagnostics"><summary>Fit and leave-one-out diagnostics</summary><div data-cfb-diagnostics></div></details>
+        <details class="cfb-diagnostics"><summary>Fit and leave-one-out diagnostics</summary><p>These check the numerical calculations, not how well a team will play. <a href="#cfb-reading-checks">What do these checks mean?</a></p><div data-cfb-diagnostics></div></details>
       </section>
       <section id="cfb-panel-history" role="tabpanel" aria-labelledby="cfb-tab-history" data-cfb-panel="history" hidden>
         <h3>A season, one week at a time</h3>
-        <p class="small-note">Follow a team’s official rank or posterior summaries through this season. Gaps stay visible. Click a week in the table to open its full rankings and distributions.</p>
+        <p class="small-note">Follow a team’s official rank or posterior summaries through this season. Gaps stay visible. Click a week in the table to open its full rankings and distributions. <a href="#cfb-reading-history">How to read the weekly chart</a>.</p>
         <div class="cfb-explorer-controls">
           <label for="cfb-history-team">Team<select id="cfb-history-team" data-cfb-history-team></select></label>
           <label for="cfb-history-other">Compare team<select id="cfb-history-other" data-cfb-history-other></select></label>
@@ -144,28 +151,75 @@ description: "My college football rankings: what teams have earned from the game
     <noscript><p>Enable JavaScript to browse the table, or <a href="{{ '/assets/data/cfb/index.json' | relative_url }}">open the saved ranking index</a> for links to JSON and CSV downloads.</p></noscript>
   </section>
 
+  <section id="cfb-guide" class="cfb-guide prose" aria-labelledby="cfb-guide-title">
+    <p class="eyebrow">Reading the results</p>
+    <h2 id="cfb-guide-title">How to read the rankings</h2>
+    <p>Start with a season and week. The table asks what teams have earned from the games played up to that point. The numbered ranking is a useful summary, but the uncertainty tells you how much evidence separates those teams.</p>
+
+    <h3 id="cfb-reading-posterior">What is a posterior?</h3>
+    <p>We don’t know exactly how strong each team is or exactly how impressive its results have been. The model considers many plausible combinations of team strengths and game-to-game variation, then uses the scores to work out which combinations are better supported. That updated picture of what we know—and what we’re still unsure about—is the <strong>posterior distribution</strong>.</p>
+    <p>A <strong>draw</strong> is one sampled scenario from that distribution. In one draw, a team might have the sixth-highest merit; in another, it might be twelfth. Looking across thousands of draws shows whether its position is fairly clear or could reasonably be much higher or lower. These are possibilities under the model, not thousands of additional games that actually happened.</p>
+    <dl class="cfb-glossary">
+      <dt>Mean and median</dt><dd>The mean is the average across the draws. The median is the middle value when the draws are put in order. The ranking starts with mean merit; a difference between the mean and median can indicate an uneven distribution.</dd>
+      <dt>90% and 50% intervals</dt><dd>These contain the middle 90% or 50% of the draws. A raw-rank interval of 4–15 says the model still supports a fairly wide range of positions, even if the table puts the team seventh. Wider intervals mean more uncertainty. They describe what the model supports given the available results, not a guarantee.</dd>
+      <dt>SD</dt><dd>Standard deviation: a summary of how spread out the draws are around their mean. Larger values mean more uncertainty for the same quantity. It is not a percentage or a measure of how inconsistent the team is from game to game.</dd>
+    </dl>
+
+    <h3 id="cfb-reading-ranks">What each table column means</h3>
+    <dl class="cfb-glossary">
+      <dt>Rank</dt><dd>The final ordering after applying the stated rules for merit, head-to-head results, common opponents, and undefeated teams. Lower is better. Changing a rule shows your alternative ordering and keeps the saved official rank underneath.</dd>
+      <dt>Change</dt><dd>How many places the team moved relative to the comparison week named above the table. An upward arrow means a better rank; a dash means no comparison is available. When you adjust the rules, this instead compares your ordering with the official ranking for the same week.</dd>
+      <dt>FBS W–L</dt><dd>Wins and losses against other Football Bowl Subdivision teams. Games against FCS teams do not count here. These rankings include regular-season games, conference championships, and Army–Navy; bowls and playoff games are excluded.</dd>
+      <dt>Merit</dt><dd>The credit a team has earned across its eligible games. Each win adds between zero and one point; each loss subtracts up to one point. Opponent strength, margin, and venue determine how much. The table shows the mean and a 90% interval. Higher is better. This is accumulated résumé credit, not a predicted score or a per-game average.</dd>
+      <dt>SOS: strength of schedule</dt><dd>How often a common reference team would be expected to lose against this schedule, accounting for where the games were played. The reference is the 25th-strongest team in each draw, rather than a particular school. An SOS of 30% means about three expected losses across ten games for that reference team. Higher means a harder schedule; it is not the actual team’s predicted loss rate.</dd>
+      <dt>Raw rank</dt><dd>The ordering by mean merit before the additional ranking rules. Its 90% interval shows how the team’s merit rank varies across draws. The posterior explorer also shows the mean and median of those draw-by-draw ranks; those need not equal its position when teams are sorted by mean merit.</dd>
+      <dt>P(top 10)</dt><dd>The share of posterior draws in which the team is in the top ten by raw merit, with ties shared fairly. For example, 80% means top-ten merit in about eight out of ten draws. This is not its chance of making the playoff or winning its next game. The explorer also reports top-eight and top-25 probabilities.</dd>
+    </dl>
+    <p>Merit, SOS, and raw-rank uncertainty combine leave-one-game-out calculations using an approximation. Team strength and the model parameters use the full-data posterior. These are estimates under stated assumptions, not exact facts about the teams.</p>
+
+    <h3>Reading the posterior plots</h3>
+    <p>The horizontal axis is the quantity you selected. A narrow distribution means the draws are concentrated; a broad one means more uncertainty. Colors identify the teams. The solid vertical line is the mean and the dashed line is the median.</p>
+    <p>In <strong>Density / probability mass</strong>, bars show where the draws fall. For a continuous quantity, probability is represented by the area of a bar, not its height alone. For separate rank values, the height gives the share of draws at that value. In <strong>Cumulative probability</strong>, the curve shows the fraction of draws at or below a value: 0.80 means 80%. The continuous curve is approximated between the saved bin boundaries.</p>
+    <p>Overlapping distributions show why a single numbered position can hide uncertainty. The paired merit probability below the plot directly compares the two teams across their joint merit draws. A value of 70% means the first team has higher merit in roughly seven out of ten draws, counting exact ties as half. It does not mean a 70% chance of beating the other team on the field.</p>
+    <dl class="cfb-glossary">
+      <dt>Team strength (θ)</dt><dd>Underlying strength on the scoring-margin scale, measured in points. A ten-point difference between two teams corresponds to a ten-point expected margin on a neutral field under the model. This helps put results in context; it is different from the merit a team has earned.</dd>
+      <dt>Home advantage</dt><dd>The common advantage, in points, associated with playing at home. Neutral-site games receive no home advantage.</dd>
+      <dt>Residual scale (σ)</dt><dd>How much scoring margins tend to vary around what team strengths and venue suggest. Larger values allow more unpredictable results. It is a scale parameter, not literally the standard deviation. The model uses an eight-point minimum throughout the season.</dd>
+      <dt>Degrees of freedom (ν)</dt><dd>How readily the model allows unusually extreme margins. Smaller values give more room for surprising blowouts rather than forcing every score to fit a narrow pattern.</dd>
+    </dl>
+
+    <h3 id="cfb-reading-rules">What happens when I change the rules?</h3>
+    <p>The controls change how the final ordering is constructed. The model’s merit estimates, SOS, and uncertainty remain the same. A threshold of 90% is a decision rule, not a 90% bonus to a team’s score.</p>
+    <dl class="cfb-glossary">
+      <dt>Merit protection</dt><dd>Keep one team ahead when the probability it has higher merit exceeds this threshold. Raising it requires stronger evidence before protecting an ordering.</dd>
+      <dt>Head-to-head</dt><dd>Use the actual winner when the probability that the loser has higher merit is at or below this threshold, unless a higher-priority requirement blocks it. At the default 90%, an 85% comparison qualifies; a 95% comparison does not.</dd>
+      <dt>Common opponents</dt><dd>For teams that never played each other, consider whether one did at least as well against every shared opponent and better against at least one. The threshold limits how much contrary merit evidence that result can overcome.</dd>
+      <dt>Equal records and undefeated teams</dt><dd>The first switch limits head-to-head and common-opponent comparisons to equal FBS records. The second protects an undefeated Power Four team with at least eight FBS games from being placed below a team with two or more FBS losses. This is a separate stated rule and can override merit protection.</dd>
+    </dl>
+    <p>Rules can conflict. “Explain rank” shows the comparisons that were accepted or blocked, and why. It is possible to change a threshold without moving any teams. “Official defaults” restores the published settings.</p>
+
+    <h3 id="cfb-reading-history">Reading the weekly chart</h3>
+    <p>Each point uses only results through that week’s cutoff. For ranks, higher on the chart means a better position; for merit, it means more earned credit. The vertical ranges show 90% uncertainty intervals when you select a posterior summary. Missing fits leave gaps. The official-rank line also breaks when the ranking rules differ between saved weeks, so a rule change is not presented as an ordinary weekly movement.</p>
+    <p>Historical weeks are reconstructed from saved game data. An early-season reconstruction lets you explore how little was known at the time; a numbered position on its own is not evidence that the teams were clearly distinguishable.</p>
+
+    <h3 id="cfb-reading-checks">What are the diagnostic checks?</h3>
+    <p>These are checks on the computation. <strong>R̂</strong> asks whether independent sampling runs agree; values near one are reassuring. <strong>Effective sample size (ESS)</strong> estimates how much independent information the draws provide, because neighboring draws can be related. “Bulk” refers to the main part of the distribution and “tail” to its extremes. Divergences and tree-depth limit hits flag sampling difficulties that need attention.</p>
+    <p><strong>Leave-one-game-out</strong> means evaluating a game using estimates made without that game, so it does not help grade itself. PSIS is a shortcut for that calculation. Flagged games need a separate omitted-game fit when the shortcut is unreliable. The transport mean error checks how closely the combined draws preserve the per-game average credits. Passing numerical checks does not prove the model’s assumptions are correct.</p>
+    <p><a href="{{ cfb_story_url }}">Read the full explanation, examples, and equations in my blog post →</a></p>
+  </section>
+
   <section id="cfb-method" class="cfb-method prose" aria-labelledby="cfb-method-title">
     <p class="eyebrow">Behind the rankings</p>
     <h2 id="cfb-method-title">How it works</h2>
-    <p>I wanted a ranking that starts with what happened on the field. A win over a strong opponent should mean something different from a win over a weak one, and the margin and location should matter too. Margin of Merit adds up what a team earns from each game, using a common reference opponent standard across the season.</p>
-    <h3>Each game contributes to a team’s résumé</h3>
-    <p>The model estimates team strength and home advantage from scoring margins. For each game, it asks how a reference team—the 25th-strongest team in that posterior draw—would be expected to perform against that opponent, in that location. The actual margin is converted into a percentile of that distribution. Wins contribute between zero and one point; losses contribute between minus one and zero. A team’s season merit is the sum of those game credits.</p>
-    <p>The game being scored is left out when estimating its opponents and reference standard, so it does not help grade itself. The rankings use completed regular-season FBS-versus-FBS games, including conference championships and Army–Navy. FCS games and bowls/CFP are excluded.</p>
-    <h3>Strength of schedule, with uncertainty</h3>
-    <p>The same model lets me ask how difficult each team’s schedule has been. For each game, I estimate the probability that the reference team—the 25th-strongest team in that draw—would lose against that opponent, in that location. I average those probabilities across the team’s eligible games to get strength of schedule (SOS). Everyone is evaluated using the same reference rule, and higher values mean a harder schedule.</p>
-    <p>An SOS of 30% means the reference team would be expected to lose 30% of the games on that schedule: three losses over ten games, for example. That is different from predicting how the actual team would perform. The rankings table shows the posterior mean and 90% interval; select “Strength of schedule (SOS)” in the posterior explorer for its distribution, median, standard deviation, and team comparisons. As with merit, the uncertainty uses the saved marginal-quantile leave-one-out approximation.</p>
-    <h3>Let the uncertainty tell us when results should decide</h3>
-    <p>V4 starts with posterior mean merit. I don’t define “close” by how many places separate two teams. I use the probability that one has earned more merit than the other. Two teams twelve places apart can qualify for a head-to-head adjustment; two neighboring teams can have enough evidence separating them to keep their order protected.</p>
-    <p>At the official defaults, a merit comparison above 90% probability is protected. For teams with the same FBS record, a decisive head-to-head winner must go ahead unless the model gives the loser more than a 90% chance of higher merit, or another required ordering prevents it. Common opponents are considered only when the teams never played each other. A team that did at least as well against every shared opponent and better against one must go ahead unless opposing merit confidence exceeds 70%, or that ordering conflicts with an earlier requirement. A split direct series never sends us looking for a common-opponent tiebreak.</p>
-    <p>There’s one separate policy choice: an undefeated ACC, Big Ten, Big 12, or SEC team with at least eight FBS games stays ahead of teams with two or more FBS losses. That can override merit protection for those comparisons. You can change the three thresholds, compare across different records, or turn off that undefeated-team rule above.</p>
-    <p>These rules create required pairwise orderings, not swaps of numbered positions. If a rule would create a contradiction, its explanation shows the full chain blocking it. Among teams whose requirements are satisfied, the team with the highest raw merit goes next. Changing the rules may move teams—or leave the order exactly as it was.</p>
-    <h3>The uncertainty is part of the result</h3>
-    <p>The intervals show how much the underlying merit and rank vary across posterior draws. “P(top 10)” is the probability that a team’s raw merit falls in the top ten. It is not a playoff probability, and it does not apply the editorial ordering rules to each draw. The joint uncertainty uses a marginal-quantile approximation, so these probabilities should not be read as exact.</p>
-    <details><summary>Model and update details</summary>
-      <p>Scoring margins follow a Student-t model with team-strength differences and home advantage. Team strengths have Normal(0, 14) priors; home advantage has a Normal(2, 2.5) prior. The residual scale is 8 + exp(η), with η distributed Normal(log 6, 0.75). Degrees of freedom are 2 + exp(ζ), with ζ distributed Normal(log 5, 0.9). Normal scales here are standard deviations. The eight-point floor is on the Student-t scale, not its standard deviation, and stays the same all season.</p>
-      <p>Fits use four sequential NUTS chains and checked leave-one-game-out scoring. Unreliable importance-sampling approximations require individual omitted-game refits. V4 uses no preference weights or rank-distance penalties. Direct-result requirements precede common-opponent requirements; within either type, lower opposing-merit probability comes first, with ties resolved by stable team names. Contradictory hard requirements are reported as an error. Stable topological completion respects every accepted requirement but does not promise the smallest possible number of rank changes.</p>
-      <p>Changing a control reuses saved pairwise probabilities in your browser. It does not rerun the Bayesian model. Earlier archived updates keep the policy used when they were published; controls are available on v4 snapshots.</p>
-      <p>Game data come from <a href="https://collegefootballdata.com/">CollegeFootballData</a>. Updates are scheduled for Sunday mornings, with additional refreshes when needed. A week may still have unplayed games: use the displayed observation time and game count to see what an update includes. If an update fails its checks, the last successful rankings stay available. Historical reconstructions use observed final scores and kickoff cutoffs, rather than an exact record of when each game finished.</p>
-    </details>
+    <p>The best team isn’t necessarily the most deserving team. I built Margin of Merit to evaluate what teams have earned on the field: who they played, whether they won, and by how much. Every season starts fresh.</p>
+    <p>In <a href="{{ cfb_story_url }}">College Football Has a Rankings Problem. So I Built My Own.</a>, I explain why I wanted a different approach, how the Bayesian model learns from the network of games, and how those results become merit, schedule strength, and an ordering with uncertainty.</p>
+    <ul>
+      <li><a href="{{ cfb_story_url }}#learning-from-the-entire-network-of-games">The model, priors, and network of game results</a></li>
+      <li><a href="{{ cfb_story_url }}#how-much-is-a-particular-victory-worth">How much a result is worth</a></li>
+      <li><a href="{{ cfb_story_url }}#strength-of-schedule-without-conference-reputation">Strength of schedule</a></li>
+      <li><a href="{{ cfb_story_url }}#but-actual-results-should-still-matter-most">Head-to-head results, common opponents, and the ranking rules</a></li>
+      <li><a href="{{ cfb_story_url }}#rankings-should-have-margins-of-error">What the uncertainty tells us</a></li>
+    </ul>
+    <p class="small-note">Game data come from <a href="https://collegefootballdata.com/">CollegeFootballData</a>. Rankings update on Sunday mornings during the season. If an update fails its checks, the last successful results stay available.</p>
   </section>
 </div>

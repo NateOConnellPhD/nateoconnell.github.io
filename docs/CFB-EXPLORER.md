@@ -31,9 +31,15 @@ Coverage begins in 2024 because the specified undefeated Power Four rule assumes
 
 ## Browsing and comparisons
 
-The archive shows available weeks and missing fits. Every revision remains accessible. Season trajectories use the latest snapshot per week, preserve gaps, and break official-rank lines when ordering policies change. History-table changes require adjacent weeks with the same policy. The ranking table allows an explicit baseline and names its week; different-policy rank comparisons are rejected. Slider comparisons remain relative to the same snapshot's official ranking.
+Primary navigation is **Season → Week of season**. The selected season's week grid is always visible, with one entry per week and missing fits explicitly marked. Changing seasons opens its latest available week; selecting a week opens its latest saved version. Earlier versions of that same week remain in a separate expandable selector. Links with `?season=2025&week=8` open that week's latest version; existing `snapshot` links still open the exact saved version. A requested week without a fit shows an unavailable state, never another week's rankings.
+
+Public labels show weeks and dates (using America/New_York for a consistent date), without times of day. Exact timestamps and internal model identifiers remain in saved data for reproducibility. Public rule labels omit implementation version numbers. The rankings page reuses the CFB blog post's cover image, links to that article for the full model and rationale, and provides an on-page plain-language guide to every column, posterior summaries, plots, controls, weekly trajectories, and diagnostics.
+
+Season trajectories use the latest snapshot per week, preserve gaps, and break official-rank lines when ordering policies change. History-table changes require adjacent weeks with the same policy. The ranking table allows an explicit baseline and names its week; different-policy rank comparisons are rejected. Slider comparisons remain relative to the same snapshot's official ranking.
 
 ## Validation and limitations
+
+The season/week navigation has an offline controller check in `scripts/cfb/check_navigation.cjs`: week grouping (including week zero), revision selection, switching seasons, pending fits, exact and weekly links, and reuse of loaded snapshots. It uses a minimal DOM stub, not a rendered browser.
 
 Performed locally:
 

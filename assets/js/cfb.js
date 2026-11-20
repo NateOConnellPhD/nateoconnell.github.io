@@ -10,8 +10,8 @@
   let comparisonNumber = 0;
   let viewTeams, policyResult, customPolicy = false, policyError = null, policyFrame = 0;
   let sortKey = 'rank', direction = 1;
-  const date = value => new Date(value).toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+  const date = value => new Date(value).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
   });
   const fixed = value => Number.isFinite(value) ? value.toFixed(2) : '—';
   const interval = (low, high, digits = 1) => Number.isFinite(low) && Number.isFinite(high)
@@ -44,37 +44,47 @@
     const node = document.createElement('option');
     node.value = value; node.textContent = label; return node;
   }
-  function populateUpdates(season, selected) {
+  function seasonWeeks(season) {
+    const rows = index.snapshots.filter(r => r.season === Number(season));
+    const expected = (index.archive || []).find(s => s.season === Number(season))?.weeks || [];
+    return [...new Set([...rows.map(r => r.week), ...expected.map(w => w.week)])].sort((a, b) => a - b)
+      .map(week => ({week, row: rows.find(r => r.week === week)}));
+  }
+  function populateUpdates(season, selected, requestedWeek = null) {
     el('season').value = String(season);
-    el('update').replaceChildren(...index.snapshots.filter(r => r.season === Number(season)).map(r =>
-      option(r.id, `Week ${r.week} · ${r.kind === 'reconstruction' ? 'Reconstructed through ' : 'Cutoff '}${date(r.data_cutoff)} · ${r.games} games`)));
+    const rows = index.snapshots.filter(r => r.season === Number(season));
+    const weeks = seasonWeeks(season);
+    const week = rows.find(r => r.id === selected)?.week ?? requestedWeek ?? rows[0]?.week ?? weeks[weeks.length - 1]?.week;
+    el('week').replaceChildren(...weeks.map(({week, row}) => {
+      const node = option(week, `Week ${week} · ${row ? date(row.data_cutoff) : 'awaiting fit'}`);
+      node.disabled = !row; return node;
+    }));
+    el('week').value = String(week ?? '');
+    el('week').disabled = !rows.length;
+    const revisions = rows.filter(r => r.week === week);
+    el('update').replaceChildren(...revisions.map((r, i) =>
+      option(r.id, `${i === 0 ? 'Latest version' : `Earlier version ${i}`} · Saved ${date(r.published_at)} · ${r.games} games`)));
     if (selected) el('update').value = selected;
+    el('revisions').hidden = revisions.length < 2;
+    renderArchive();
   }
   function renderArchive() {
     const grid = el('archive-grid'); grid.replaceChildren();
-    const years = [...new Set([...(index.archive || []).map(s=>s.season), ...index.snapshots.map(r=>r.season)])].sort((a,b)=>b-a);
-    if (!years.length) {
-      el('archive-status').textContent = 'No weekly snapshots have been published. Historical fitting has to finish before the archive can display results.';
-      return;
-    }
+    const season = Number(el('season').value), weeks = seasonWeeks(season);
+    el('archive').hidden = !el('season').value;
+    el('archive-title').textContent = `${season} season · ${weeks.filter(w => w.row).length} of ${weeks.length} weeks available`;
     el('archive-status').textContent = index.backfill?.status === 'failed'
       ? 'Historical fitting stopped on a failed check. Completed weeks remain available; missing weeks are not estimated or filled in.'
       : index.backfill?.status === 'pending' ? 'Historical reconstruction is in progress. Completed weeks become available as they pass the model checks.'
-      : 'Open a saved week to explore its rankings and posterior. Every revision is also available in the Saved update selector.';
-    for (const year of years) {
-      const section=document.createElement('section'), title=document.createElement('h3'), weeks=document.createElement('div');
-      title.textContent=year; weeks.className='cfb-week-grid'; section.append(title,weeks);
-      const rows=index.snapshots.filter(r=>r.season===year);
-      const expected=(index.archive||[]).find(s=>s.season===year)?.weeks.map(w=>w.week)||[];
-      const available=[...new Set([...rows.map(r=>r.week),...expected])].sort((a,b)=>a-b);
-      for (const week of available) {
-        const row=rows.find(r=>r.week===week), button=document.createElement('button');
-        button.type='button'; button.textContent=`Week ${week}`; button.disabled=!row;
-        const small=document.createElement('small');small.textContent=row?'View rankings':'Awaiting fit';button.append(small);
-        if(row) {button.addEventListener('click',()=>select(row.id));if(el('update').value===row.id)button.setAttribute('aria-current','true');}
-        weeks.append(button);
-      }
-      grid.append(section);
+      : 'Select a week to explore the rankings and posterior using games played through that cutoff.';
+    grid.className = 'cfb-week-grid';
+    for (const {week, row} of weeks) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.textContent = `Week ${week}`; button.disabled = !row;
+      const small = document.createElement('small'); small.textContent = row ? date(row.data_cutoff) : 'Awaiting fit'; button.append(small);
+      if (row) button.addEventListener('click', () => select(row.id));
+      if (el('week').value === String(week)) button.setAttribute('aria-current', 'true');
+      grid.append(button);
     }
   }
   function notice() {
@@ -125,11 +135,10 @@
       el('team-a').replaceChildren(...active.map(t => option(t.id, t.name)));
       el('team-b').replaceChildren(option('', 'All comparisons'), ...active.map(t => option(t.id, t.name)));
       if (current.order.length) el('team-a').value = String(current.order[0]);
-      el('mode').textContent = 'Official rankings · v4 defaults';
+      el('mode').textContent = 'Official rankings';
       ruleSentences(); renderAudit();
     } else {
-      const version = current.specification?.version?.match(/v\d+$/)?.[0] || 'original policy';
-      el('mode').textContent = `Saved official rankings · ${version}. This earlier update retains its original rules; v4 controls are available on newer v4 updates.`;
+      el('mode').textContent = 'Saved official rankings. This older result does not include the information needed to adjust its ranking rules.';
     }
     comparisonLabel();
   }
@@ -145,7 +154,7 @@
       policyResult = result; customPolicy = !isOfficial; policyError = null;
       el('policy-error').hidden = true;
       const changed = current.teams.filter(t => t.rank !== rank.get(t.id) && t.rank != null).length;
-      el('mode').textContent = isOfficial ? 'Official rankings · v4 defaults'
+      el('mode').textContent = isOfficial ? 'Official rankings'
         : `Your rules · ${changed} team${changed === 1 ? '' : 's'} changed position from the official ranking. Saved estimates are unchanged.`;
     } catch (error) {
       // An inconsistent graph has no valid custom order. Label the fallback,
@@ -306,15 +315,14 @@
       setOfficialPolicy();
       el('label').textContent = `${row.season} season / ${id === index.latest ? 'Latest update' : 'Saved update'}`;
       document.getElementById('cfb-title').textContent = `Week ${row.week} rankings`;
-      const checked = index.last_attempt?.season === row.season && id === index.latest && index.last_attempt.status !== 'failed'
-        ? ` Last checked ${date(index.last_attempt.at)}.` : '';
-      el('timing').textContent = `${current.games} completed FBS–FBS games through ${date(current.data_cutoff)}. ${current.kind==='reconstruction'?'Retrospective reconstruction; the model only uses games through this cutoff.':'Unplayed games are not included.'} Source observed ${date(current.data_observed_at)}. Published ${date(current.published_at)}.${checked}`;
-      el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, data observed ${date(current.data_observed_at)}`;
+      el('timing').textContent = `${current.games} completed FBS–FBS games through ${date(current.data_cutoff)}. ${current.kind==='reconstruction'?'Reconstructed using only results through this week.':'Unplayed games are not included.'}`;
+      el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, through ${date(current.data_cutoff)}`;
       const chosenConference = el('conference').value;
       el('conference').replaceChildren(option('', 'All conferences'), ...[...new Set(current.teams.map(r => r.conference).filter(Boolean))].sort().map(c => option(c, c)));
       if ([...el('conference').options].some(o => o.value === chosenConference)) el('conference').value = chosenConference;
       const address = new URL(location.href);
-      address.searchParams.set('snapshot', id); address.searchParams.delete('season'); address.hash = '';
+      address.searchParams.set('snapshot', id);
+      address.searchParams.set('season', row.season); address.searchParams.set('week', row.week); address.hash = '';
       el('permalink').href = address.href;
       el('csv').href = url(row.csv); el('csv').hidden = false;
       el('json').href = url(row.json);
@@ -323,14 +331,32 @@
       el('status').textContent = `Loaded ${row.season} week ${row.week}.`;
       el('status').hidden = true;
     } catch (_) {
-      if (sequence === loadNumber) el('status').textContent = 'This saved update could not be loaded. Choose another update or reload the page.';
+      if (sequence === loadNumber) el('status').textContent = 'This week’s rankings could not be loaded. Choose another week or reload the page.';
     } finally { if (sequence === loadNumber) root.removeAttribute('aria-busy'); }
   }
-  el('season').addEventListener('change', () => {
-    populateUpdates(el('season').value);
-    if(el('update').value) select(el('update').value);
-    else {loadNumber++;comparisonNumber++;el('results').hidden=true;el('csv').hidden=true;el('status').hidden=false;el('status').textContent=`No checked rankings are published for ${el('season').value} yet. Its historical weeks are awaiting fitting.`;}
-  });
+  async function browseSeason(season, week = null, writeURL = true) {
+    populateUpdates(season, null, week);
+    if (el('update').value) return select(el('update').value, writeURL);
+    // A season or linked week awaiting fitting must not retain another week's results.
+    loadNumber++; comparisonNumber++; current = null; previous = null;
+    root.removeAttribute('aria-busy');
+    el('results').hidden = true; el('csv').hidden = true; el('notice').hidden = true;
+    el('label').textContent = `${season} season`;
+    document.getElementById('cfb-title').textContent = week == null ? 'Weekly rankings awaiting fits' : `Week ${week} rankings unavailable`;
+    el('timing').textContent = 'Completed weekly fits will appear here as they become available.';
+    el('status').hidden = false;
+    el('status').textContent = week == null
+      ? `No checked rankings are published for ${season} yet.`
+      : `No checked rankings are published for ${season} week ${week}. Choose an available week below.`;
+    if (writeURL) {
+      const address = new URL(location.href);
+      address.searchParams.delete('snapshot'); address.searchParams.set('season', season);
+      if (week == null) address.searchParams.delete('week'); else address.searchParams.set('week', week);
+      history.replaceState(null, '', address);
+    }
+  }
+  el('season').addEventListener('change', () => browseSeason(el('season').value));
+  el('week').addEventListener('change', () => browseSeason(el('season').value, Number(el('week').value)));
   el('compare-update').addEventListener('change', async()=> {
     const sequence=++comparisonNumber, id=el('compare-update').value, snapshot=current;
     previous=null;comparisonLabel();render();
@@ -347,7 +373,7 @@
     if (!index?.latest) return;
     el('search').value = ''; el('conference').value = '';
     const address = new URL(location.href);
-    address.searchParams.delete('snapshot'); address.searchParams.delete('season');
+    address.searchParams.delete('snapshot'); address.searchParams.delete('season'); address.searchParams.delete('week');
     history.replaceState(null, '', address);
     select(index.latest, false);
   }
@@ -388,20 +414,24 @@
     try {
       index = await fetchJSON(root.dataset.index, 'no-store');
       if (index.schema !== 'margin-of-merit-index-v1' || !Array.isArray(index.snapshots)) throw new Error('Invalid archive');
-      renderArchive();
-      if (!index.snapshots.length) {
+      const seasons = [...new Set([...index.snapshots.map(r => r.season), ...(index.archive || []).map(s => s.season)])].sort((a,b) => b-a);
+      if (!seasons.length) {
         el('status').textContent = index.last_attempt?.status === 'failed'
           ? 'The first ranking update did not finish. No rankings have been published yet.'
           : 'No rankings have been published yet.';
         return;
       }
       el('controls').hidden = false;
-      el('season').replaceChildren(...[...new Set([...index.snapshots.map(r => r.season),...(index.archive||[]).map(s=>s.season)])].sort((a,b) => b-a).map(s => option(s, `${s}${index.snapshots.some(r=>r.season===s)?'':' · awaiting fits'}`)));
+      el('season').replaceChildren(...seasons.map(s => option(s, `${s}${index.snapshots.some(r=>r.season===s)?'':' · awaiting fits'}`)));
+      el('latest').disabled = !index.latest;
       const query = new URLSearchParams(location.search);
-      const requested = index.snapshots.find(r => r.id === query.get('snapshot')) ||
-        index.snapshots.find(r => String(r.season) === query.get('season')) || index.snapshots.find(r => r.id === index.latest);
-      if (!requested) throw new Error('Missing latest update');
-      await select(requested.id, false);
+      const requested = index.snapshots.find(r => r.id === query.get('snapshot'));
+      if (requested) await select(requested.id, false);
+      else if (seasons.includes(Number(query.get('season')))) {
+        const week = /^\d+$/.test(query.get('week') || '') ? Number(query.get('week')) : null;
+        await browseSeason(Number(query.get('season')), week, false);
+      } else if (index.latest) await select(index.latest, false);
+      else await browseSeason(seasons[0], null, false);
     } catch (_) { el('status').textContent = 'The ranking archive could not be loaded. Please reload the page in a moment.'; }
   }
   start();
