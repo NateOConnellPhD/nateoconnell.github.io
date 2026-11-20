@@ -31,4 +31,27 @@
 .cfb-method summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:.95rem}
 .cfb-method details[open] summary{margin-bottom:20px}
 .cfb-method details p{font-size:.93rem}
+.cfb-mode{font-size:.86rem;font-weight:600;color:var(--blue);padding:12px 0;margin:0}
+.cfb-policy,.cfb-explanations{border:1px solid var(--line);padding:20px;margin:14px 0 26px;background:var(--paper);scroll-margin-top:24px}
+.cfb-policy>summary,.cfb-explanations>summary{font-size:.95rem;font-weight:600;color:var(--blue);cursor:pointer;min-height:30px}
+.cfb-policy[open]>summary,.cfb-explanations[open]>summary{margin-bottom:14px}
+.cfb-sliders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:22px 0}
+.cfb-sliders label{flex-direction:row;justify-content:space-between;font-size:.86rem}
+.cfb-sliders output{color:var(--blue);font-variant-numeric:tabular-nums}
+.cfb-sliders input[type=range]{accent-color:var(--blue);border:0;padding:0;min-height:36px;background:transparent;cursor:pointer}
+.cfb-sliders p{font-size:.8rem;line-height:1.6;margin:4px 0;color:var(--muted)}
+.cfb-toggles{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:24px 0}
+.cfb-toggles label{flex-direction:row;align-items:flex-start;font-size:.85rem;gap:10px}
+.cfb-toggles input[type=checkbox]{width:18px;height:18px;min-height:18px;flex:none;margin:4px 0;accent-color:var(--blue)}
+.cfb-toggles small{display:block;font-size:.78rem;font-weight:400;line-height:1.6;color:var(--muted);margin-top:5px}
+.cfb-pair-controls{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}
+.cfb-pair-summary p{font-size:.84rem;margin:8px 0;line-height:1.6}
+.cfb-decisions{margin:20px 0}
+.cfb-explanations details{border-top:1px solid var(--line);padding:12px 0;font-size:.8rem;line-height:1.6}
+.cfb-explanations details summary{cursor:pointer;color:var(--blue)}
+.cfb-explanations details p,.cfb-explanations details li{font-size:.8rem;line-height:1.6;margin:10px 0}
+.cfb-explain{display:block;border:0;border-bottom:1px solid var(--line);background:transparent;padding:2px 0;color:var(--blue);font-size:.7rem;cursor:pointer;text-align:left;margin-top:4px}
+.cfb-page button:focus-visible,.cfb-page summary:focus-visible,.cfb-page input:focus-visible,.cfb-page select:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
+@media(max-width:800px){.cfb-sliders{grid-template-columns:1fr;gap:20px}.cfb-toggles{grid-template-columns:1fr;gap:16px}}
+@media(max-width:500px){.cfb-pair-controls{grid-template-columns:1fr}.cfb-policy,.cfb-explanations{padding:15px}}
 @media(max-width:700px){.cfb-history{grid-template-columns:1fr 2fr}.cfb-history .button{grid-column:1/-1}.cfb-filters{grid-template-columns:1fr 1fr}.cfb-filters label:first-child{grid-column:1/-1}.cfb-page .section-heading{align-items:start;flex-direction:column;gap:10px}.cfb-heading{margin-bottom:35px}.cfb-table th,.cfb-table td{padding:13px 10px}.cfb-method{margin-top:48px}}

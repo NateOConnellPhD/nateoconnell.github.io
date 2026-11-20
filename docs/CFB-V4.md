@@ -76,3 +76,24 @@ Set `NODE` if Node is not on PATH. The private fixture is an ordering oracle onl
 these checks do not validate its original HMC/LOO computation or publish its arrays.
 The maintained NumPy draw-summary tests run in the workflow's numerical environment;
 no runtime or packages were downloaded, and no new HMC fit was run locally for v4.
+
+## Public controls
+
+The page offers three independent 50–99% sliders with their live conditional
+sentences, two scope/protection toggles, and an official-default reset. The table
+labels reader rules, shows official ranks alongside changed ranks, and compares
+custom movement with the same snapshot's official result. Official CSV/JSON and
+permalinks remain explicit; a separate download includes the selected rules and
+decision audit. The team/pair inspector shows actual probabilities, records,
+raw/official/displayed ranks, and every edge of a blocking chain. It also exposes
+protected comparisons among teams between a selected pair's raw ranks, solely as
+an explanation, never as an eligibility filter.
+
+An inconsistent hard graph leaves the official table visible with an explicit
+error and partial audit, rather than displaying a fabricated custom order. Sliders
+are unavailable for historical snapshots without v4 inputs. Display controls
+never alter the stored snapshot or raw uncertainty.
+
+JavaScript syntax, unique HTML IDs, labels, control references, and policy-script
+load order passed source checks. A rendered browser review is pending permission;
+these source checks do not establish desktop/mobile rendering behavior.

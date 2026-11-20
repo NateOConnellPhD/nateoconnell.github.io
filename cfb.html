@@ -16,7 +16,7 @@ description: "My college football rankings: what teams have earned from the game
   </header>
 
   <section id="rankings" aria-labelledby="cfb-title">
-    <div class="section-heading"><div><p class="eyebrow" data-cfb-label>Rankings</p><h2 id="cfb-title">Latest saved update</h2></div><a data-cfb-csv class="text-link" hidden download>Download CSV <span aria-hidden="true">↓</span></a></div>
+    <div class="section-heading"><div><p class="eyebrow" data-cfb-label>Rankings</p><h2 id="cfb-title">Latest saved update</h2></div><a data-cfb-csv class="text-link" hidden download>Official CSV <span aria-hidden="true">↓</span></a></div>
     <p class="small-note" data-cfb-timing>Scheduled for Sunday mornings during the season. Each update shows the games and data cutoff it includes.</p>
     <p class="cfb-notice" data-cfb-notice hidden></p>
     <p class="cfb-state" data-cfb-status role="status" aria-live="polite">Loading rankings…</p>
@@ -28,6 +28,29 @@ description: "My college football rankings: what teams have earned from the game
     </div>
 
     <div data-cfb-results hidden>
+      <p class="cfb-mode" data-cfb-mode role="status" aria-live="polite"></p>
+      <details class="cfb-policy" data-cfb-policy hidden>
+        <summary>Explore the ranking rules</summary>
+        <p class="small-note">Try different cutoffs and see which teams move. The saved merit estimates and uncertainty stay the same. Your choices affect this view only.</p>
+        <div class="cfb-sliders">
+          <div><label for="cfb-protect">Merit protection <output for="cfb-protect" data-cfb-protect-value>90%</output></label>
+            <input id="cfb-protect" data-cfb-protect type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-protect-rule">
+            <p id="cfb-protect-rule" data-cfb-protect-rule></p></div>
+          <div><label for="cfb-direct">Head-to-head rule <output for="cfb-direct" data-cfb-direct-value>90%</output></label>
+            <input id="cfb-direct" data-cfb-direct type="range" min="50" max="99" step="1" value="90" aria-describedby="cfb-direct-rule">
+            <p id="cfb-direct-rule" data-cfb-direct-rule></p></div>
+          <div><label for="cfb-common">Common-opponent rule <output for="cfb-common" data-cfb-common-value>70%</output></label>
+            <input id="cfb-common" data-cfb-common type="range" min="50" max="99" step="1" value="70" aria-describedby="cfb-common-rule">
+            <p id="cfb-common-rule" data-cfb-common-rule></p></div>
+        </div>
+        <div class="cfb-toggles">
+          <label for="cfb-equal"><input id="cfb-equal" data-cfb-equal type="checkbox" checked><span>Compare only equal-record teams<small>Only use direct and common-opponent rules when teams have the same FBS wins and losses.</small></span></label>
+          <label for="cfb-p4"><input id="cfb-p4" data-cfb-p4 type="checkbox" checked><span>Undefeated Power Four protection<small>After eight FBS games, keep undefeated ACC, Big Ten, Big 12 and SEC teams ahead of teams with two or more FBS losses. This separate policy can override merit protection.</small></span></label>
+        </div>
+        <p class="small-note">Each cutoff is independent. Exactly at a cutoff, a game-result rule qualifies; merit protection requires a probability above its cutoff. Rank distance never determines eligibility.</p>
+        <button type="button" class="button button-outline" data-cfb-reset>Official defaults</button>
+        <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
+      </details>
       <div class="cfb-filters">
         <label for="cfb-search">Find a team<input type="search" id="cfb-search" placeholder="Search all teams…" autocomplete="off" data-cfb-search></label>
         <label for="cfb-conference">Conference<select id="cfb-conference" data-cfb-conference><option value="">All conferences</option></select></label>
@@ -38,9 +61,9 @@ description: "My college football rankings: what teams have earned from the game
         <table class="cfb-table">
           <caption class="sr-only" data-cfb-caption>Margin of Merit rankings</caption>
           <thead><tr>
-            <th scope="col" aria-sort="ascending"><button type="button" data-cfb-sort="rank">Rank <span aria-hidden="true">↑</span></button></th>
+            <th scope="col" aria-sort="ascending"><button type="button" data-cfb-sort="rank">Rank <span aria-hidden="true">↑</span></button><small data-cfb-rank-label>Official</small></th>
             <th scope="col"><button type="button" data-cfb-sort="name">Team</button></th>
-            <th scope="col"><abbr title="Change from the previous saved week, when the ordering policy is unchanged">Change</abbr></th>
+            <th scope="col">Change<small data-cfb-change-label>Previous week</small></th>
             <th scope="col"><abbr title="Wins and losses against FBS opponents only">FBS W–L</abbr></th>
             <th scope="col"><button type="button" data-cfb-sort="merit_mean">Merit</button><small>Mean · 90% interval</small></th>
             <th scope="col">Raw rank<small>90% interval</small></th>
@@ -49,9 +72,21 @@ description: "My college football rankings: what teams have earned from the game
           <tbody data-cfb-rows></tbody>
         </table>
       </div>
-      <p class="small-note cfb-table-note">Records include FBS opponents only. Rank intervals and top-10 probabilities describe raw merit; the displayed order also applies the v2 ranking rules. <a href="#cfb-method">What do these numbers mean?</a></p>
+      <p class="small-note cfb-table-note">Records include FBS opponents only. Raw rank, its interval, and top-10 probabilities describe raw merit. They do not change when you adjust the ordering rules. <a href="#cfb-method">What do these numbers mean?</a></p>
       <p class="small-note" data-cfb-comparison></p>
-      <p class="small-note"><a data-cfb-permalink>Link to this update</a> · <a data-cfb-json>Download full results</a></p>
+      <p class="small-note"><a data-cfb-permalink>Link to official update</a> · <a data-cfb-json>Download official results</a></p>
+      <details id="cfb-explanations" class="cfb-explanations" data-cfb-explanations hidden>
+        <summary>Why is a team ranked here?</summary>
+        <p class="small-note">Inspect an actual pairwise decision, its probability, and any chain that prevents it. “Not directly constrained” means the order follows the highest available raw-merit team after all accepted requirements are respected.</p>
+        <div class="cfb-pair-controls">
+          <label for="cfb-team-a">Team<select id="cfb-team-a" data-cfb-team-a></select></label>
+          <label for="cfb-team-b">Compare with<select id="cfb-team-b" data-cfb-team-b></select></label>
+        </div>
+        <div class="cfb-pair-summary" data-cfb-pair-summary></div>
+        <div class="cfb-decisions" data-cfb-decisions></div>
+        <details data-cfb-intermediaries hidden><summary>Protected comparisons between their raw ranks</summary><div data-cfb-intermediary-list></div></details>
+        <button type="button" class="button button-outline" data-cfb-audit-download>Download rules and decision audit</button>
+      </details>
     </div>
     <noscript><p>Enable JavaScript to browse the table, or <a href="{{ '/assets/data/cfb/index.json' | relative_url }}">open the saved ranking index</a> for links to JSON and CSV downloads.</p></noscript>
   </section>
@@ -63,13 +98,17 @@ description: "My college football rankings: what teams have earned from the game
     <h3>Each game contributes to a team’s résumé</h3>
     <p>The model estimates team strength and home advantage from scoring margins. For each game, it asks how a reference team—the 25th-strongest team in that posterior draw—would be expected to perform against that opponent, in that location. The actual margin is converted into a percentile of that distribution. Wins contribute between zero and one point; losses contribute between minus one and zero. A team’s season merit is the sum of those game credits.</p>
     <p>The game being scored is left out when estimating its opponents and reference standard, so it does not help grade itself. The rankings use completed regular-season FBS-versus-FBS games, including conference championships and Army–Navy. FCS games and bowls/CFP are excluded.</p>
-    <h3>Close comparisons can use football evidence</h3>
-    <p>V2 starts with posterior mean merit. When teams have the same FBS record and their merit comparison is uncertain, head-to-head results or a clear advantage against common opponents can influence the order. Those preferences have to outweigh the merit cost of passing every team in between. Pairwise merit comparisons above 90% probability are protected, apart from an explicit rule placing undefeated ACC, Big Ten, Big 12, or SEC teams with at least eight FBS wins above teams with two or more FBS losses.</p>
+    <h3>Let the uncertainty tell us when results should decide</h3>
+    <p>V4 starts with posterior mean merit. I don’t define “close” by how many places separate two teams. I use the probability that one has earned more merit than the other. Two teams twelve places apart can qualify for a head-to-head adjustment; two neighboring teams can have enough evidence separating them to keep their order protected.</p>
+    <p>At the official defaults, a merit comparison above 90% probability is protected. For teams with the same FBS record, a decisive head-to-head winner must go ahead unless the model gives the loser more than a 90% chance of higher merit, or another required ordering prevents it. Common opponents are considered only when the teams never played each other. A team that did at least as well against every shared opponent and better against one must go ahead unless opposing merit confidence exceeds 70%, or that ordering conflicts with an earlier requirement. A split direct series never sends us looking for a common-opponent tiebreak.</p>
+    <p>There’s one separate policy choice: an undefeated ACC, Big Ten, Big 12, or SEC team with at least eight FBS games stays ahead of teams with two or more FBS losses. That can override merit protection for those comparisons. You can change the three thresholds, compare across different records, or turn off that undefeated-team rule above.</p>
+    <p>These rules create required pairwise orderings, not swaps of numbered positions. If a rule would create a contradiction, its explanation shows the full chain blocking it. Among teams whose requirements are satisfied, the team with the highest raw merit goes next. Changing the rules may move teams—or leave the order exactly as it was.</p>
     <h3>The uncertainty is part of the result</h3>
     <p>The intervals show how much the underlying merit and rank vary across posterior draws. “P(top 10)” is the probability that a team’s raw merit falls in the top ten. It is not a playoff probability, and it does not apply the editorial ordering rules to each draw. The joint uncertainty uses a marginal-quantile approximation, so these probabilities should not be read as exact.</p>
     <details><summary>Model and update details</summary>
       <p>Scoring margins follow a Student-t model with team-strength differences and home advantage. Team strengths have Normal(0, 14) priors; home advantage has a Normal(2, 2.5) prior. The residual scale is 8 + exp(η), with η distributed Normal(log 6, 0.75). Degrees of freedom are 2 + exp(ζ), with ζ distributed Normal(log 5, 0.9). Normal scales here are standard deviations. The eight-point floor is on the Student-t scale, not its standard deviation, and stays the same all season.</p>
-      <p>Fits use four sequential NUTS chains and checked leave-one-game-out scoring. Unreliable importance-sampling approximations require individual omitted-game refits. V2 uses preference weights of 0.50 for head-to-head, 0.20 for common opponents, and a 0.04 cost per crossing. These are declared policy choices. The ordering search finds a local optimum under single-team insertions.</p>
+      <p>Fits use four sequential NUTS chains and checked leave-one-game-out scoring. Unreliable importance-sampling approximations require individual omitted-game refits. V4 uses no preference weights or rank-distance penalties. Direct-result requirements precede common-opponent requirements; within either type, lower opposing-merit probability comes first, with ties resolved by stable team names. Contradictory hard requirements are reported as an error. Stable topological completion respects every accepted requirement but does not promise the smallest possible number of rank changes.</p>
+      <p>Changing a control reuses saved pairwise probabilities in your browser. It does not rerun the Bayesian model. Earlier archived updates keep the policy used when they were published; controls are available on v4 snapshots.</p>
       <p>Game data come from <a href="https://collegefootballdata.com/">CollegeFootballData</a>. Updates are scheduled for Sunday mornings, with additional refreshes when needed. A week may still have unplayed games: use the displayed observation time and game count to see what an update includes. If an update fails its checks, the last successful rankings stay available. Historical reconstructions use observed final scores and kickoff cutoffs, rather than an exact record of when each game finished.</p>
     </details>
   </section>
