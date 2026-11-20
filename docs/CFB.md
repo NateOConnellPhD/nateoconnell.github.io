@@ -49,13 +49,36 @@ it is not an isolated causal estimate of the floor's effect.
 
 Keep the website on GitHub Pages. Run Python and NumPyro's NUTS sampler in a
 scheduled background job, initially GitHub Actions. JavaScript handles the
-table, filters, historical navigation, and charts. It does not fit a posterior
-when someone opens the page. NumPyro already provides maintained adaptive HMC:
+table, filters, historical navigation, and charts using saved result files.
+Visitors never call the football-data API or trigger inference, including when
+they select another season, week, or team. NumPyro provides maintained adaptive HMC:
 https://num.pyro.ai/en/stable/mcmc.html
+
+Persist the game data used by the fits, season-specific rosters/conferences,
+data provenance, and validated weekly ranking/uncertainty summaries as versioned
+files. Store model/policy versions, diagnostics, and explicit data cutoffs with
+each result. A small index lists available seasons/weeks and points to the
+latest valid snapshot. "Current" and "Historical" use the same saved results;
+current means the latest successful **weekly** update, not live-game rankings.
+These durable inputs/results must not depend on expiring Actions artifacts or
+dependency caches. Large posterior arrays are not needed to browse the site.
+
+Backfill missing historical inputs once, verify any reusable supplied data,
+then compute historical weekly results once using only games available at each
+cutoff. Browsing and scheduled current-season updates must not fetch or refit
+completed historical seasons. Historical corrections or methodology revisions
+are explicit maintenance operations with labeled result revisions.
 
 Proposed update sequence:
 
-1. Fetch current-season results and retain the raw response's provenance. Verify
+1. Once each Sunday morning after Saturday's games, make one bulk current-season
+   games request and retain the response and query provenance. The documented
+   `/games` endpoint accepts a year with no week filter and returns a game array:
+   https://api.collegefootballdata.com/api/games
+   Refresh the season's saved game file so the same request captures newly
+   completed games and corrections to earlier scores. Cache season metadata
+   separately; initial roster/calendar setup and explicit error retries are
+   additional calls, not visitor-driven requests. Verify
    completed status, unique game IDs, final scores, venues, and season-specific
    FBS membership. Exclude FCS games and postseason bowls/CFP under the current
    scope; include eligible conference championships and Army–Navy.
@@ -73,15 +96,21 @@ Proposed update sequence:
 5. Publish a small JSON/CSV result only after all applicable checks pass. Retain
    the last valid ranking if an update fails and show its actual data cutoff
    and update timestamp. Do not silently substitute approximate inference.
-6. Keep a changing current-season result separate from dated weekly snapshots.
+6. Advance the current-results pointer to the newly validated weekly snapshot.
    A correction creates an explicit revision; it must not silently rewrite what
    an earlier post displayed. Candidate and failed runs are not official ranks.
 
-Start with hourly checks during relevant game windows and a daily reconciliation
-for corrections. Reassess after timing a real fit and measuring provider latency.
-Scheduled Actions can be delayed or dropped, so this is automatic updating after
-completed games, not a guarantee of instant/live-play rankings. A dedicated
-worker becomes appropriate only if measured latency makes it necessary:
+The owner selected a weekly Sunday refresh instead of hourly/daily polling.
+With season metadata already stored, the normal in-season schedule uses one
+games request per week (roughly four or five per month). If eligible data have
+not changed, keep the prior result and skip inference. No routine off-season
+polling or historical refresh is needed. Sunday/Monday games and provider-late
+results enter the following scheduled update unless an explicit extra refresh
+is requested; the page must show the actual cutoff instead of claiming a week
+is complete. Allow an owner-triggered refresh for those exceptions/corrections.
+The workflow's selected Sunday hour must specify its time zone. Scheduled
+Actions can be delayed or dropped, so preserve the last valid result and its
+timestamp if no successful update is available:
 https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 
 GitHub-token commits do not trigger a Pages build automatically. The eventual
