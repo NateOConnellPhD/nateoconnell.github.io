@@ -11,11 +11,12 @@ inputs have been audited against the reference, including documented venue
 corrections. See [the data audit](CFB-2024-DATA-AUDIT.md). Exact-LOO
 fallback, historical policy, scheduled updates, automated publication, and the
 public blog section remain unfinished.
-The updated private Margin of Merit v2 handoff has also been reviewed. It
-replaces the intended production ordering policy, not the statistical model or
-data importer. Its policy is specified below but is not yet integrated into the
-maintained production code. Both handoffs stay private and unchanged; 2024 is
-a reference, not the limit of the historical archive.
+The updated private Margin of Merit v2 handoff replaces the production ordering
+policy, not the statistical model or importer. The maintained v2 implementation
+and saved-data fitting command are now present. Fifteen focused standard-library
+policy checks passed; the new numerical bridge and full fitting command have
+not yet been executed. Both handoffs stay private and unchanged; 2024 is a
+reference, not the limit of the historical archive.
 
 ## First GitHub data sync
 
@@ -111,7 +112,21 @@ the selected editorial rule to each draw. Public labels must say, for example,
 `P(raw merit in top 8)`. These quantities retain the known approximate joint
 dependence from per-game marginal quantile transport.
 
-Integration/replay checks still needed:
+Implementation and remaining replay checks:
+
+- `ranking_policy.py` implements the ordering objective and audited insertion
+  search. It computes strict pair probabilities in both directions, excludes
+  no-game teams from published ranks/probabilities, and handles exact tied raw
+  draws with midpoint ranks and fractional top-K membership.
+- Strong confidence constraints apply even if their direction differs from
+  posterior mean order. A stable topological pass finds a feasible starting
+  order; conflicting hard constraints stop the candidate rather than silently
+  relaxing an intermediate team's lock. The direct P4 exception is recorded.
+- Fifteen focused offline tests passed for crossing costs, intermediary locks,
+  the exact 90% boundary, equal-record scope, common opponents, split/cyclic
+  direct results, zero-bonus identity, ties, no-game teams, P4 exceptions,
+  constraint conflicts, reproducibility, and a small exhaustive ordering oracle.
+  Four NumPy tests for raw rank/probability summaries are ready but not run yet.
 
 - The supplied folder and ZIP contain policy code, tests, and result tables,
   but not the referenced `2026_merit_draws.npz` or
@@ -121,18 +136,40 @@ Integration/replay checks still needed:
   same `arviz_stats...psislw(-LL.T)` call pattern as the earlier archive. That
   alone does not establish its target or invalidate its outputs, but the earlier
   scoring discrepancy makes a numerical check necessary before reusing them.
-- Explicitly handle tied merit draws, including teams with zero eligible games:
-  the supplied pair matrix sets the reverse probability to `1 - P(A > B)`,
-  which treats equality as strict superiority in the reverse direction.
-- Check confidence locks in both directions even if mean and probability order
-  disagree, and test feasibility when the P4 exception crosses an intermediate
-  team's confidence lock. Do not silently relax an unrelated lock.
-- Use the cached season-specific roster/conferences and stable IDs. Do not copy
-  the standalone runner's team roster inferred only from completed games, its
-  2026-specific filenames, or its separate data downloader into production.
+- The maintained implementation uses cached season-specific rosters/conferences
+  and IDs. It does not import the private standalone runner, copy its roster
+  inferred only from completed games, or use its separate downloader.
 
 Do not publish the packet's superseded hard-precedence tables. Its v2 tables
 are reference material pending the checks above, not verified live output.
+
+## Saved-data candidate command
+
+`scripts/cfb/fit_saved_season.py --season 2024` prepares the reviewed inputs,
+runs the canonical four-chain NUTS fit (1,000 warmup and 1,000 retained draws
+per chain), checks diagnostics, calculates checked PSIS-LOO merit, then applies
+v2. It supports `--through-week` and an explicit timezone-aware `--as-of` cutoff.
+It makes no network calls, installs nothing, and never publishes. Pre-2024
+ranking runs stop until an explicit historical conference policy is chosen.
+
+Use the pinned numerical environment only after the working-protocol approval
+for this validation. The command and all library caches write under
+`.codex-tmp/cfb-refit/`. Estimated additional result files are under 100 MB;
+the separately approved runtime/dependency environment needs a larger budget.
+
+Posterior caching uses effective team IDs/model arrays, canonical model and
+diagnostic source, dependency versions, seed, and sampling settings. A separate
+LOO cache uses the fit, scorer, reference rank, and game IDs. Policy and display
+changes regenerate the candidate without invalidating a reusable posterior or
+LOO result. Each cache validates stored array hashes before reuse. This is a
+local validation cache; durable website snapshots and production storage still
+need integration. No numerical cache reuse has been measured on this new path.
+
+Candidates include sampling/LOO diagnostics, source provenance, venue corrections,
+the data cutoff, policy identity, official and raw ranks, raw top-K probabilities,
+and ordering audits. Failed sampling or unreliable PSIS produces no candidate.
+The latter still requires the planned exact-LOO fallback. A candidate remains
+`publication_ready: false` pending the complete publication review.
 
 ## One model throughout each season
 
