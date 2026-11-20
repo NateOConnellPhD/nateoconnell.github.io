@@ -269,13 +269,16 @@
       movement.setAttribute('aria-label', change == null ? 'No comparison' : change === 0 ? 'Unchanged' : `${change > 0 ? 'Up' : 'Down'} ${Math.abs(change)} places`);
       cell(`${r.wins_fbs}–${r.losses_fbs}`);
       cell(r.rank == null ? '—' : fixed(r.merit_mean), r.rank == null ? 'No eligible games' : interval(r.merit_lo90, r.merit_hi90, 2));
+      cell(Number.isFinite(r.sos_mean) ? `${(100 * r.sos_mean).toFixed(1)}%` : '—',
+        Number.isFinite(r.sos_lo90) && Number.isFinite(r.sos_hi90)
+          ? `${(100 * r.sos_lo90).toFixed(1)}–${(100 * r.sos_hi90).toFixed(1)}%` : null);
       cell(r.raw_merit_rank ?? '—', interval(r.raw_rank_lo90, r.raw_rank_hi90));
       cell(Number.isFinite(r.p_raw_merit_top10) ? `${(r.p_raw_merit_top10 * 100).toFixed(1)}%` : '—');
       fragment.append(tr);
     }
     if (!rows.length) {
       const tr = document.createElement('tr'), td = document.createElement('td');
-      td.colSpan = 7; td.textContent = 'No matching teams. Try another search or conference.'; tr.append(td); fragment.append(tr);
+      td.colSpan = 8; td.textContent = 'No matching teams. Try another search or conference.'; tr.append(td); fragment.append(tr);
     }
     el('rows').replaceChildren(fragment);
     el('count').textContent = `${rows.length} of ${current.teams.length} teams shown.${query || conference ? ' Search and conference filters include all ranks.' : ''}`;
