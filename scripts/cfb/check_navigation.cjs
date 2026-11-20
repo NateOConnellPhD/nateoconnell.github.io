@@ -64,6 +64,10 @@ async function page(query = '', data = index) {
   assert.equal(p.get('archive').hidden, false);
   assert.equal(p.get('update').options.length, 2);
   assert.equal(p.get('revisions').hidden, false);
+  for (const label of [p.get('timing').textContent, ...p.get('week').options.map(o => o.textContent), ...p.get('update').options.map(o => o.textContent)]) {
+    assert.doesNotMatch(label, /\d{1,2}:\d{2}|\b(?:AM|PM|UTC|GMT|EST|EDT)\b/, 'Public dates should omit times');
+  }
+  assert.doesNotMatch(p.get('mode').textContent, /\bv\d+\b/, 'Public labels should omit internal model versions');
 
   await p.change('week', '0');
   assert.equal(p.shown.at(-1), '2026-0-new');

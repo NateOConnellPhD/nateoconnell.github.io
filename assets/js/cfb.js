@@ -10,8 +10,8 @@
   let comparisonNumber = 0;
   let viewTeams, policyResult, customPolicy = false, policyError = null, policyFrame = 0;
   let sortKey = 'rank', direction = 1;
-  const date = value => new Date(value).toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+  const date = value => new Date(value).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
   });
   const fixed = value => Number.isFinite(value) ? value.toFixed(2) : '—';
   const interval = (low, high, digits = 1) => Number.isFinite(low) && Number.isFinite(high)
@@ -56,14 +56,14 @@
     const weeks = seasonWeeks(season);
     const week = rows.find(r => r.id === selected)?.week ?? requestedWeek ?? rows[0]?.week ?? weeks[weeks.length - 1]?.week;
     el('week').replaceChildren(...weeks.map(({week, row}) => {
-      const node = option(week, `Week ${week}${row ? '' : ' · awaiting fit'}`);
+      const node = option(week, `Week ${week} · ${row ? date(row.data_cutoff) : 'awaiting fit'}`);
       node.disabled = !row; return node;
     }));
     el('week').value = String(week ?? '');
     el('week').disabled = !rows.length;
     const revisions = rows.filter(r => r.week === week);
     el('update').replaceChildren(...revisions.map((r, i) =>
-      option(r.id, `${i === 0 ? 'Latest version' : 'Earlier version'} · Saved ${date(r.published_at)} · ${r.games} games`)));
+      option(r.id, `${i === 0 ? 'Latest version' : `Earlier version ${i}`} · Saved ${date(r.published_at)} · ${r.games} games`)));
     if (selected) el('update').value = selected;
     el('revisions').hidden = revisions.length < 2;
     renderArchive();
@@ -81,7 +81,7 @@
     for (const {week, row} of weeks) {
       const button = document.createElement('button');
       button.type = 'button'; button.textContent = `Week ${week}`; button.disabled = !row;
-      const small = document.createElement('small'); small.textContent = row ? 'View rankings' : 'Awaiting fit'; button.append(small);
+      const small = document.createElement('small'); small.textContent = row ? date(row.data_cutoff) : 'Awaiting fit'; button.append(small);
       if (row) button.addEventListener('click', () => select(row.id));
       if (el('week').value === String(week)) button.setAttribute('aria-current', 'true');
       grid.append(button);
@@ -135,11 +135,10 @@
       el('team-a').replaceChildren(...active.map(t => option(t.id, t.name)));
       el('team-b').replaceChildren(option('', 'All comparisons'), ...active.map(t => option(t.id, t.name)));
       if (current.order.length) el('team-a').value = String(current.order[0]);
-      el('mode').textContent = 'Official rankings · v4 defaults';
+      el('mode').textContent = 'Official rankings';
       ruleSentences(); renderAudit();
     } else {
-      const version = current.specification?.version?.match(/v\d+$/)?.[0] || 'original policy';
-      el('mode').textContent = `Saved official rankings · ${version}. This earlier update retains its original rules; v4 controls are available on newer v4 updates.`;
+      el('mode').textContent = 'Saved official rankings. This older result does not include the information needed to adjust its ranking rules.';
     }
     comparisonLabel();
   }
@@ -155,7 +154,7 @@
       policyResult = result; customPolicy = !isOfficial; policyError = null;
       el('policy-error').hidden = true;
       const changed = current.teams.filter(t => t.rank !== rank.get(t.id) && t.rank != null).length;
-      el('mode').textContent = isOfficial ? 'Official rankings · v4 defaults'
+      el('mode').textContent = isOfficial ? 'Official rankings'
         : `Your rules · ${changed} team${changed === 1 ? '' : 's'} changed position from the official ranking. Saved estimates are unchanged.`;
     } catch (error) {
       // An inconsistent graph has no valid custom order. Label the fallback,
@@ -316,10 +315,8 @@
       setOfficialPolicy();
       el('label').textContent = `${row.season} season / ${id === index.latest ? 'Latest update' : 'Saved update'}`;
       document.getElementById('cfb-title').textContent = `Week ${row.week} rankings`;
-      const checked = index.last_attempt?.season === row.season && id === index.latest && index.last_attempt.status !== 'failed'
-        ? ` Last checked ${date(index.last_attempt.at)}.` : '';
-      el('timing').textContent = `${current.games} completed FBS–FBS games through ${date(current.data_cutoff)}. ${current.kind==='reconstruction'?'Retrospective reconstruction; the model only uses games through this cutoff.':'Unplayed games are not included.'} Source observed ${date(current.data_observed_at)}. Published ${date(current.published_at)}.${checked}`;
-      el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, data observed ${date(current.data_observed_at)}`;
+      el('timing').textContent = `${current.games} completed FBS–FBS games through ${date(current.data_cutoff)}. ${current.kind==='reconstruction'?'Reconstructed using only results through this week.':'Unplayed games are not included.'}`;
+      el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, through ${date(current.data_cutoff)}`;
       const chosenConference = el('conference').value;
       el('conference').replaceChildren(option('', 'All conferences'), ...[...new Set(current.teams.map(r => r.conference).filter(Boolean))].sort().map(c => option(c, c)));
       if ([...el('conference').options].some(o => o.value === chosenConference)) el('conference').value = chosenConference;

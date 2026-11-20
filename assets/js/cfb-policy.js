@@ -9,7 +9,7 @@
   function run(input, settings = defaults) {
     const spec = {...defaults, ...settings};
     if (input?.schema !== 'margin-of-merit-policy-input-v4' || spec.version !== defaults.version || input.season < 2024) {
-      throw new Error('This saved update does not include v4 comparison inputs.');
+      throw new Error('This saved update does not include the information needed to adjust its ranking rules.');
     }
     for (const key of ['merit_protection', 'head_to_head', 'common_opponents']) {
       if (!Number.isFinite(spec[key]) || spec[key] < .5 || spec[key] > .99) throw new Error('Thresholds must be between 50% and 99%.');

@@ -6,13 +6,13 @@ window.CFBExplorer = (root, api) => {
   const seriesCache = new Map();
   let current, archive, series, historySequence = 0, activeTab = 'rankings';
   const metrics = {
-    merit: ['Earned merit', 'Sum of leave-one-game-out game credits. Higher is better.'],
-    raw_rank: ['Raw merit rank', 'Posterior midrank among teams with eligible games; lower is better. The ordering rules are not applied to these draws.'],
-    strength: ['Team strength (points)', 'Full-data posterior for θ on the scoring-margin scale. Strength is different from earned merit.'],
+    merit: ['Earned merit', 'Total credit from the games a team has played, accounting for opponents, margins, and venue. Wins add credit; losses subtract it. Higher is better.'],
+    raw_rank: ['Raw merit rank', 'Where the team falls by earned merit in each sampled scenario, before the additional ranking rules. Tied teams share their positions. Lower is better.'],
+    strength: ['Team strength (points)', 'Estimated underlying strength in points, using all eligible games. Differences between teams describe expected scoring margins, rather than the merit they have earned.'],
     sos: ['Strength of schedule (loss probability)', 'Average probability that the reference team—the 25th-strongest team in each draw—would lose against this schedule, accounting for venue. The scale is 0 to 1: 0.30 means 30%. Higher means a harder schedule. Each game is left out when estimating its difficulty.'],
-    home_adv: ['Home advantage (points)', 'Full-data posterior for the common home-field advantage.'],
-    sigma: ['Residual scale (points)', 'Student-t scale, not its standard deviation. The model imposes an eight-point lower bound.'],
-    nu: ['Degrees of freedom', 'Student-t tail parameter. Smaller values indicate heavier tails.']
+    home_adv: ['Home advantage (points)', 'The common point advantage associated with playing at home. Neutral-site games receive no home advantage.'],
+    sigma: ['Residual scale (points)', 'How widely scores vary around the margins suggested by team strengths and venue. This scale has an eight-point minimum and is not literally a standard deviation.'],
+    nu: ['Degrees of freedom', 'How readily the model allows unusually extreme scores. Smaller values allow more surprising blowouts.']
   };
   const num = x => Number.isFinite(x) ? x.toFixed(2) : '—';
   const interval = (a,b) => `${num(a)} to ${num(b)}`;
@@ -115,7 +115,9 @@ window.CFBExplorer = (root, api) => {
     if (!mass && !cdf) for (const entry of entries.filter(e=>e.s.distribution.kind==='mass')) {
       el('stat-legend').append(node('small',`${entry.name} is a point mass at ${num(entry.s.mean)} (100% of draws), shown by its vertical summary line; it has no continuous density.`));
     }
-    el('stat-note').textContent = `${current.posterior.interpretation} ${cdf&&!mass?'The continuous CDF is interpolated within saved histogram bins. ':''}${current.posterior.representation} Intervals are equal-tailed.`;
+    el('stat-note').textContent = `${global || key === 'strength'
+      ? 'These estimates use the model fitted to all eligible games through this cutoff.'
+      : 'These estimates combine leave-one-game-out calculations, so a game does not help grade itself. Their joint uncertainty is approximate.'} Summary statistics use all retained draws. Intervals contain the middle 50% or 90% of those draws. ${cdf&&!mass?'The continuous cumulative curve is approximated between saved bin boundaries.':'The plot groups continuous draws into bins; separate rank values show their share of the draws.'}`;
     if (!global) {
       for (const id of ids) {
         const team=current.teams.find(t=>String(t.id)===id), box=node('p');

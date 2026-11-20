@@ -1,4 +1,6 @@
 .cfb-heading{max-width:850px;margin-bottom:48px}
+.cfb-hero{margin:24px 0}
+.cfb-hero img{display:block;width:100%;height:auto}
 .cfb-jumps{display:flex;flex-wrap:wrap;gap:12px 28px;font-size:.9rem}
 .cfb-jumps a{min-height:40px;padding:6px 0}
 .cfb-page .section-heading{align-items:center}
@@ -24,7 +26,11 @@
 .cfb-table tr:hover{background:var(--tint)}
 .cfb-table abbr{text-decoration:underline dotted;text-underline-offset:3px}
 .cfb-table-note{margin-top:20px;max-width:780px}
-.cfb-method{border-top:1px solid var(--line);margin-top:72px;padding-top:38px;max-width:800px}
+.cfb-guide,.cfb-method{border-top:1px solid var(--line);margin-top:72px;padding-top:38px;max-width:800px}
+.cfb-guide,.cfb-guide h3{scroll-margin-top:24px}
+.cfb-guide h2{margin-top:0}
+.cfb-glossary dt{font-weight:600;color:var(--blue);margin:20px 0 5px}
+.cfb-glossary dd{margin:0 0 18px}
 .cfb-method .eyebrow{margin-bottom:14px}
 .cfb-method h2{margin-top:0}
 .cfb-method details{padding:18px 0;border-top:1px solid var(--line)}
