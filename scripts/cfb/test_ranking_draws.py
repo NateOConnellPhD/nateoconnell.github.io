@@ -16,15 +16,29 @@ class DrawTests(unittest.TestCase):
             self.assertEqual(row['raw_rank_mean'], 5)
 
     def test_rank_uncertainty_is_raw_merit_not_official_policy(self):
-        roster = teams(2)
-        roster[0]['conference'] = 'ACC'
-        result = rank_merit(roster, games([(1, 2)] * 8), np.tile([1., 2.], (20, 1)), season=2024)
+        # A and B are both 1–1. A's direct win qualifies by proximity even
+        # though B has greater merit in every draw. C and D have other records.
+        result = rank_merit(teams(4), games([(1, 2), (3, 1), (2, 4)]),
+                            np.tile([1., 2., -1., -2.], (20, 1)), season=2024)
         a = next(r for r in result['teams'] if r['id'] == 1)
         self.assertEqual(a['rank'], 1)
         self.assertEqual(a['raw_merit_rank'], 2)
         self.assertEqual(a['raw_rank_mean'], 2)
-        self.assertTrue(any(r['type'] == 'merit_protection' and
+        self.assertTrue(any(r['type'] == 'head_to_head' and r['winner_id'] == 1 and
+                            r['loser_id'] == 2 and r['status'] == 'accepted' for r in result['audit']))
+        self.assertTrue(any(r['type'] == 'merit_protection' and r['winner_id'] == 2 and r['loser_id'] == 1 and
                             r['status'] == 'overridden_by_global_objective' for r in result['audit']))
+
+    def test_undefeated_p4_team_has_no_automatic_promotion(self):
+        roster = teams(2)
+        roster[0]['conference'] = 'ACC'
+        result = rank_merit(roster, games([(1, 2)] * 8), np.tile([1., 2.], (20, 1)), season=2024)
+        a = next(r for r in result['teams'] if r['id'] == 1)
+        self.assertEqual((a['wins_fbs'], a['losses']), (8, 0))
+        self.assertEqual((a['rank'], a['raw_merit_rank'], a['raw_rank_mean']), (2, 2, 2))
+        self.assertEqual(result['order'], [2, 1])
+        self.assertTrue(all(r['type'] == 'merit_protection' and r['status'] == 'accepted'
+                            for r in result['audit']))
 
     def test_no_game_teams_get_null_probabilities(self):
         result = rank_merit(teams(3), games([(1, 2)]), np.tile([1., -1., 0.], (20, 1)), season=2024)
