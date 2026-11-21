@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Publications
-section: research
+section: publications
 permalink: /publications/
 description: "Publications by Nathaniel O’Connell, sortable by publication date and citation count."
 ---
@@ -9,7 +9,7 @@ description: "Publications by Nathaniel O’Connell, sortable by publication dat
   <header class="page-heading">
     <p class="eyebrow">Papers & contributions</p><h1>Publications<span class="accent">.</span></h1>
     {% assign scholar = site.data.profile.links | where: 'label', 'Google Scholar' | first %}
-    <div class="resource-links"><a class="text-link" href="{{ '/research/' | relative_url }}">Research & work <span aria-hidden="true">←</span></a>{% if scholar.url %}<a class="text-link" href="{{ scholar.url | escape }}">Google Scholar <span aria-hidden="true">↗</span></a>{% endif %}</div>
+    {% if scholar.url and scholar.url != empty %}<div class="resource-links"><a class="text-link" href="{{ scholar.url | escape }}">Google Scholar <span aria-hidden="true">↗</span></a></div>{% endif %}
     {% if site.data.publications.items.size > 0 %}<p class="small-note">Publication records and citation counts from <a href="{{ site.data.publications.author_url | escape }}">OpenAlex</a>, updated {{ site.data.publications.updated | date: '%B %-d, %Y' }}. Coverage and citation counts differ from Google Scholar.</p>{% endif %}
   </header>
   {% if site.data.publications.items.size > 0 %}

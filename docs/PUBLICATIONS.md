@@ -1,6 +1,6 @@
 # Publication list
 
-`/publications/` shows a saved OpenAlex list with local search and sorting by date or citation count. Entries render without JavaScript, and visitors do not contact OpenAlex. Research & work links to the list; Google Scholar remains linked separately. OpenAlex coverage and citation counts differ from Scholar.
+`/publications/` shows a saved OpenAlex list with local search and sorting by date or citation count. Entries render without JavaScript, and visitors do not contact OpenAlex. Publications has its own main navigation tab between Research and Talks, with a Google Scholar link on the publication page. OpenAlex coverage and citation counts differ from Scholar.
 
 The homepage's **Recent papers** box reuses this same snapshot and weekly refresh. It shows the three newest articles, reviews, or preprints by publication date, with direct paper links, dates, and journal names when available. Conference abstracts and other record types stay in the full list. The box links to all publications and the Google Scholar profile, identifies OpenAlex as its source, and shows the last refresh date. It makes no additional API requests and stays hidden when no eligible records are available. New papers appear once OpenAlex indexes them and the next refresh succeeds; this is not a direct Google Scholar feed.
 
