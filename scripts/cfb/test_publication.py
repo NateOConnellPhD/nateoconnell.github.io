@@ -17,16 +17,19 @@ from ranking_policy import order_policy, prepare_policy
 from policy_fixtures import probability
 from sync_data import ROOT, UTC
 from historical_home import CANONICAL as HOME
+from model import strength_structure
 
 
 def fixture(season=2026):
     at = f'{season}-11-20T12:00:00+00:00'
     inputs = {'season': season, 'fit_input_sha256': 'fixture', 'scored_game_indices': [0],
               'home_history': {'input_sha256': 'history-fixture'}, 'venue_corrections_sha256': 'venues-fixture',
-              'teams': [{'id': i, 'name': name, 'conference': 'ACC'} for i, name in ((1, 'A'), (2, 'B'))],
+              'teams': [{'id': i, 'name': name, 'conference': 'ACC', 'classification':'fbs'} for i, name in ((1, 'A'), (2, 'B'))],
               'games': [{'id': 1, 'week': 12, 'start_date': at, 'home_id': 1, 'away_id': 2,
                          'season': season, 'eligible': True, 'completed': True, 'season_type': 'regular',
                          'home_points': 7, 'away_points': 0}], 'source': {'games': {'retrieved_at': at}}}
+    inputs['teams'].append(dict(id=99,name='FCS fixture',conference='Ivy',classification='fcs'))
+    inputs['strength_structure'] = strength_structure(inputs['teams'])
     rows = []
     for i, name in enumerate(('A', 'B'), 1):
         rows.append({'id': i, 'name': name, 'conference': 'ACC', 'rank': i, 'raw_merit_rank': i,
@@ -37,15 +40,15 @@ def fixture(season=2026):
                      'sos_mean': .5, 'sos_lo90': .4, 'sos_hi90': .6,
                      'p_raw_merit_top8': 1., 'p_raw_merit_top10': 1., 'p_raw_merit_top25': 1.})
     result = {'season': season, 'games': 1, 'teams': rows, 'order': [1, 2], 'data_cutoff': at,
-              'identity': {'inputs': {'fit_input_sha256': 'fixture', 'home_history_sha256': 'history-fixture'}},
+              'identity': {'inputs': {'fit_input_sha256': 'fixture', 'home_history_sha256': 'history-fixture', 'strength_structure': inputs['strength_structure']}},
               'home_prior': {'years': list(range(season-3, season)), 'history_input_sha256': 'history-fixture',
                              'prior_sha256': 'a'*64, 'specification': asdict(HOME), 'diagnostics': {'converged': True}},
-              'sampling_diagnostics': {'sampling_checks_passed': True, 'max_rank_normalized_rhat': 1.,
+              'sampling_diagnostics': {'sampling_checks_passed': True, 'parameters_checked': ['mu_fcs','tau_division','tau_conf','theta_z','conference_z','conference_effect'], 'max_rank_normalized_rhat': 1.,
                                        'min_bulk_ess': 1000, 'min_tail_ess': 1000, 'divergences': 0,
                                        'tree_depth_limit_hits': 0, 'bfmi_by_chain': [1.]*4},
               'loo_diagnostics': {'unreliable_games': 0, 'psis_unreliable_games': 0,
                                   'exact_refits': 0, 'max_transport_mean_error': .0001}}
-    result.update(order_policy(prepare_policy(inputs['teams'], inputs['games'], [1., 0.], probability(2), season=season)))
+    result.update(order_policy(prepare_policy(inputs['teams'][:2], inputs['games'], [1., 0.], probability(2), season=season, opponents=inputs['teams'][2:])))
     return result, inputs
 
 
@@ -111,6 +114,19 @@ class PublicationTests(unittest.TestCase):
                 live.publish(bad, self.inputs, 'bad-home', self.now, self.public)
         self.assertFalse(self.public.exists())
 
+    def test_hierarchy_membership_and_latent_diagnostics_are_required(self):
+        for mutation in ('membership', 'diagnostics', 'dynamic_trace'):
+            bad = copy.deepcopy(self.result)
+            if mutation == 'membership':
+                bad['identity']['inputs']['strength_structure']['conference'][0] += 1
+            elif mutation == 'diagnostics':
+                bad['sampling_diagnostics']['parameters_checked'].remove('tau_conf')
+            else:
+                bad['dynamic_trace'].append({'iteration': 99})
+            with self.assertRaises(ValueError):
+                live.publish(bad, self.inputs, 'bad-hierarchy', self.now, self.public)
+        self.assertFalse(self.public.exists())
+
     def test_records_probabilities_and_input_identity_are_checked(self):
         for mutation in ('record', 'probability', 'inputs'):
             bad = copy.deepcopy(self.result)
@@ -144,9 +160,10 @@ class PublicationTests(unittest.TestCase):
                         wins=0, losses=0, wins_fcs=0, losses_fcs=0, wins_fbs=0, losses_fbs=0, sos_mean=None,
                         p_raw_merit_top8=None, p_raw_merit_top10=None, p_raw_merit_top25=None)
             self.result['teams'].append(idle)
-            self.inputs['teams'].append({'id': ident, 'name': idle['name'], 'conference': 'ACC'})
-        self.result.update(order_policy(prepare_policy(self.inputs['teams'], self.inputs['games'],
-                           [r['merit_mean'] for r in self.result['teams']], probability(4), season=2026)))
+            self.inputs['teams'].append({'id': ident, 'name': idle['name'], 'conference': 'ACC', 'classification':'fbs'})
+        self.result.update(order_policy(prepare_policy([t for t in self.inputs['teams'] if t['classification']=='fbs'], self.inputs['games'],
+                           [r['merit_mean'] for r in self.result['teams']], probability(4), season=2026, opponents=[t for t in self.inputs['teams'] if t['classification']=='fcs'])))
+        self.result['identity']['inputs']['strength_structure'] = strength_structure(self.inputs['teams'])
         row = self.publish()
         body = (self.public / row['csv']).read_bytes()
         self.assertNotIn(b'\r', body)

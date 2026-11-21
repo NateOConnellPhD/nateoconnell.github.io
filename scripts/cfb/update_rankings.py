@@ -103,6 +103,7 @@ def validate_candidate(result, inputs):
     from home_history_inputs import years_for
     from historical_home import CANONICAL as HOME
     from dataclasses import asdict
+    from model import strength_structure
     prior = result.get('home_prior', {})
     if (prior.get('years') != years_for(inputs['season'])
             or prior.get('history_input_sha256') != inputs['home_history']['input_sha256']
@@ -111,7 +112,11 @@ def validate_candidate(result, inputs):
             or not prior.get('diagnostics', {}).get('converged')
             or result['identity']['inputs'].get('home_history_sha256') != inputs['home_history']['input_sha256']):
         raise ValueError('Candidate requires the exact preceding three-season home prior; proxy history is not publishable')
+    if result['identity']['inputs'].get('strength_structure') != strength_structure(inputs['teams']):
+        raise ValueError('Candidate does not use the current season division/conference hierarchy')
     d, loo = result['sampling_diagnostics'], result['loo_diagnostics']
+    if not {'mu_fcs', 'tau_division', 'tau_conf', 'theta_z', 'conference_z', 'conference_effect'} <= set(d.get('parameters_checked', [])):
+        raise ValueError('Candidate is missing hierarchical-strength sampling diagnostics')
     if (not d['sampling_checks_passed'] or d['max_rank_normalized_rhat'] > 1.01
             or min(d['min_bulk_ess'], d['min_tail_ess']) < 400
             or d['divergences'] or d['tree_depth_limit_hits'] or min(d['bfmi_by_chain']) < .3):
@@ -193,7 +198,7 @@ def publish(result, inputs, key, now, destination=PUBLIC):
                 'published_at': now.isoformat(), 'data_observed_at': inputs['source']['games']['retrieved_at'],
                 'latest_game_kickoff': max(g['start_date'] for g in inputs['games']),
                 'week': week, 'kind': kind,
-                'scope': 'Completed regular-season FBS–FBS, FBS–FCS and FCS–FCS games in the joint model; FBS rankings and records include FCS games. No bowls/CFP.',
+                'scope': 'Completed regular-season FBS–FBS, FBS–FCS and FCS–FCS games in the joint model; FBS rankings and records include FCS games. FCS playoff games, bowls and CFP games are excluded.',
                 'scored_games': len(inputs['scored_game_indices']),
                 'game_ids': [g['id'] for g in inputs['games']]}
     checksum = digest(snapshot)

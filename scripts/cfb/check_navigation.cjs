@@ -24,7 +24,7 @@ class Element {
 
 function row(season, week, version = 'new') {
   const id = `${season}-${week}-${version}`;
-  return {season, week, id, games: week, methodology: 'margin-of-merit-v6-historical-home', json: `${id}.json`, csv: `${id}.csv`,
+  return {season, week, id, games: week, methodology: 'margin-of-merit-2026-11-21', json: `${id}.json`, csv: `${id}.csv`,
     data_cutoff: `${season}-09-${String(week + 1).padStart(2, '0')}T00:00:00Z`, published_at: `${season}-11-21T00:00:00Z`};
 }
 const rows = [row(2026, 12), row(2026, 12, 'old'), row(2026, 10), row(2026, 0), row(2024, 16), row(2024, 2)];
@@ -151,7 +151,7 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const malformed = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, 2, 4]), week: 11}});
   assert.match(malformed.get('comparison').textContent, /Week 10 could not be loaded/);
 
-  const specification = {version: 'margin-of-merit-order-v5', merit_protection: .9,
+  const specification = {version: 'margin-of-merit-order-2026-11-21', merit_protection: .9,
     head_to_head: .9, common_opponents: .7, proximity: 2, equal_records_only: true, undefeated_p4_protection: true};
   const policyFixtures = Object.fromEntries(Object.entries(fixtures).map(([id, value]) => [id, {...value,
     specification, policy_inputs: {schema: 'margin-of-merit-policy-input-v5', id}, order: [1, 2, 3, 4]}]));

@@ -11,7 +11,8 @@ from scipy.stats import t as student
 
 def flatten(samples):
     return {k: np.asarray(samples[k]).reshape((-1,) + np.asarray(samples[k]).shape[2:])
-            for k in ('theta', 'home_adv', 'sigma', 'nu', 'home_effect') if k in samples}
+            for k in ('theta', 'home_adv', 'sigma', 'nu', 'home_effect',
+                      'mu_fcs', 'tau_division', 'tau_conf', 'conference_effect') if k in samples}
 
 
 def venue_effect(samples, data):

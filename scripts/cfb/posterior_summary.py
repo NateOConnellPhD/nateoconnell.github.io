@@ -70,6 +70,9 @@ def attach(result, inputs, task):
         if team['id'] not in rows: continue
         row = rows[team['id']]
         metrics = {'strength': summarize(flat['theta'][:, i])}
+        if 'conference_effect' in flat:
+            cluster = inputs['strength_structure']['conference'][i]
+            metrics['conference_effect'] = summarize(flat['conference_effect'][:, cluster])
         if 'home_effect' in flat:
             offset = flat['home_effect'][:, home_slots[team['id']]]
             metrics.update(home_offset=summarize(offset), home_total=summarize(flat['home_adv'] + offset))
@@ -85,8 +88,11 @@ def attach(result, inputs, task):
                 row[key + '_median'] = metrics[key]['median']
                 row[key + '_sd'] = metrics[key]['sd']
         output[str(team['id'])] = metrics
-    result['posterior'] = {'schema': SCHEMA, 'teams': output,
-        'parameters': {name: summarize(flat[name]) for name in ('home_adv', 'sigma', 'nu')},
+    parameters = {name: summarize(flat[name]) for name in ('home_adv', 'sigma', 'nu')}
+    if 'mu_fcs' in flat:
+        parameters.update(mu_fcs=summarize(flat['mu_fcs']), tau_conf=summarize(flat['tau_conf']),
+                          tau_fbs=summarize(flat['tau_division'][:, 0]), tau_fcs=summarize(flat['tau_division'][:, 1]))
+    result['posterior'] = {'schema': SCHEMA, 'teams': output, 'parameters': parameters,
         'interpretation': 'Merit, raw rank and schedule strength use the saved marginal-quantile LOO approximation. '
                           'Team strength and model parameters use the full-data posterior. '
                           'Raw rank uses midranks for exact ties. Ordering rules are not applied to draws.',
@@ -99,11 +105,19 @@ def validate(result):
     posterior = result['posterior']
     if posterior['schema'] != SCHEMA or set(posterior['teams']) != {str(t['id']) for t in result['teams']}:
         raise ValueError('Invalid posterior roster or schema')
+    required_parameters = {'home_adv', 'sigma', 'nu'}
+    hierarchical = 'strength_structure' in result.get('identity', {}).get('inputs', {})
+    if hierarchical:
+        required_parameters |= {'mu_fcs', 'tau_fbs', 'tau_fcs', 'tau_conf'}
+    if not required_parameters <= posterior['parameters'].keys():
+        raise ValueError('Missing model posterior parameters')
     for team in result['teams']:
         metrics = posterior['teams'][str(team['id'])]
         required = ('strength', 'merit', 'raw_rank', 'sos') if team['status'] == 'ranked' else ('strength',)
         if 'home_prior' in result:
             required += ('home_offset', 'home_total')
+        if hierarchical:
+            required += ('conference_effect',)
         if any(key not in metrics for key in required):
             raise ValueError('Missing team posterior metric')
         for key in ('merit', 'raw_rank', 'sos'):
@@ -113,7 +127,7 @@ def validate(result):
                     if not math.isclose(metrics[key][field], team[key + suffix], abs_tol=1e-10):
                         raise ValueError('Published posterior summary disagrees with team table')
     summaries = [s for metrics in posterior['teams'].values() for s in metrics.values()]
-    summaries += [posterior['parameters'][key] for key in ('home_adv', 'sigma', 'nu')]
+    summaries += list(posterior['parameters'].values())
     for s in summaries:
         if type(s['n']) is not int or s['n'] < 2 or s['sd'] < 0:
             raise ValueError('Invalid posterior count or dispersion')

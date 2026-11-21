@@ -1,4 +1,4 @@
-"""Fit saved v6 season inputs with the v5 ordering policy; never publish.
+"""Fit saved season inputs with the current hierarchical model and dynamic ordering; never publish.
 
 No API calls or downloads. Run in the approved pinned numerical environment.
 Fits and LOO scores have separate cache identities so policy-only changes reuse
@@ -68,7 +68,8 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
     home_identity = {'years': prior['years'], 'history_input_sha256': prior['history_input_sha256'],
                      'prior_sha256': digest(prior), 'specification': prior['specification'],
                      'diagnostics': prior['diagnostics']}
-    model_data = {'team_ids': [t['id'] for t in inputs['teams']], 'data': inputs['data']}
+    model_data = {'team_ids': [t['id'] for t in inputs['teams']], 'data': inputs['data'],
+                  'strength_structure': inputs['strength_structure']}
     fit_identity = {'refit_generation': REFIT_GENERATION, 'model': asdict(MODEL), 'model_source': source_hash('model.py'),
                     'home_prior': home_identity,
                     'diagnostic_source': source_hash('refit_2024.py'),
@@ -82,11 +83,11 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
         if report['identity'] != fit_identity or not report['diagnostics']['sampling_checks_passed']:
             raise ValueError('Cached fit identity or diagnostics failed; review before rerunning')
         with np.load(fitted / 'posterior.npz', allow_pickle=False) as saved:
-            samples = {k: saved[k] for k in ('theta', 'home_adv', 'home_effect', 'home_z', 'sigma', 'nu', 'eta_sigma', 'eta_nu')}
+            samples = dict(saved)
     else:
         fitted.mkdir(parents=True)
         sampler = fit(len(inputs['teams']), **inputs['data'], specification=MODEL,
-                      home_prior=prior, seed=seed, warmup=1000, draws=1000)
+                      home_prior=prior, structure=inputs['strength_structure'], seed=seed, warmup=1000, draws=1000)
         samples, diagnostics, parameters = describe(sampler)
         np.savez_compressed(fitted / 'posterior.npz', **samples)
         report = {'identity': fit_identity, 'diagnostics': diagnostics, 'parameters': parameters,
@@ -127,7 +128,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
             print(json.dumps({'exact_loo_game': ident['game_id']}), flush=True)
             omitted = {key: values[:game] + values[game+1:] for key, values in inputs['data'].items()}
             sampler = fit(len(inputs['teams']), **omitted, specification=MODEL,
-                          home_prior=prior, seed=ident['seed'], warmup=1000, draws=1000)
+                          home_prior=prior, structure=inputs['strength_structure'], seed=ident['seed'], warmup=1000, draws=1000)
             exact_samples, diagnostics, _ = describe(sampler)
             if not diagnostics['sampling_checks_passed']:
                 raise ValueError('Exact LOO failed sampling diagnostics; last published ranking is preserved')

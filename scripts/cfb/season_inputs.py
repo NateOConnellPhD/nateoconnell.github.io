@@ -57,6 +57,8 @@ def prepare(normalized, raw_games, corrections, *, cutoff, through_week=None):
     if not scored:
         raise ValueError('No eligible completed games at the selected cutoff')
     return {'season': season, 'teams': teams, 'games': games, 'data': data,
+            'excluded_fcs_playoffs': [g for g in normalized['games'] if 'fcs_playoff' in g['exclusions']
+                and instant(g['start_date']) <= cutoff and (through_week is None or g['week'] <= through_week)],
             'fbs_indices': fbs_indices, 'scored_game_indices': scored, 'statistical_scope': normalized['summary'].get('scope', 'fbs_only'),
             'fit_input_sha256': digest({'teams': teams, 'games': games}),
             'venue_corrections': audit, 'venue_corrections_sha256': digest(audit),
@@ -110,8 +112,10 @@ def load_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections
 def load_fit_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections_path=CORRECTIONS):
     """Production input path: current games plus exactly three prior seasons."""
     from home_history_inputs import load_history
+    from model import strength_structure
     result = load_inputs(season, through_week=through_week, as_of=as_of, root=root, corrections_path=corrections_path)
     result['home_history'] = load_history(season, root=root, corrections_path=corrections_path)
+    result['strength_structure'] = strength_structure(result['teams'])
     slots = {result['teams'][i]['id']: slot+1 for slot, i in enumerate(result['fbs_indices'])}
     # Slot zero denotes an FCS host: national home effect, with no school offset.
     result['data']['host'] = [slots.get(g['home_id'], 0) for g in result['games']]

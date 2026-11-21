@@ -9,6 +9,11 @@ window.CFBExplorer = (root, api) => {
     merit: ['Earned merit', 'Total credit from the games a team has played, accounting for opponents, margins, and venue. Wins add credit; losses subtract it. Higher is better.'],
     raw_rank: ['Raw merit rank', 'Where the team falls by earned merit in each sampled scenario, before the additional ranking rules. Tied teams share their positions. Lower is better.'],
     strength: ['Team strength (points)', 'Estimated underlying strength in points, using all eligible games. Differences between teams describe expected scoring margins, rather than the merit they have earned.'],
+    conference_effect: ['Conference effect (points)', 'The estimated conference contribution to this team’s strength. Every conference starts with the same prior; differences are learned from this season’s games. Independents have their own one-team clusters.'],
+    mu_fcs: ['FCS division mean (points)', 'Estimated FCS baseline relative to the FBS baseline of zero. Conference and team effects are added to these baselines. The difference is learned from this season’s games.'],
+    tau_fbs: ['FBS team spread (points)', 'Estimated spread of FBS team strengths around their conference levels. Larger values mean greater differences between teams within conferences.'],
+    tau_fcs: ['FCS team spread (points)', 'Estimated spread of FCS team strengths around their conference levels.'],
+    tau_conf: ['Conference spread (points)', 'Estimated spread of conference effects around zero, using the same prior for every conference in both divisions. Smaller values mean more pooling toward the division baselines.'],
     sos: ['Strength of schedule (loss probability)', 'Average probability that the reference team—the 25th-strongest team in each draw—would lose against this schedule, accounting for venue. The scale is 0 to 1: 0.30 means 30%. Higher means a harder schedule. Each game is left out when estimating its difficulty.'],
     home_adv: ['National home advantage (points)', 'The shared home effect, informed by the preceding three seasons and updated by current results. Neutral-site games receive no home advantage.'],
     home_offset: ['School home offset (points)', 'This school’s adjustment to the national home effect, partially pooled toward zero. It is a venue effect, not a carryover of last season’s team strength.'],
@@ -61,7 +66,7 @@ window.CFBExplorer = (root, api) => {
   }
   function renderPosterior() {
     if (!current || activeTab !== 'posterior') return;
-    const key = el('metric').value, global = ['home_adv','sigma','nu'].includes(key);
+    const key = el('metric').value, global = ['home_adv','sigma','nu','mu_fcs','tau_fbs','tau_fcs','tau_conf'].includes(key);
     const ids = [el('stat-team').value, el('stat-other').value].filter((v,i,a)=>v && a.indexOf(v)===i);
     el('stat-team').disabled = global; el('stat-other').disabled = global;
     el('stat-context').textContent = metrics[key][1];
@@ -117,7 +122,7 @@ window.CFBExplorer = (root, api) => {
     if (!mass && !cdf) for (const entry of entries.filter(e=>e.s.distribution.kind==='mass')) {
       el('stat-legend').append(node('small',`${entry.name} is a point mass at ${num(entry.s.mean)} (100% of draws), shown by its vertical summary line; it has no continuous density.`));
     }
-    el('stat-note').textContent = `${global || ['strength','home_offset','home_total'].includes(key)
+    el('stat-note').textContent = `${global || ['strength','home_offset','home_total','conference_effect'].includes(key)
       ? 'These estimates use the model fitted to all eligible games through this cutoff.'
       : 'These estimates combine leave-one-game-out calculations, so a game does not help grade itself. Their joint uncertainty is approximate.'} Summary statistics use all retained draws. Intervals contain the middle 50% or 90% of those draws. ${cdf&&!mass?'The continuous cumulative curve is approximated between saved bin boundaries.':'The plot groups continuous draws into bins; separate rank values show their share of the draws.'}`;
     if (!global) {

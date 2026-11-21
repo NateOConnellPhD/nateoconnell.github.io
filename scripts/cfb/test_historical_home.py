@@ -11,7 +11,7 @@ from scipy.stats import t
 
 from historical_home import design, estimate, load_or_estimate, validate
 from loo_scoring import game_values, log_likelihood, venue_effect
-from model import margin_model
+from model import margin_model, strength_structure
 from sync_data import ROOT, digest
 
 
@@ -133,15 +133,18 @@ class HostScoringTests(unittest.TestCase):
         mean = jnp.array([3., 2., -1.])
         chol = jnp.array([[1., 0., 0.], [-.5, 1., 0.], [-.25, .1, 1.]])
         z = jnp.array([1., 2., 3.])
-        conditioned = substitute(margin_model, data={'home_z': z, 'theta': jnp.array([5., 1., -4.])})
+        structure = strength_structure([dict(id=i+1, name=str(i), classification='fbs' if i<2 else 'fcs',
+                                             conference='Example') for i in range(3)])
+        conditioned = substitute(margin_model, data={'home_z': z, 'theta_z': jnp.array([.5, .1, 1.6]),
+            'mu_fcs': -20., 'tau_division': jnp.array([10.,10.]), 'tau_conf': 5., 'conference_z': jnp.zeros(2)})
         traced = trace(seed(conditioned, rng_seed=42)).get_trace(
             3, jnp.array(self.data['home']), jnp.array(self.data['away']),
             jnp.array(self.data['venue']), jnp.array(self.data['margin']),
-            host=jnp.array(self.data['host']), home_prior=(mean, chol))
+            host=jnp.array(self.data['host']), home_prior=(mean, chol), structure=structure)
         effects = np.asarray(mean+chol@z)
         np.testing.assert_allclose(traced['home_effect']['value'], effects)
-        np.testing.assert_allclose(traced['theta']['fn'].mean, 0.)
-        np.testing.assert_allclose(traced['theta']['fn'].variance, 14**2)
+        self.assertEqual(traced['theta']['type'], 'deterministic')
+        np.testing.assert_allclose(traced['theta']['value'], [5.,1.,-4.])
         np.testing.assert_allclose(traced['margin']['fn'].loc, [4+effects[0]+effects[1], -4., -9+effects[0]])
         self.assertGreater(float(traced['sigma']['value']), 8.)
 

@@ -14,8 +14,9 @@ from numbers import Integral
 
 @dataclass(frozen=True)
 class Specification:
-    version: str = "margin-of-merit-v6-historical-home"
+    version: str = "margin-of-merit-2026-11-21"
     historical_home: bool = True
+    hierarchical_strength: bool = True
     theta_sd: float = 14.0
     home_mean: float = 2.0
     home_sd: float = 2.5
@@ -41,15 +42,42 @@ CANONICAL = Specification()
 # Separate research comparisons, never selected implicitly by season/week.
 UNFLOORED_SENSITIVITY = Specification(
     version="margin-of-merit-unfloored-sensitivity-v1",
-    historical_home=False, sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.75,
+    historical_home=False, hierarchical_strength=False, sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.75,
 )
 ARCHIVED_PRIOR = Specification(
     version="margin-of-merit-archived-scale-prior-v1",
-    historical_home=False, sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.5,
+    historical_home=False, hierarchical_strength=False, sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.5,
 )
 
 
-def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL, host=None, home_prior=None):
+def strength_structure(teams):
+    """Stable season membership, shared by the full fit and every LOO fit.
+
+    Each independent has its own cluster. Missing conference metadata is an
+    error, not evidence that two schools share a conference or are independent.
+    """
+    divisions, clusters = [], []
+    ids = [t['id'] for t in teams]
+    if not teams or len(set(ids)) != len(ids):
+        raise ValueError('Strength hierarchy requires a unique season roster')
+    for team in teams:
+        division = team.get('classification')
+        conference = team.get('conference')
+        if division not in ('fbs', 'fcs') or not isinstance(conference, str) or not conference.strip():
+            raise ValueError(f"Missing division/conference for {team.get('name', team['id'])}")
+        divisions.append(int(division == 'fcs'))
+        label = f"independent:{team['id']}" if 'independent' in conference.lower() else conference.strip()
+        clusters.append(division + ':' + label)
+    if set(divisions) != {0, 1}:
+        raise ValueError('Production strength hierarchy requires both FBS and FCS teams')
+    labels = sorted(set(clusters))
+    indices = {label: i for i, label in enumerate(labels)}
+    return {'team_ids': ids, 'division': divisions, 'conference': [indices[c] for c in clusters],
+            'conference_labels': labels}
+
+
+def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL,
+                 host=None, home_prior=None, structure=None):
     """Venue is 1 at the home team's venue, 0 for a neutral-site game.
 
     The caller supplies eligible games as of its declared cutoff and the entire
@@ -60,8 +88,20 @@ def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL, ho
     import numpyro
     import numpyro.distributions as dist
 
-    with numpyro.plate("teams", n_teams):
-        theta = numpyro.sample("theta", dist.Normal(0.0, specification.theta_sd))
+    if specification.hierarchical_strength:
+        if structure is None:
+            raise ValueError('Current model requires season division and conference membership')
+        division, conference = (jnp.asarray(structure[k], dtype=jnp.int32) for k in ('division', 'conference'))
+        z = numpyro.sample('theta_z', dist.Normal(0., 1.).expand((n_teams,)).to_event(1))
+        mu_fcs = numpyro.sample('mu_fcs', dist.ImproperUniform(dist.constraints.real, (), ()))
+        tau = numpyro.sample('tau_division', dist.ImproperUniform(dist.constraints.positive, (), (2,)))
+        tau_conf = numpyro.sample('tau_conf', dist.ImproperUniform(dist.constraints.positive, (), ()))
+        w = numpyro.sample('conference_z', dist.Normal(0., 1.).expand((len(structure['conference_labels']),)).to_event(1))
+        gamma = numpyro.deterministic('conference_effect', tau_conf * w)
+        theta = numpyro.deterministic('theta', jnp.where(division == 0, 0., mu_fcs) + gamma[conference] + tau[division] * z)
+    else:
+        with numpyro.plate("teams", n_teams):
+            theta = numpyro.sample("theta", dist.Normal(0.0, specification.theta_sd))
     if specification.historical_home:
         if home_prior is None or host is None:
             raise ValueError('Current model requires the exact historical home prior and host indices')
@@ -71,7 +111,7 @@ def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL, ho
         home_adv = numpyro.deterministic('home_adv', effects[0])
         game_home = home_adv + jnp.where(host > 0, effects[host], 0.)
     else:
-        # Explicit forensic prior comparisons only; production requires v6.
+        # Explicit forensic prior comparisons only.
         home_adv = numpyro.sample("home_adv", dist.Normal(specification.home_mean, specification.home_sd))
         game_home = home_adv
     eta_sigma = numpyro.sample("eta_sigma", dist.Normal(specification.eta_sigma_mean, specification.eta_sigma_sd))
@@ -84,11 +124,11 @@ def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL, ho
 
 
 def fit(n_teams, home, away, venue, margin, *, specification=CANONICAL,
-        seed=20261120, warmup=1000, draws=1000, host=None, home_prior=None):
+        seed=20261120, warmup=1000, draws=1000, host=None, home_prior=None, structure=None):
     """Four sequential NUTS chains; no approximate-inference fallback."""
     import jax
     import jax.numpy as jnp
-    from numpyro.infer import MCMC, NUTS
+    from numpyro.infer import MCMC, NUTS, init_to_value
 
     if n_teams < 2 or warmup < 1 or draws < 4 or not len(home):
         raise ValueError("A fit needs teams, games, warmup, and at least four draws per chain")
@@ -101,6 +141,17 @@ def fit(n_teams, home, away, venue, margin, *, specification=CANONICAL,
             raise ValueError("Invalid venue or scoring margin")
 
     jax.config.update("jax_enable_x64", True)
+    initial = {}
+    if specification.hierarchical_strength:
+        if (structure is None or len(structure['division']) != n_teams
+                or len(structure['conference']) != n_teams or set(structure['division']) != {0, 1}
+                or any(type(c) is not int or not 0 <= c < len(structure['conference_labels'])
+                       for c in structure['conference'])):
+            raise ValueError('Invalid season strength hierarchy')
+        if not any(structure['division'][h] != structure['division'][a] for h, a in zip(home, away)):
+            raise ValueError('No FBS–FCS games identify the flat division-mean prior at this cutoff')
+        # Flat hyperpriors have no joint MAP; initialize in the interior and use NUTS.
+        initial = {'mu_fcs': -20., 'tau_division': jnp.array([10., 10.]), 'tau_conf': 5.}
     home_args = {}
     if specification.historical_home:
         import numpy as np
@@ -115,7 +166,8 @@ def fit(n_teams, home, away, venue, margin, *, specification=CANONICAL,
                      'home_prior': (jnp.asarray(mean, dtype=jnp.float64), jnp.asarray(chol, dtype=jnp.float64))}
 
     sampler = MCMC(
-        NUTS(partial(margin_model, specification=specification), target_accept_prob=0.9, max_tree_depth=10),
+        NUTS(partial(margin_model, specification=specification, structure=structure),
+             init_strategy=init_to_value(values=initial), target_accept_prob=0.9, max_tree_depth=10),
         num_warmup=warmup, num_samples=draws, num_chains=4,
         chain_method="sequential", progress_bar=False,
     )

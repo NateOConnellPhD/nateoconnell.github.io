@@ -1,5 +1,7 @@
 # Rolling historical home-field model
 
+Historical implementation notes. Superseded by the [November 21 specification](CFB-2026-11-21.md).
+
 The current model uses the supplied historical-home specification. The v5
 ordering rules remain unchanged. Every season and completed week requires a
 new fit; older posterior draws and published rankings are not treated as v6.

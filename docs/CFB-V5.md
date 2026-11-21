@@ -1,5 +1,7 @@
 # Margin of Merit: current rules and full-archive refit
 
+Historical implementation notes. Superseded by the [November 21 specification](CFB-2026-11-21.md).
+
 ## One methodology for every season and week
 
 Every season from 2002 onward and every completed weekly cutoff must receive a

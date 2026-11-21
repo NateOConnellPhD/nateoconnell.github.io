@@ -2,7 +2,7 @@
 import hashlib
 from pathlib import Path
 
-REFIT_GENERATION = 'margin-of-merit-v6-historical-home'
+REFIT_GENERATION = 'margin-of-merit-2026-11-21'
 
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
            'ranking_policy_v5.py', 'exact_order.py', 'sync_data.py', 'season_inputs.py',

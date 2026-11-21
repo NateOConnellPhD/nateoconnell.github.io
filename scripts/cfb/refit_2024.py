@@ -51,6 +51,8 @@ def describe(sampler):
     parameters = ["theta", "home_adv", "sigma", "nu", "eta_sigma", "eta_nu"]
     if 'home_effect' in idata.posterior:
         parameters += ['home_effect', 'home_z']
+    if 'mu_fcs' in idata.posterior:
+        parameters += ['mu_fcs', 'tau_division', 'tau_conf', 'theta_z', 'conference_z', 'conference_effect']
     rhat = np.concatenate([np.asarray(v).ravel() for v in az.rhat(idata, var_names=parameters, method="rank").data_vars.values()])
     bulk = np.concatenate([np.asarray(v).ravel() for v in az.ess(idata, var_names=parameters, method="bulk").data_vars.values()])
     tail = np.concatenate([np.asarray(v).ravel() for v in az.ess(idata, var_names=parameters, method="tail").data_vars.values()])
@@ -59,6 +61,7 @@ def describe(sampler):
     energy = np.asarray(extra["energy"])
     bfmi = np.mean(np.diff(energy, axis=1) ** 2, axis=1) / np.var(energy, axis=1)
     diagnostics = {
+        "parameters_checked": parameters,
         "max_rank_normalized_rhat": float(np.max(rhat)),
         "min_bulk_ess": float(np.min(bulk)), "min_tail_ess": float(np.min(tail)),
         "divergences": int(np.sum(extra["diverging"])),
@@ -73,7 +76,7 @@ def describe(sampler):
         and np.min(bfmi) >= 0.3
     )
     summaries = {}
-    for name in ("theta", "home_adv", "sigma", "nu", "home_effect"):
+    for name in ("theta", "home_adv", "sigma", "nu", "home_effect", "mu_fcs", "tau_division", "tau_conf", "conference_effect"):
         if name not in samples: continue
         values = samples[name].reshape((-1,) + samples[name].shape[2:])
         summaries[name] = {"mean": np.mean(values, axis=0).tolist(),

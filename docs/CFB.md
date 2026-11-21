@@ -1,6 +1,6 @@
 # Margin of Merit: model and automated updates
 
-**Current migration:** [CFB-V6.md](CFB-V6.md) defines the rolling three-season national/school home prior and full refit of every season and week. The [v5 ordering rules](CFB-V5.md) are unchanged. Older numerical validation reports below do not validate this migration.
+**Current specification:** [November 21 update](CFB-2026-11-21.md): division/conference strength hierarchy, rolling three-season home prior, FCS playoff exclusions, and dynamic proximity with 95% head-to-head admission. Every season and week requires a fresh fit under this specification. Earlier validation reports below describe earlier models.
 
 ## Current-season publishing
 
@@ -132,9 +132,9 @@ corrections, rejected responses, input eligibility, and credential-safe errors.
 The subsequent live 2024 run established endpoint access with the saved key.
 Current-season publication is now connected through the workflow described above.
 
-## Current ranking policy: v5
+## Ranking policy and prior implementation notes
 
-See [CFB-V5.md](CFB-V5.md) for probability-or-proximity eligibility, exact
+See [the current specification](CFB-2026-11-21.md). The earlier [CFB-V5.md](CFB-V5.md) describes the original probability-or-proximity eligibility, exact
 lexicographic ordering, and the FCS-inclusive migration. `ranking_policy.py`
 exports the single current sorter. The source and private handoff are inputs
 to implementation and review, not prevalidated public rankings. Every season
