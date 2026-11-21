@@ -24,7 +24,7 @@ class Element {
 
 function row(season, week, version = 'new') {
   const id = `${season}-${week}-${version}`;
-  return {season, week, id, games: week, json: `${id}.json`, csv: `${id}.csv`,
+  return {season, week, id, games: week, methodology: 'margin-of-merit-v5-fcs-refit', json: `${id}.json`, csv: `${id}.csv`,
     data_cutoff: `${season}-09-${String(week + 1).padStart(2, '0')}T00:00:00Z`, published_at: `${season}-11-21T00:00:00Z`};
 }
 const rows = [row(2026, 12), row(2026, 12, 'old'), row(2026, 10), row(2026, 0), row(2024, 16), row(2024, 2)];
@@ -48,7 +48,7 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
     cancelAnimationFrame() {}, requestAnimationFrame(callback) { callback(); return 0; }, location,
     history: {replaceState(_, __, address) { location.href = String(address); location.search = new URL(address).search; }},
     document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element()},
-    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id), tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun}},
+    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id), tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun, cancel() {}}},
     fetch: async address => {
       requests.push(String(address));
       const name = String(address).split('/').pop();
@@ -110,6 +110,10 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.equal(exact.shown.at(-1), '2026-12-old', 'Exact snapshot links keep their original revision');
   assert.equal(exact.get('week').value, '12');
   assert.equal(exact.get('update').value, '2026-12-old');
+  const retired = {...rows[0], methodology: 'previous-methodology'};
+  const migration = await page('', {...index, latest: retired.id, snapshots: [retired]});
+  assert.equal(migration.shown.length, 0, 'Never show a prior-methodology ranking while its refit is pending');
+  assert.equal(migration.requests.some(u => u.endsWith(retired.json)), false);
   const empty = await page('', {...index, latest: null, snapshots: []});
   assert.equal(empty.get('controls').hidden, false);
   assert.equal(empty.get('results').hidden, true);
@@ -117,7 +121,7 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
 
   const weeklyRows = [row(2026, 11), row(2026, 11, 'old'), row(2026, 10), row(2026, 9)];
   const weeklyIndex = {...index, latest: weeklyRows[0].id, snapshots: weeklyRows};
-  const teams = ranks => ranks.map((rank, i) => ({id: i + 1, name: `Team ${i + 1}`, rank, wins_fbs: 5, losses_fbs: 2}));
+  const teams = ranks => ranks.map((rank, i) => ({id: i + 1, name: `Team ${i + 1}`, rank, wins: 5, losses: 2, wins_fbs: 5, losses_fbs: 2}));
   const fixtures = {'2026-11-new': {teams: teams([1, 2, 3, 4, null])},
     '2026-10-new': {teams: teams([3, 1, 2, 4, null])}};
   const weekly = await page('', weeklyIndex, fixtures);
@@ -147,22 +151,23 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const malformed = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, 2, 4]), week: 11}});
   assert.match(malformed.get('comparison').textContent, /Week 10 could not be loaded/);
 
-  const specification = {version: 'margin-of-merit-order-v4', merit_protection: .9,
-    head_to_head: .9, common_opponents: .7, equal_records_only: true, undefeated_p4_protection: true};
+  const specification = {version: 'margin-of-merit-order-v5', merit_protection: .9,
+    head_to_head: .9, common_opponents: .7, proximity: 2, equal_records_only: true, undefeated_p4_protection: true};
   const policyFixtures = Object.fromEntries(Object.entries(fixtures).map(([id, value]) => [id, {...value,
-    specification, policy_inputs: {schema: 'margin-of-merit-policy-input-v4', id}, order: [1, 2, 3, 4]}]));
+    specification, policy_inputs: {schema: 'margin-of-merit-policy-input-v5', id}, order: [1, 2, 3, 4]}]));
   const calls = [];
   const custom = await page('', weeklyIndex, policyFixtures, input => {
     calls.push(input.id); return {order: input.id.includes('-10-') ? [4, 1, 2, 3] : [4, 3, 2, 1]};
   });
   custom.get('protect').value = '85'; custom.get('protect').handlers.input();
+  await new Promise(resolve => setTimeout(resolve, 200)); await settle();
   assert.deepEqual(calls, ['2026-11-new', '2026-10-new'], 'Apply custom rules to both weeks');
   assert.match(custom.get('comparison').textContent, /Both weeks use your selected rules/);
   assert.deepEqual(custom.get('rows').children[0].children.map(tr => tr.children.at(-1).textContent), ['0', '↑ 2', '0', '↓ 2']);
 
   const roster = teams(Array.from({length: 138}, (_, i) => i + 1));
   const auditFixture = {...policyFixtures['2026-11-new'], teams: roster, order: roster.map(t => t.id),
-    policy_inputs: {schema: 'margin-of-merit-policy-input-v4', teams: roster, games: [],
+    policy_inputs: {schema: 'margin-of-merit-policy-input-v5', teams: roster, opponents: [], games: [],
       probabilities: roster.map(() => roster.map(() => .5))},
     audit: roster.slice(1).map(t => ({winner_id: 1, loser_id: t.id, type: 'merit_protection', status: 'accepted', p_loser_higher_merit: .05}))};
   const focused = await page('', weeklyIndex, {...fixtures, '2026-11-new': auditFixture}, () => {});

@@ -68,7 +68,7 @@ description: "My college football rankings: what teams have earned from the game
             <th scope="col"><button type="button" data-cfb-sort="name">Team</button></th>
             <th scope="col" data-cfb-poll-rank-heading hidden><button type="button" data-cfb-sort="poll_rank"><span data-cfb-poll-rank-label>Poll rank</span></button></th>
             <th scope="col" data-cfb-poll-gap-heading hidden><button type="button" data-cfb-sort="poll_gap"><span data-cfb-poll-gap-label>Vs. poll</span></button><small>Positive = higher here</small></th>
-            <th scope="col"><abbr title="Wins and losses against FBS opponents only">FBS W–L</abbr></th>
+            <th scope="col"><abbr data-cfb-record-label title="Wins and losses in this saved update">W–L</abbr></th>
             <th scope="col"><button type="button" data-cfb-sort="merit_mean">Merit</button><small>Mean · 90% interval</small></th>
             <th scope="col"><button type="button" data-cfb-sort="sos_mean"><abbr title="Strength of schedule: average loss probability for the reference team against this schedule">SOS</abbr></button><small>Mean · 90% interval</small></th>
             <th scope="col">Raw rank<small>90% interval</small></th>
@@ -84,7 +84,7 @@ description: "My college football rankings: what teams have earned from the game
       <button type="button" class="button button-outline" data-cfb-open-rules>Explore the ranking rules</button>
       </div>
       <section id="cfb-panel-rules" role="tabpanel" aria-labelledby="cfb-tab-rules" data-cfb-panel="rules" hidden>
-        <p class="small-note" data-cfb-rules-unavailable hidden>This saved ranking does not include the information needed to explore its rules.</p>
+        <p class="small-note" data-cfb-rules-unavailable hidden>This week is awaiting a refit under the current model and rules.</p>
       <section class="cfb-policy" data-cfb-policy hidden>
         <h3>Explore the ranking rules</h3>
         <p class="small-note">Try different cutoffs and see which teams move. The saved merit estimates and uncertainty stay the same. Your choices affect this view only. <a href="#cfb-reading-rules">What do the controls mean?</a></p>
@@ -98,12 +98,15 @@ description: "My college football rankings: what teams have earned from the game
           <div><label for="cfb-common">Common-opponent rule <output for="cfb-common" data-cfb-common-value>70%</output></label>
             <input id="cfb-common" data-cfb-common type="range" min="50" max="99" step="1" value="70" aria-describedby="cfb-common-rule">
             <p id="cfb-common-rule" data-cfb-common-rule></p></div>
+          <div data-cfb-proximity-control><label for="cfb-proximity">Raw-ranking proximity <output for="cfb-proximity" data-cfb-proximity-value>±2 places</output></label>
+            <input id="cfb-proximity" data-cfb-proximity type="number" min="0" max="200" step="1" value="2" aria-describedby="cfb-proximity-rule">
+            <p id="cfb-proximity-rule">A direct or common-opponent result also qualifies when the teams are this close in the raw merit order, even if opposing merit confidence is high. Zero turns off this route.</p></div>
         </div>
         <div class="cfb-toggles">
-          <label for="cfb-equal"><input id="cfb-equal" data-cfb-equal type="checkbox" checked><span>Compare only equal-record teams<small>Only use direct and common-opponent rules when teams have the same FBS wins and losses.</small></span></label>
-          <label for="cfb-p4"><input id="cfb-p4" data-cfb-p4 type="checkbox" checked><span>Undefeated Power Four protection<small>After eight FBS games, keep undefeated ACC, Big Ten, Big 12 and SEC teams ahead of teams with two or more FBS losses. This separate policy can override merit protection.</small></span></label>
+          <label for="cfb-equal"><input id="cfb-equal" data-cfb-equal type="checkbox" checked><span>Equal overall W–L only<small data-cfb-record-rule>Only compare actual results when overall wins and losses match, including FCS games.</small></span></label>
+          <label for="cfb-p4"><input id="cfb-p4" data-cfb-p4 type="checkbox" checked><span>Undefeated Power Four protection<small>After eight FBS games, keep undefeated ACC, Big Ten, Big 12 and SEC teams ahead of teams with two or more overall losses. One-loss teams can still rank higher.</small></span></label>
         </div>
-        <p class="small-note">Each cutoff is independent. Exactly at a cutoff, a game-result rule qualifies; merit protection requires a probability above its cutoff. Rank distance never determines eligibility.</p>
+        <p class="small-note" data-cfb-boundary-rule>Probability thresholds and raw-rank proximity are independent. Direct results take priority, then common opponents, then merit protection; remaining ties preserve the raw order as closely as possible.</p>
         <button type="button" class="button button-outline" data-cfb-reset>Official defaults</button>
         <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
       </section>
@@ -155,7 +158,7 @@ description: "My college football rankings: what teams have earned from the game
         <div class="cfb-plot" data-cfb-trajectory></div>
         <p class="cfb-chart-legend" data-cfb-history-legend></p>
         <div class="cfb-table-scroll" tabindex="0" role="region" aria-label="Weekly team history">
-          <table class="cfb-summary-table"><caption data-cfb-history-caption>Weekly history</caption><thead><tr><th scope="col">Week</th><th scope="col">Team</th><th scope="col">Official rank</th><th scope="col">FBS W–L</th><th scope="col">Merit mean / median</th><th scope="col">90% merit interval</th><th scope="col">Weekly change</th></tr></thead><tbody data-cfb-history-rows></tbody></table>
+          <table class="cfb-summary-table"><caption data-cfb-history-caption>Weekly history</caption><thead><tr><th scope="col">Week</th><th scope="col">Team</th><th scope="col">Official rank</th><th scope="col">Overall W–L</th><th scope="col">Merit mean / median</th><th scope="col">90% merit interval</th><th scope="col">Weekly change</th></tr></thead><tbody data-cfb-history-rows></tbody></table>
         </div>
       </section>
     </div>
@@ -181,9 +184,9 @@ description: "My college football rankings: what teams have earned from the game
       <dt>Rank</dt><dd>The final ordering after applying the stated rules for merit, head-to-head results, common opponents, and undefeated teams. Lower is better. Changing a rule shows your alternative ordering and keeps the saved official rank underneath.</dd>
       <dt>AP / CFP comparison</dt><dd>Choose a poll to see its ranking beside mine. A difference of +3 means the team is three places higher here; −3 means three places lower. NR means it is outside the poll’s Top 25, so no numerical difference is calculated. The Top 25 view includes teams in either ranking. Check the selected poll edition: Margin of Merit uses games through the selected week, while polls have their own week labels and release schedules. The following poll week is suggested, but you can choose any saved edition, including postseason and final polls. Polls may include games that these regular-season rankings exclude. Missing editions stay unavailable rather than borrowing a different week. Poll data come from <a href="https://api.collegefootballdata.com/api/rankings">CollegeFootballData</a>.</dd>
       <dt>Weekly change</dt><dd>How many places the team moved since the immediately preceding week: Week 11 compares with Week 10. ↑ means a higher rank, ↓ means a lower rank, and 0 means unchanged. New means the team had no rank last week. N/A means the previous week is missing or cannot be compared; the note below the table explains why. When you adjust the rules, the same settings are applied to both weeks.</dd>
-      <dt>FBS W–L</dt><dd>Wins and losses against other Football Bowl Subdivision teams. Games against FCS teams do not count here. These rankings include regular-season games, conference championships, and Army–Navy; bowls and playoff games are excluded.</dd>
+      <dt>W–L</dt><dd>Overall wins and losses, including FCS opponents. FCS–FCS games help estimate opponent strength, but FCS teams do not enter the published rankings. These rankings include regular-season games, conference championships, and Army–Navy; bowls and playoff games are excluded.</dd>
       <dt>Merit</dt><dd>The credit a team has earned across its eligible games. Each win adds between zero and one point; each loss subtracts up to one point. Opponent strength, margin, and venue determine how much. The table shows the mean and a 90% interval. Higher is better. This is accumulated résumé credit, not a predicted score or a per-game average.</dd>
-      <dt>SOS: strength of schedule</dt><dd>How often a common reference team would be expected to lose against this schedule, accounting for where the games were played. The reference is the 25th-strongest team in each draw, rather than a particular school. An SOS of 30% means about three expected losses across ten games for that reference team. Higher means a harder schedule; it is not the actual team’s predicted loss rate.</dd>
+      <dt>SOS: strength of schedule</dt><dd>How often a common reference team would be expected to lose against this schedule, accounting for where the games were played. The reference is the 25th-strongest FBS team in each draw, rather than a particular school. An SOS of 30% means about three expected losses across ten games for that reference team. Higher means a harder schedule; it is not the actual team’s predicted loss rate.</dd>
       <dt>Raw rank</dt><dd>The ordering by mean merit before the additional ranking rules. Its 90% interval shows how the team’s merit rank varies across draws. The posterior explorer also shows the mean and median of those draw-by-draw ranks; those need not equal its position when teams are sorted by mean merit.</dd>
       <dt>P(top 10)</dt><dd>The share of posterior draws in which the team is in the top ten by raw merit, with ties shared fairly. For example, 80% means top-ten merit in about eight out of ten draws. This is not its chance of making the playoff or winning its next game. The explorer also reports top-eight and top-25 probabilities.</dd>
     </dl>
@@ -192,7 +195,7 @@ description: "My college football rankings: what teams have earned from the game
     <h3>Reading the posterior plots</h3>
     <p>The horizontal axis is the quantity you selected. A narrow distribution means the draws are concentrated; a broad one means more uncertainty. Colors identify the teams. The solid vertical line is the mean and the dashed line is the median.</p>
     <p>In <strong>Density / probability mass</strong>, bars show where the draws fall. For a continuous quantity, probability is represented by the area of a bar, not its height alone. For separate rank values, the height gives the share of draws at that value. In <strong>Cumulative probability</strong>, the curve shows the fraction of draws at or below a value: 0.80 means 80%. The continuous curve is approximated between the saved bin boundaries.</p>
-    <p>Overlapping distributions show why a single numbered position can hide uncertainty. The paired merit probability below the plot directly compares the two teams across their joint merit draws. A value of 70% means the first team has higher merit in roughly seven out of ten draws, counting exact ties as half. It does not mean a 70% chance of beating the other team on the field.</p>
+    <p>Overlapping distributions show why a single numbered position can hide uncertainty. The paired merit probability below the plot directly compares the two teams across their joint merit draws. A value of 70% means the first team has higher merit in roughly seven out of ten draws. Comparisons count strictly greater merit. It does not mean a 70% chance of beating the other team on the field.</p>
     <dl class="cfb-glossary">
       <dt>Team strength (θ)</dt><dd>Underlying strength on the scoring-margin scale, measured in points. A ten-point difference between two teams corresponds to a ten-point expected margin on a neutral field under the model. This helps put results in context; it is different from the merit a team has earned.</dd>
       <dt>Home advantage</dt><dd>The common advantage, in points, associated with playing at home. Neutral-site games receive no home advantage.</dd>
@@ -203,15 +206,16 @@ description: "My college football rankings: what teams have earned from the game
     <h3 id="cfb-reading-rules">What happens when I change the rules?</h3>
     <p>The controls change how the final ordering is constructed. The model’s merit estimates, SOS, and uncertainty remain the same. A threshold of 90% is a decision rule, not a 90% bonus to a team’s score.</p>
     <dl class="cfb-glossary">
-      <dt>Merit protection</dt><dd>Keep one team ahead when the probability it has higher merit exceeds this threshold. Raising it requires stronger evidence before protecting an ordering.</dd>
-      <dt>Head-to-head</dt><dd>Use the actual winner when the probability that the loser has higher merit is at or below this threshold, unless a higher-priority requirement blocks it. At the default 90%, an 85% comparison qualifies; a 95% comparison does not.</dd>
-      <dt>Common opponents</dt><dd>For teams that never played each other, consider whether one did at least as well against every shared opponent and better against at least one. The threshold limits how much contrary merit evidence that result can overcome.</dd>
-      <dt>Equal records and undefeated teams</dt><dd>The first switch limits head-to-head and common-opponent comparisons to equal FBS records. The second protects an undefeated Power Four team with at least eight FBS games from being placed below a team with two or more FBS losses. This is a separate stated rule and can override merit protection.</dd>
+      <dt>Merit protection</dt><dd>A probability at or above this threshold creates a preference to keep the higher-merit team ahead. It can yield to qualifying actual results when the requirements conflict.</dd>
+      <dt>Head-to-head</dt><dd>A decisive direct result qualifies when the loser’s probability of greater merit is below the chosen threshold OR the teams are within the chosen number of places in the raw ranking. With the default two-place window, an adjacent team’s win qualifies even against 99% opposing merit confidence.</dd>
+      <dt>Common opponents</dt><dd>For teams that never played each other, one must have at least as good a win fraction against every shared FBS opponent and a better one against at least one. The result qualifies through the probability threshold OR raw-rank proximity. Any direct meeting rules out this fallback, including a split series.</dd>
+      <dt>Raw-ranking proximity</dt><dd>Distance in the ordering by mean merit, frozen before any rules are applied. Two places means raw #8 can be compared by this route with raw #6 through #10. It is an eligibility condition, not a limit on how far a team can move.</dd>
+      <dt>Equal records and undefeated teams</dt><dd>The first switch limits head-to-head and common-opponent comparisons to equal overall records, including FCS games. The second protects an undefeated Power Four team with at least eight FBS games from being placed below a team with two or more overall losses. A one-loss team may still rank above an undefeated team.</dd>
     </dl>
-    <p>Rules can conflict. “Explain rank” shows the comparisons that were accepted or blocked, and why. It is possible to change a threshold without moving any teams. “Official defaults” restores the published settings.</p>
+    <p>Rules can conflict. The final order honors the hard undefeated-team restriction, then satisfies as many qualifying direct results as possible, then common-opponent results, then merit preferences. Among equally good solutions, it makes the fewest pairwise changes to the raw ranking. “Explain rank” shows the evidence for the selected pair and any overridden requirements. It is possible to change a threshold without moving any teams. The reset button restores the published settings. Every season and every week uses these same rules.</p>
 
     <h3 id="cfb-reading-history">Reading the weekly chart</h3>
-    <p>Each point uses only results through that week’s cutoff. For ranks, higher on the chart means a better position; for merit, it means more earned credit. The vertical ranges show 90% uncertainty intervals when you select a posterior summary. Missing fits leave gaps. The official-rank line also breaks when the ranking rules differ between saved weeks, so a rule change is not presented as an ordinary weekly movement.</p>
+    <p>Each point uses only results through that week’s cutoff. For ranks, higher on the chart means a better position; for merit, it means more earned credit. The vertical ranges show 90% uncertainty intervals when you select a posterior summary. Missing fits leave gaps. Weeks awaiting a refit remain unavailable until they pass the same checks as the current rankings.</p>
     <p>Historical weeks are reconstructed from saved game data. An early-season reconstruction lets you explore how little was known at the time; a numbered position on its own is not evidence that the teams were clearly distinguishable.</p>
 
     <h3 id="cfb-reading-checks">What are the diagnostic checks?</h3>
