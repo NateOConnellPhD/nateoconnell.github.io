@@ -10,6 +10,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import urllib.error
@@ -117,6 +118,20 @@ def game_team_context(row, side):
             f"classification {row.get(side + 'Classification')!r}")
 
 
+def fcs_playoff(row, roster):
+    """Provider seasonType alone misses FCS playoff games labelled regular.
+
+    Conference title games are retained. CFBD exposes playoff metadata as a
+    nested object; the handoff's tabular source calls it playoff_competition.
+    """
+    if any(roster.get(row.get(side + 'Id'), {}).get('classification') != 'fcs'
+           for side in ('home', 'away')):
+        return False
+    return bool(row.get('playoff_competition') or row.get('playoffCompetition')
+                or row.get('playoff')
+                or re.search(r'\bFCS\s+Championship\b', str(row.get('notes') or ''), re.I))
+
+
 def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False, require_calendar=True):
     """Keep future/non-final games for audit, but never in eligible model inputs.
 
@@ -209,6 +224,8 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
             if start > observed_at:
                 raise ValueError('A future game is marked completed')
         reasons = []
+        if fcs_playoff(row, roster):
+            reasons.append('fcs_playoff')
         if kind != 'regular':
             reasons.append('postseason_not_in_scope')
         if unclassified:
@@ -236,6 +253,9 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
             game['unclassified_sides'] = unclassified
         if inferred:
             game['inferred_classifications'] = inferred
+        if 'fcs_playoff' in reasons:
+            game['playoff_evidence'] = {key: row[key] for key in
+                ('notes', 'playoff', 'playoff_competition', 'playoffCompetition') if row.get(key)}
         normalized.append(game)
     normalized.sort(key=lambda row: (row['start_date'], row['id']))
     roster_list = [roster[key] for key in sorted(roster)]
@@ -300,7 +320,10 @@ def sync(season, key, *, destination=DATA, refresh_metadata=False, fetcher=fetch
     if old:
         prior_ids = {r['id'] for r in old['games'] if r['eligible']}
         current_ids = {r['id'] for r in result['games'] if r['eligible']}
-        if not prior_ids <= current_ids:
+        # A methodology change may remove explicitly identified playoff games.
+        # Missing finals or other upstream changes still stop publication.
+        newly_excluded_playoffs = {r['id'] for r in result['games'] if 'fcs_playoff' in r['exclusions']}
+        if not prior_ids <= current_ids | newly_excluded_playoffs:
             raise ValueError('Previously eligible final games disappeared; review upstream changes before replacing data')
     proposed['normalized.json'] = result
     changed = [name for name, value in proposed.items()
