@@ -1,4 +1,4 @@
-"""Fit saved season inputs and produce a v5 candidate for review; never publish.
+"""Fit saved v6 season inputs with the v5 ordering policy; never publish.
 
 No API calls or downloads. Run in the approved pinned numerical environment.
 Fits and LOO scores have separate cache identities so policy-only changes reuse
@@ -16,7 +16,7 @@ import time
 from model import CANONICAL as MODEL, fit
 from cache_identity import REFIT_GENERATION
 from ranking_policy import CANONICAL as POLICY
-from season_inputs import load_inputs
+from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, digest
 
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
@@ -61,10 +61,16 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
     from loo_scoring import score, flatten, game_values
     from ranking_policy import rank_merit
     from refit_2024 import describe, predictive_summary
+    from historical_home import load_or_estimate
 
     started = time.monotonic()
+    prior = load_or_estimate(inputs, TASK / 'home')
+    home_identity = {'years': prior['years'], 'history_input_sha256': prior['history_input_sha256'],
+                     'prior_sha256': digest(prior), 'specification': prior['specification'],
+                     'diagnostics': prior['diagnostics']}
     model_data = {'team_ids': [t['id'] for t in inputs['teams']], 'data': inputs['data']}
     fit_identity = {'refit_generation': REFIT_GENERATION, 'model': asdict(MODEL), 'model_source': source_hash('model.py'),
+                    'home_prior': home_identity,
                     'diagnostic_source': source_hash('refit_2024.py'),
                     'model_data_sha256': digest(model_data), 'packages': packages,
                     'seed': seed, 'warmup': 1000, 'draws': 1000, 'chains': 4}
@@ -76,11 +82,11 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
         if report['identity'] != fit_identity or not report['diagnostics']['sampling_checks_passed']:
             raise ValueError('Cached fit identity or diagnostics failed; review before rerunning')
         with np.load(fitted / 'posterior.npz', allow_pickle=False) as saved:
-            samples = {k: saved[k] for k in ('theta', 'home_adv', 'sigma', 'nu', 'eta_sigma', 'eta_nu')}
+            samples = {k: saved[k] for k in ('theta', 'home_adv', 'home_effect', 'home_z', 'sigma', 'nu', 'eta_sigma', 'eta_nu')}
     else:
         fitted.mkdir(parents=True)
         sampler = fit(len(inputs['teams']), **inputs['data'], specification=MODEL,
-                      seed=seed, warmup=1000, draws=1000)
+                      home_prior=prior, seed=seed, warmup=1000, draws=1000)
         samples, diagnostics, parameters = describe(sampler)
         np.savez_compressed(fitted / 'posterior.npz', **samples)
         report = {'identity': fit_identity, 'diagnostics': diagnostics, 'parameters': parameters,
@@ -121,7 +127,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
             print(json.dumps({'exact_loo_game': ident['game_id']}), flush=True)
             omitted = {key: values[:game] + values[game+1:] for key, values in inputs['data'].items()}
             sampler = fit(len(inputs['teams']), **omitted, specification=MODEL,
-                          seed=ident['seed'], warmup=1000, draws=1000)
+                          home_prior=prior, seed=ident['seed'], warmup=1000, draws=1000)
             exact_samples, diagnostics, _ = describe(sampler)
             if not diagnostics['sampling_checks_passed']:
                 raise ValueError('Exact LOO failed sampling diagnostics; last published ranking is preserved')
@@ -153,8 +159,10 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
                         'optimizer_source': source_hash('exact_order.py'),
                         'input_preparation_source': source_hash('season_inputs.py'),
                         'runner_source': source_hash('fit_saved_season.py'),
-                        'inputs': {k: v for k, v in inputs.items() if k not in ('data', 'games', 'teams')}}
+                        'inputs': {k: v for k, v in inputs.items() if k not in ('data', 'games', 'teams', 'home_history')}}
+    ranking_identity['inputs']['home_history_sha256'] = inputs['home_history']['input_sha256']
     result.update(identity=ranking_identity, season=season, status='candidate_for_review',
+                  home_prior=home_identity,
                   sampling_diagnostics=report['diagnostics'], loo_diagnostics=score_report['diagnostics'],
                   data_cutoff=inputs['cutoff'], games=len(inputs['games']))
     output = TASK / 'rankings' / digest(ranking_identity)

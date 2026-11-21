@@ -1,6 +1,6 @@
 # Margin of Merit: model and automated updates
 
-**Current migration:** [CFB-V5.md](CFB-V5.md) defines the required full FCS-inclusive refit of every season and week. Old numerical validation reports below describe earlier work, not validation of this migration.
+**Current migration:** [CFB-V6.md](CFB-V6.md) defines the rolling three-season national/school home prior and full refit of every season and week. The [v5 ordering rules](CFB-V5.md) are unchanged. Older numerical validation reports below do not validate this migration.
 
 ## Current-season publishing
 
@@ -18,7 +18,7 @@ when a new ranking is needed, runs the joint FBS/FCS model and current v5 policy
 JSON/CSV snapshots under `assets/data/cfb/`, and explicitly requests a Pages
 build. It does not use OpenAI or require the owner's computer to remain on.
 The first current-season import makes four API requests; subsequent imports
-normally make two (FBS and FCS games). Visitors only read stored files.
+normally make two (FBS and FCS games). Missing historical home-prior seasons add two requests each, then are cached across weekly fits. Visitors only read stored files.
 
 `/blog/cfb/` is linked from the blog's CFB rankings tab. It reads the public
 index and selected snapshot, with season/update selection, searches across all
@@ -26,7 +26,7 @@ teams, conference filtering, sorting, raw-rank uncertainty, CSV/JSON downloads,
 and links to specific snapshots. Movement compares against the previous saved
 week only when the policy identity matches. Missing results and failed updates
 are labeled explicitly. The page retains the site's original blue palette.
-The current v5 integration has received source review only; see its validation limits in CFB-V5.md.
+See CFB-V6.md for the current model and validation limits.
 
 Every successful snapshot is immutable. The index retains earlier weeks and
 revisions, but only completed weeks appear in the public rankings and history.
@@ -37,7 +37,7 @@ from the next week cannot move the current pointer forward. The Monday schedule
 runs after the provider's calendar week ends (typically early Monday morning).
 
 Index rows record `week_complete` by comparing their own saved cutoff with the
-calendar end, not today's date. Earlier partial-week snapshots and prior-methodology rankings are excluded from selection, current rankings and trajectories. Week 11 is current as of November 20, 2026. The v5 migration invalidates every prior-methodology fit and ranking. All seasons and weeks enter the refit queue.
+calendar end, not today's date. Earlier partial-week snapshots and prior-methodology rankings are excluded from selection, current rankings and trajectories. The v6 migration invalidates every prior-methodology fit and ranking. All seasons and weeks enter the refit queue.
 An unchanged input/implementation identity reuses the published
 snapshot without installing packages or fitting, even if numerical caches
 have expired. A separate Actions cache can reuse posterior/LOO arrays after
@@ -60,7 +60,7 @@ force-pushes; concurrent repository changes are merged before saving results.
 The last reported GitHub run completed ranking generation but failed the Git
 whitespace check on generated CSV rows. Commit `989518d` changed the exporter
 to LF endings. A successful deployment has not yet been verified here.
-The current policy and required full refits are documented in [CFB-V5.md](CFB-V5.md). [CFB-V4.md](CFB-V4.md) is a historical implementation report only.
+The current model and required full refits are documented in [CFB-V6.md](CFB-V6.md); [CFB-V5.md](CFB-V5.md) specifies the retained ordering policy. [CFB-V4.md](CFB-V4.md) is a historical implementation report only.
 
 ## Earlier validation and remaining historical work
 
@@ -316,12 +316,9 @@ only applies against teams with **two or more overall losses**; it does not prev
 a one-loss team from ranking above an undefeated team. Seasons with invalid
 or incomplete inputs remain subject to the existing validation gates.
 
-`history_cache_compatibility.json` records exact source hashes before and after
-this date-range extension. `cache_identity.py` preserves the already checked
-2024–2026 publication keys and equivalent HMC/LOO runner identities only while
-the complete source bundle matches that reviewed revision. Any subsequent
-source edit disables this bridge. New historical results carry the full new
-source identity. Existing immutable snapshots are not rewritten.
+The old source-hash compatibility bridge is inactive. Every season and week
+uses the current source bundle and historical-home model; older snapshots are
+not presented as current-model results.
 
 The range-extension checks passed offline: historical queue discovery and
 termination through 2002, saved historical poll reuse, and identical Python/
@@ -371,8 +368,11 @@ The resulting interpreter is
 No installation occurs when importing or reading source.
 
 After environment approval, `scripts/cfb/refit_2024.py` accepts the original
-`2024_observed_FBS_games_used.csv` path and `--variant canonical`, `unfloored`, or
-`archived-prior`. Its SHA-256 check prevents accidentally fitting a modified
+`2024_observed_FBS_games_used.csv` path for the explicitly historical
+`--variant unfloored` or `archived-prior` research comparisons. The old
+`--variant canonical` command now refuses the FBS-only fixture: current-model
+2024 fits must use `fit_saved_season.py --season 2024` with saved FBS/FCS games
+and the exact 2021–2023 home-history window. Its SHA-256 check prevents accidentally fitting a modified
 reference while labeling it as the archive comparison. This fixture-specific
 entry point is not the future arbitrary-season importer.
 

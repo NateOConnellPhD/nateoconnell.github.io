@@ -61,6 +61,7 @@ jobs:
           NODE=node python3 -B scripts/cfb/test_policy_v5.py
           python3 -B scripts/cfb/test_sync_data.py
           python3 -B scripts/cfb/test_season_inputs.py
+          python3 -B scripts/cfb/test_home_history_inputs.py
           python3 -B scripts/cfb/test_posterior_summary.py
           python3 -B scripts/cfb/test_history.py
           python3 -B scripts/cfb/test_weekly_publication.py
@@ -91,12 +92,13 @@ jobs:
         id: cache
         with:
           path: |
+            .codex-tmp/cfb-refit/home
             .codex-tmp/cfb-refit/fits
             .codex-tmp/cfb-refit/scores
             .codex-tmp/cfb-refit/exact
-          key: cfb-v5-fcs-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}
+          key: cfb-v6-home-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}
           restore-keys: |
-            cfb-v5-fcs-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
+            cfb-v6-home-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
       - name: Install pinned numerical packages into the disposable environment
         if: steps.prepare.outputs.needs_fit == 'true'
         run: |
@@ -107,6 +109,7 @@ jobs:
         run: |
           (cd scripts/cfb && ../../.codex-tmp/cfb-refit/venv/bin/python -B -m unittest test_scoring.CreditTests test_exact_scoring test_ranking_draws)
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_publication.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_historical_home.py
       - name: Fit if needed and save checked rankings
         id: complete
         run: |
@@ -151,6 +154,7 @@ jobs:
         if: success() && steps.prepare.outputs.needs_fit == 'true' && steps.cache.outputs.cache-hit != 'true'
         with:
           path: |
+            .codex-tmp/cfb-refit/home
             .codex-tmp/cfb-refit/fits
             .codex-tmp/cfb-refit/scores
             .codex-tmp/cfb-refit/exact

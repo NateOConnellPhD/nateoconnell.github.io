@@ -35,7 +35,7 @@
   async function read(row) {
     if (!snapshots.has(row.id)) {
       const value = await fetchJSON(url(row.json));
-      if (value.methodology !== 'margin-of-merit-v5-fcs-refit' || !value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams) ||
+      if (value.methodology !== 'margin-of-merit-v6-historical-home' || !value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams) ||
           value.season !== row.season || value.week !== row.week) {
         throw new Error('Unpublished or invalid ranking');
       }
@@ -532,7 +532,7 @@
     try {
       index = await fetchJSON(root.dataset.index, 'no-store');
       if (index.schema !== 'margin-of-merit-index-v1' || !Array.isArray(index.snapshots)) throw new Error('Invalid archive');
-      index.snapshots = index.snapshots.filter(r => r.week_complete !== false && r.methodology === 'margin-of-merit-v5-fcs-refit');
+      index.snapshots = index.snapshots.filter(r => r.week_complete !== false && r.methodology === 'margin-of-merit-v6-historical-home');
       if (!index.snapshots.some(r => r.id === index.latest)) index.latest = index.snapshots[0]?.id || null;
       const seasons = [...new Set([...index.snapshots.map(r => r.season), ...(index.archive || []).map(s => s.season)])].sort((a,b) => b-a);
       if (!seasons.length) {

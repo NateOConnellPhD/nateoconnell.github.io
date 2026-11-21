@@ -9,17 +9,20 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
+from dataclasses import asdict
 from unittest.mock import patch
 
 import update_rankings as live
 from ranking_policy import order_policy, prepare_policy
 from policy_fixtures import probability
 from sync_data import ROOT, UTC
+from historical_home import CANONICAL as HOME
 
 
 def fixture(season=2026):
     at = f'{season}-11-20T12:00:00+00:00'
     inputs = {'season': season, 'fit_input_sha256': 'fixture', 'scored_game_indices': [0],
+              'home_history': {'input_sha256': 'history-fixture'}, 'venue_corrections_sha256': 'venues-fixture',
               'teams': [{'id': i, 'name': name, 'conference': 'ACC'} for i, name in ((1, 'A'), (2, 'B'))],
               'games': [{'id': 1, 'week': 12, 'start_date': at, 'home_id': 1, 'away_id': 2,
                          'season': season, 'eligible': True, 'completed': True, 'season_type': 'regular',
@@ -34,7 +37,9 @@ def fixture(season=2026):
                      'sos_mean': .5, 'sos_lo90': .4, 'sos_hi90': .6,
                      'p_raw_merit_top8': 1., 'p_raw_merit_top10': 1., 'p_raw_merit_top25': 1.})
     result = {'season': season, 'games': 1, 'teams': rows, 'order': [1, 2], 'data_cutoff': at,
-              'identity': {'inputs': {'fit_input_sha256': 'fixture'}},
+              'identity': {'inputs': {'fit_input_sha256': 'fixture', 'home_history_sha256': 'history-fixture'}},
+              'home_prior': {'years': list(range(season-3, season)), 'history_input_sha256': 'history-fixture',
+                             'prior_sha256': 'a'*64, 'specification': asdict(HOME), 'diagnostics': {'converged': True}},
               'sampling_diagnostics': {'sampling_checks_passed': True, 'max_rank_normalized_rhat': 1.,
                                        'min_bulk_ess': 1000, 'min_tail_ess': 1000, 'divergences': 0,
                                        'tree_depth_limit_hits': 0, 'bfmi_by_chain': [1.]*4},
@@ -95,6 +100,15 @@ class PublicationTests(unittest.TestCase):
         self.result['loo_diagnostics']['psis_unreliable_games'] = 1
         with self.assertRaises(ValueError):
             self.publish()
+        self.assertFalse(self.public.exists())
+
+    def test_proxy_missing_or_changed_historical_home_prior_cannot_publish(self):
+        for change in ({'years': [2022, 2023, 2024]}, {'history_input_sha256': 'other'},
+                       {'specification': {}}, {'prior_sha256': ''}, {'diagnostics': {'converged': False}}):
+            bad = copy.deepcopy(self.result)
+            bad['home_prior'].update(change)
+            with self.assertRaisesRegex(ValueError, 'three-season home prior'):
+                live.publish(bad, self.inputs, 'bad-home', self.now, self.public)
         self.assertFalse(self.public.exists())
 
     def test_records_probabilities_and_input_identity_are_checked(self):

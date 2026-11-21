@@ -22,12 +22,13 @@ from policy_fixtures import games, probability, teams
 class ArchiveRangeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.base = ROOT / '.codex-tmp' / 'cfb-archive-review'
-        cls.base.mkdir(parents=True, exist_ok=False)
+        cls.base = Path(os.environ.get('CFB_TEST_TMP', ROOT / '.codex-tmp' / 'cfb-archive-review'))
+        cls.created_base = not cls.base.exists()
+        cls.base.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def tearDownClass(cls):
-        cls.base.rmdir()
+        if cls.created_base: cls.base.rmdir()
 
     def test_same_rules_allow_one_loss_above_undefeated_in_every_season(self):
         roster = teams(3)
@@ -47,8 +48,9 @@ class ArchiveRangeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '2002'):
             prepare_policy(roster, [], [2, 3, 0], probability(3), season=2001)
 
-    def test_cache_bridge_requires_the_exact_reviewed_source_bundle(self):
+    def test_every_season_requires_the_current_source_bundle(self):
         current, previous = identities.source_identities()
+        self.assertIsNone(previous)
         self.assertEqual(identities.publication_sources(2002), current)
         self.assertEqual(identities.publication_sources(2026), previous or current)
         self.assertEqual(identities.runner_identity(), (previous or current)['fit_saved_season.py'])
@@ -80,6 +82,8 @@ class ArchiveRangeTests(unittest.TestCase):
             def matching(index, key, *args, **kw):
                 return {'id': 'saved'} if int(key.split('-')[0]) >= 2024 else None
             with patch.object(history, 'DATA', data), patch.object(history, 'sync', side_effect=save_season), \
+                 patch.object(history, 'history_available', return_value=True), \
+                 patch.object(history, 'ensure_history', return_value=0), \
                  patch.object(history, 'load_inputs', side_effect=lambda season, through_week: {'season': season, 'through_week': through_week}), \
                  patch.object(pipeline, 'current_season', return_value=2026), \
                  patch.object(pipeline, 'PUBLIC', public), patch.object(pipeline, 'TASK', task), \

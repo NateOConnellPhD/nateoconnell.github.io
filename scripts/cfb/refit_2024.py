@@ -49,6 +49,8 @@ def describe(sampler):
 
     idata = az.from_numpyro(sampler)
     parameters = ["theta", "home_adv", "sigma", "nu", "eta_sigma", "eta_nu"]
+    if 'home_effect' in idata.posterior:
+        parameters += ['home_effect', 'home_z']
     rhat = np.concatenate([np.asarray(v).ravel() for v in az.rhat(idata, var_names=parameters, method="rank").data_vars.values()])
     bulk = np.concatenate([np.asarray(v).ravel() for v in az.ess(idata, var_names=parameters, method="bulk").data_vars.values()])
     tail = np.concatenate([np.asarray(v).ravel() for v in az.ess(idata, var_names=parameters, method="tail").data_vars.values()])
@@ -71,7 +73,8 @@ def describe(sampler):
         and np.min(bfmi) >= 0.3
     )
     summaries = {}
-    for name in ("theta", "home_adv", "sigma", "nu"):
+    for name in ("theta", "home_adv", "sigma", "nu", "home_effect"):
+        if name not in samples: continue
         values = samples[name].reshape((-1,) + samples[name].shape[2:])
         summaries[name] = {"mean": np.mean(values, axis=0).tolist(),
                            "lo90": np.quantile(values, 0.05, axis=0).tolist(),
@@ -81,11 +84,11 @@ def describe(sampler):
 
 def predictive_summary(samples, data, seed):
     import numpy as np
+    from loo_scoring import flatten, venue_effect
     th = samples["theta"].reshape(-1, samples["theta"].shape[-1])
-    h = samples["home_adv"].ravel()
     sig = samples["sigma"].ravel()
     nu = samples["nu"].ravel()
-    mu = th[:, data["home"]] - th[:, data["away"]] + h[:, None] * np.asarray(data["venue"])
+    mu = th[:, data["home"]] - th[:, data["away"]] + venue_effect(flatten(samples), data)
     rng = np.random.default_rng(seed)
     replicated = mu + sig[:, None] * rng.standard_t(nu[:, None], size=mu.shape)
     observed = np.asarray(data["margin"])
@@ -108,6 +111,9 @@ def main():
     args = parser.parse_args()
     teams, data = read_reference(args.fixture)
     spec = VARIANTS[args.variant]
+    if spec.historical_home:
+        parser.error('The current model requires saved FBS/FCS inputs and the exact historical home window. '
+                     'Use fit_saved_season.py --season 2024; the old FBS-only fixture cannot fit the current model.')
     destination = TASK / f"{args.variant}-{args.seed}-{args.warmup}-{args.draws}"
     if destination.exists():
         raise ValueError("This run already exists; use a different seed rather than overwrite it")

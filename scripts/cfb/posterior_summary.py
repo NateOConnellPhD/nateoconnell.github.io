@@ -58,15 +58,21 @@ def attach(result, inputs, task):
     fit_report, samples = read(task / 'fits' / score_report['identity']['fit_key'], 'posterior.npz')
     if fit_report['array_sha256'] != score_report['identity']['posterior_sha256']:
         raise ValueError('Posterior and merit cache identities disagree')
+    if result.get('home_prior') != fit_report['identity'].get('home_prior'):
+        raise ValueError('Posterior summaries do not belong to this historical home prior')
     flat = flatten(samples)
     merit, sos = scores['merit'], scores['sos']
     rows = {r['id']: r for r in result['teams']}
     active = [i for i, t in enumerate(inputs['teams']) if t['id'] in rows and rows[t['id']]['status'] == 'ranked']
     output = {}
+    home_slots = {inputs['teams'][i]['id']: slot+1 for slot, i in enumerate(inputs['fbs_indices'])}
     for i, team in enumerate(inputs['teams']):
         if team['id'] not in rows: continue
         row = rows[team['id']]
         metrics = {'strength': summarize(flat['theta'][:, i])}
+        if 'home_effect' in flat:
+            offset = flat['home_effect'][:, home_slots[team['id']]]
+            metrics.update(home_offset=summarize(offset), home_total=summarize(flat['home_adv'] + offset))
         if i in active:
             higher = np.sum(merit[:, active] > merit[:, i, None], axis=1)
             equal = np.sum(merit[:, active] == merit[:, i, None], axis=1)
@@ -96,6 +102,8 @@ def validate(result):
     for team in result['teams']:
         metrics = posterior['teams'][str(team['id'])]
         required = ('strength', 'merit', 'raw_rank', 'sos') if team['status'] == 'ranked' else ('strength',)
+        if 'home_prior' in result:
+            required += ('home_offset', 'home_total')
         if any(key not in metrics for key in required):
             raise ValueError('Missing team posterior metric')
         for key in ('merit', 'raw_rank', 'sos'):

@@ -10,7 +10,9 @@ window.CFBExplorer = (root, api) => {
     raw_rank: ['Raw merit rank', 'Where the team falls by earned merit in each sampled scenario, before the additional ranking rules. Tied teams share their positions. Lower is better.'],
     strength: ['Team strength (points)', 'Estimated underlying strength in points, using all eligible games. Differences between teams describe expected scoring margins, rather than the merit they have earned.'],
     sos: ['Strength of schedule (loss probability)', 'Average probability that the reference team—the 25th-strongest team in each draw—would lose against this schedule, accounting for venue. The scale is 0 to 1: 0.30 means 30%. Higher means a harder schedule. Each game is left out when estimating its difficulty.'],
-    home_adv: ['Home advantage (points)', 'The common point advantage associated with playing at home. Neutral-site games receive no home advantage.'],
+    home_adv: ['National home advantage (points)', 'The shared home effect, informed by the preceding three seasons and updated by current results. Neutral-site games receive no home advantage.'],
+    home_offset: ['School home offset (points)', 'This school’s adjustment to the national home effect, partially pooled toward zero. It is a venue effect, not a carryover of last season’s team strength.'],
+    home_total: ['School home advantage (points)', 'The national home effect plus this school’s offset. This is the advantage used when this team hosts a nonneutral game.'],
     sigma: ['Residual scale (points)', 'How widely scores vary around the margins suggested by team strengths and venue. This scale has an eight-point minimum and is not literally a standard deviation.'],
     nu: ['Degrees of freedom', 'How readily the model allows unusually extreme scores. Smaller values allow more surprising blowouts.']
   };
@@ -115,7 +117,7 @@ window.CFBExplorer = (root, api) => {
     if (!mass && !cdf) for (const entry of entries.filter(e=>e.s.distribution.kind==='mass')) {
       el('stat-legend').append(node('small',`${entry.name} is a point mass at ${num(entry.s.mean)} (100% of draws), shown by its vertical summary line; it has no continuous density.`));
     }
-    el('stat-note').textContent = `${global || key === 'strength'
+    el('stat-note').textContent = `${global || ['strength','home_offset','home_total'].includes(key)
       ? 'These estimates use the model fitted to all eligible games through this cutoff.'
       : 'These estimates combine leave-one-game-out calculations, so a game does not help grade itself. Their joint uncertainty is approximate.'} Summary statistics use all retained draws. Intervals contain the middle 50% or 90% of those draws. ${cdf&&!mass?'The continuous cumulative curve is approximated between saved bin boundaries.':'The plot groups continuous draws into bins; separate rank values show their share of the draws.'}`;
     if (!global) {

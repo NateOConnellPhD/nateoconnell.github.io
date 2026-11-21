@@ -24,7 +24,7 @@ class Element {
 
 function row(season, week, version = 'new') {
   const id = `${season}-${week}-${version}`;
-  return {season, week, id, games: week, methodology: 'margin-of-merit-v5-fcs-refit', json: `${id}.json`, csv: `${id}.csv`,
+  return {season, week, id, games: week, methodology: 'margin-of-merit-v6-historical-home', json: `${id}.json`, csv: `${id}.csv`,
     data_cutoff: `${season}-09-${String(week + 1).padStart(2, '0')}T00:00:00Z`, published_at: `${season}-11-21T00:00:00Z`};
 }
 const rows = [row(2026, 12), row(2026, 12, 'old'), row(2026, 10), row(2026, 0), row(2024, 16), row(2024, 2)];

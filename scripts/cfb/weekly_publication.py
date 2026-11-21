@@ -11,8 +11,9 @@ import sys
 
 import update_rankings as pipeline
 from historical_rankings import closed_weeks, prepare_history
-from season_inputs import load_inputs
+from season_inputs import load_fit_inputs as load_inputs
 from sync_data import DATA, UTC, encoded, instant, read_saved, sync
+from home_history_inputs import ensure_history
 
 
 def calendar_for(season, root=DATA):
@@ -72,8 +73,9 @@ def prepare(season, refresh_metadata=False):
     if not 2002 <= year <= now.year:
         raise ValueError('Use a season from 2002 through the current year')
     fetched = sync(year, os.environ.get('CFBD_API_KEY', ''), refresh_metadata=refresh_metadata)
+    historical_requests = ensure_history(year, os.environ.get('CFBD_API_KEY', ''))
     plan = current_plan(year, dt.datetime.now(UTC))
-    plan['requests'] = fetched['requests']
+    plan['requests'] = fetched['requests'] + historical_requests
     pipeline.TASK.mkdir(parents=True, exist_ok=True)
     pipeline.PLAN.write_bytes(encoded(plan))
     if os.environ.get('GITHUB_OUTPUT'):

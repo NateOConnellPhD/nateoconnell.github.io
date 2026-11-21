@@ -14,7 +14,8 @@ from numbers import Integral
 
 @dataclass(frozen=True)
 class Specification:
-    version: str = "margin-of-merit-v1"
+    version: str = "margin-of-merit-v6-historical-home"
+    historical_home: bool = True
     theta_sd: float = 14.0
     home_mean: float = 2.0
     home_sd: float = 2.5
@@ -40,15 +41,15 @@ CANONICAL = Specification()
 # Separate research comparisons, never selected implicitly by season/week.
 UNFLOORED_SENSITIVITY = Specification(
     version="margin-of-merit-unfloored-sensitivity-v1",
-    sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.75,
+    historical_home=False, sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.75,
 )
 ARCHIVED_PRIOR = Specification(
     version="margin-of-merit-archived-scale-prior-v1",
-    sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.5,
+    historical_home=False, sigma_floor=0.0, eta_sigma_mean=math.log(14.0), eta_sigma_sd=0.5,
 )
 
 
-def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL):
+def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL, host=None, home_prior=None):
     """Venue is 1 at the home team's venue, 0 for a neutral-site game.
 
     The caller supplies eligible games as of its declared cutoff and the entire
@@ -61,18 +62,29 @@ def margin_model(n_teams, home, away, venue, margin, specification=CANONICAL):
 
     with numpyro.plate("teams", n_teams):
         theta = numpyro.sample("theta", dist.Normal(0.0, specification.theta_sd))
-    home_adv = numpyro.sample("home_adv", dist.Normal(specification.home_mean, specification.home_sd))
+    if specification.historical_home:
+        if home_prior is None or host is None:
+            raise ValueError('Current model requires the exact historical home prior and host indices')
+        mean, chol = home_prior
+        z = numpyro.sample('home_z', dist.Normal(0., 1.).expand((len(mean),)).to_event(1))
+        effects = numpyro.deterministic('home_effect', mean + chol @ z)
+        home_adv = numpyro.deterministic('home_adv', effects[0])
+        game_home = home_adv + jnp.where(host > 0, effects[host], 0.)
+    else:
+        # Explicit forensic prior comparisons only; production requires v6.
+        home_adv = numpyro.sample("home_adv", dist.Normal(specification.home_mean, specification.home_sd))
+        game_home = home_adv
     eta_sigma = numpyro.sample("eta_sigma", dist.Normal(specification.eta_sigma_mean, specification.eta_sigma_sd))
     eta_nu = numpyro.sample("eta_nu", dist.Normal(specification.eta_nu_mean, specification.eta_nu_sd))
     sigma = numpyro.deterministic("sigma", specification.sigma_floor + jnp.exp(eta_sigma))
     nu = numpyro.deterministic("nu", 2.0 + jnp.exp(eta_nu))
-    mu = theta[home] - theta[away] + home_adv * venue
+    mu = theta[home] - theta[away] + game_home * venue
     with numpyro.plate("games", len(home)):
         numpyro.sample("margin", dist.StudentT(nu, mu, sigma), obs=margin)
 
 
 def fit(n_teams, home, away, venue, margin, *, specification=CANONICAL,
-        seed=20261120, warmup=1000, draws=1000):
+        seed=20261120, warmup=1000, draws=1000, host=None, home_prior=None):
     """Four sequential NUTS chains; no approximate-inference fallback."""
     import jax
     import jax.numpy as jnp
@@ -89,6 +101,19 @@ def fit(n_teams, home, away, venue, margin, *, specification=CANONICAL,
             raise ValueError("Invalid venue or scoring margin")
 
     jax.config.update("jax_enable_x64", True)
+    home_args = {}
+    if specification.historical_home:
+        import numpy as np
+        if home_prior is None or host is None or len(host) != len(home):
+            raise ValueError('Current model requires a historical home prior and one host index per game')
+        mean, chol = np.asarray(home_prior['mean']), np.asarray(home_prior['chol'])
+        if (mean.ndim != 1 or chol.shape != (len(mean), len(mean))
+                or not np.isfinite(mean).all() or not np.isfinite(chol).all()
+                or any(not isinstance(i, Integral) or not 0 <= i < len(mean) for i in host)):
+            raise ValueError('Invalid historical home prior or host indices')
+        home_args = {'host': jnp.asarray(host, dtype=jnp.int32),
+                     'home_prior': (jnp.asarray(mean, dtype=jnp.float64), jnp.asarray(chol, dtype=jnp.float64))}
+
     sampler = MCMC(
         NUTS(partial(margin_model, specification=specification), target_accept_prob=0.9, max_tree_depth=10),
         num_warmup=warmup, num_samples=draws, num_chains=4,
@@ -99,5 +124,6 @@ def fit(n_teams, home, away, venue, margin, *, specification=CANONICAL,
         jnp.asarray(home, dtype=jnp.int32), jnp.asarray(away, dtype=jnp.int32),
         jnp.asarray(venue, dtype=jnp.float64), jnp.asarray(margin, dtype=jnp.float64),
         extra_fields=("potential_energy", "energy", "num_steps", "accept_prob"),
+        **home_args,
     )
     return sampler

@@ -8,7 +8,8 @@ import json
 import os
 
 from sync_data import DATA, UTC, encoded, instant, sync
-from season_inputs import load_inputs
+from season_inputs import load_fit_inputs as load_inputs
+from home_history_inputs import ensure_history, history_available
 
 FIRST_SEASON = 2002  # Earliest season supported by the saved-calendar input path.
 
@@ -54,15 +55,18 @@ def prepare_history():
         folder = DATA / str(season)
         # The live workflow refreshes current-season data. Historical sources
         # are fetched just once; explicit data sync can later apply corrections.
-        if not all((folder / (name + '.json')).exists() for name in ('teams', 'calendar', 'games', 'games-fcs')):
-            # Discover at most one new season per job, then commit its inputs
+        current_saved = all((folder / (name + '.json')).exists() for name in ('teams', 'calendar', 'games', 'games-fcs'))
+        if not current_saved or not history_available(season, root=DATA):
+            # Discover at most one target season and its home-history window per job, then commit its inputs
             # with the checked result. A later bad season must not discard an
             # entire historical import and cause all those API calls to repeat.
             if fetched_season is not None:
                 pending_seasons.append(season)
                 coverage.append({'season': season, 'weeks': [], 'status': 'awaiting_data'})
                 continue
-            sync(season, os.environ.get('CFBD_API_KEY', ''))
+            if not current_saved:
+                sync(season, os.environ.get('CFBD_API_KEY', ''))
+            ensure_history(season, os.environ.get('CFBD_API_KEY', ''), root=DATA)
             fetched_season = season
         calendar = json.loads((folder / 'calendar.json').read_text())['payload']
         observed = min(instant(json.loads((folder / name).read_text())['retrieved_at'])

@@ -117,7 +117,7 @@ def game_team_context(row, side):
             f"classification {row.get(side + 'Classification')!r}")
 
 
-def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False):
+def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False, require_calendar=True):
     """Keep future/non-final games for audit, but never in eligible model inputs.
 
     This describes status observed at retrieval. A later fetch cannot establish
@@ -148,9 +148,9 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
                 roster[ident] = team
         for ident in fbs_ids: roster[ident]['classification'] = 'fbs'
     weeks = set()
-    if not calendar:
+    if require_calendar and not calendar:
         raise ValueError('Empty season calendar')
-    for row in calendar:
+    for row in calendar or []:
         if row.get('season') != season:
             raise ValueError('Calendar contains another season')
         pair = (text(row.get('seasonType'), 'seasonType'), integer(row.get('week'), 'week'))
@@ -180,7 +180,7 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
         if kind not in ('regular', 'postseason'):
             raise ValueError('Unexpected season type in regular/postseason response')
         week = integer(row.get('week'), 'week')
-        if (kind, week) not in weeks:
+        if require_calendar and (kind, week) not in weeks:
             raise ValueError('Game week absent from cached calendar; refresh metadata explicitly')
         unclassified = []
         inferred = {}

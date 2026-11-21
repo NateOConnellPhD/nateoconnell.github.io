@@ -11,7 +11,24 @@ from scipy.stats import t as student
 
 def flatten(samples):
     return {k: np.asarray(samples[k]).reshape((-1,) + np.asarray(samples[k]).shape[2:])
-            for k in ('theta', 'home_adv', 'sigma', 'nu')}
+            for k in ('theta', 'home_adv', 'sigma', 'nu', 'home_effect') if k in samples}
+
+
+def venue_effect(samples, data):
+    """Actual host's structural advantage for each draw/game, zero at neutral sites."""
+    if 'host' in data:
+        if 'home_effect' not in samples:
+            raise ValueError('Host-specific scoring requires historical-home posterior draws')
+        host = np.asarray(data['host'], dtype=int)
+        effects = samples['home_effect']
+        if len(host) != len(data['home']) or np.any(host < 0) or np.any(host >= effects.shape[1]):
+            raise ValueError('Invalid scoring host index')
+        advantage = effects[:, :1] + np.where(host[None, :] > 0, effects[:, host], 0.)
+    else:
+        if 'home_effect' in samples:
+            raise ValueError('Historical-home scoring requires host indices')
+        advantage = samples['home_adv'][:, None]
+    return advantage * np.asarray(data['venue'])
 
 
 def reference_strength(samples, reference_rank=25, reference_indices=None):
@@ -29,8 +46,9 @@ def game_values(samples, data, game, reference_rank=25, reference=None, *, refer
     if reference is None:
         reference = reference_strength(samples, reference_rank, reference_indices)
     h, a, venue, margin = (data[key][game] for key in ('home', 'away', 'venue', 'margin'))
-    mu_h = reference - samples['theta'][:, a] + samples['home_adv'] * venue
-    mu_a = reference - samples['theta'][:, h] - samples['home_adv'] * venue
+    home = venue_effect(samples, {key: [data[key][game]] for key in ('home', 'venue', 'host') if key in data})[:, 0]
+    mu_h = reference - samples['theta'][:, a] + home
+    mu_a = reference - samples['theta'][:, h] - home
     return {
         'home_cdf': stdtr(samples['nu'], (margin - mu_h) / samples['sigma']),
         'away_cdf': stdtr(samples['nu'], (-margin - mu_a) / samples['sigma']),
@@ -60,7 +78,7 @@ def loo_weights(log_likelihood, reff=1.):
 
 
 def log_likelihood(flat, data):
-    mu = flat['theta'][:, data['home']] - flat['theta'][:, data['away']] + flat['home_adv'][:, None] * np.asarray(data['venue'])
+    mu = flat['theta'][:, data['home']] - flat['theta'][:, data['away']] + venue_effect(flat, data)
     return student.logpdf(np.asarray(data['margin'])[None, :], flat['nu'][:, None], loc=mu, scale=flat['sigma'][:, None])
 
 

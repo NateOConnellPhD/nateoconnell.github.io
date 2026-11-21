@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import sys
 
-from season_inputs import load_inputs
+from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, UTC, digest, encoded, instant, sync
 from cache_identity import SOURCES, publication_sources, REFIT_GENERATION
 
@@ -29,6 +29,7 @@ def current_season(now):
 
 def request_key(inputs):
     return digest({'inputs': inputs['fit_input_sha256'], 'venue_corrections': inputs['venue_corrections_sha256'],
+                   'home_history': inputs['home_history']['input_sha256'], 'methodology': REFIT_GENERATION,
                    'through_week': inputs.get('through_week'),
                    'sources': publication_sources(inputs['season']), 'seed': 20261120, 'exact_loo': True})
 
@@ -99,6 +100,17 @@ def validate_candidate(result, inputs):
     if (result['season'] != inputs['season'] or result['games'] != len(inputs['games'])
             or result['identity']['inputs']['fit_input_sha256'] != inputs['fit_input_sha256']):
         raise ValueError('Candidate does not match the saved season inputs')
+    from home_history_inputs import years_for
+    from historical_home import CANONICAL as HOME
+    from dataclasses import asdict
+    prior = result.get('home_prior', {})
+    if (prior.get('years') != years_for(inputs['season'])
+            or prior.get('history_input_sha256') != inputs['home_history']['input_sha256']
+            or prior.get('specification') != asdict(HOME)
+            or len(prior.get('prior_sha256', '')) != 64
+            or not prior.get('diagnostics', {}).get('converged')
+            or result['identity']['inputs'].get('home_history_sha256') != inputs['home_history']['input_sha256']):
+        raise ValueError('Candidate requires the exact preceding three-season home prior; proxy history is not publishable')
     d, loo = result['sampling_diagnostics'], result['loo_diagnostics']
     if (not d['sampling_checks_passed'] or d['max_rank_normalized_rhat'] > 1.01
             or min(d['min_bulk_ess'], d['min_tail_ess']) < 400
@@ -226,11 +238,13 @@ def prepare(season, refresh_metadata=False):
     if not 2002 <= year <= now.year:
         raise ValueError('Use a season from 2002 through the current year')
     fetched = sync(year, os.environ.get('CFBD_API_KEY', ''), refresh_metadata=refresh_metadata)
+    from home_history_inputs import ensure_history
+    historical_requests = ensure_history(year, os.environ.get('CFBD_API_KEY', ''))
     inputs = load_inputs(year)
     key = request_key(inputs)
     reusable = matching_snapshot(read_index(), key)
     TASK.mkdir(parents=True, exist_ok=True)
-    plan = {'season': year, 'key': key, 'needs_fit': reusable is None, 'requests': fetched['requests']}
+    plan = {'season': year, 'key': key, 'needs_fit': reusable is None, 'requests': fetched['requests'] + historical_requests}
     PLAN.write_bytes(encoded(plan))
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as handle:

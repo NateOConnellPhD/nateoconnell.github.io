@@ -132,7 +132,7 @@ description: "My college football rankings: what teams have earned from the game
           <label for="cfb-metric">Quantity<select id="cfb-metric" data-cfb-metric>
             <option value="merit">Earned merit</option><option value="raw_rank">Raw merit rank</option>
             <option value="strength">Team strength (θ)</option><option value="sos">Strength of schedule (SOS)</option>
-            <option value="home_adv">Home advantage</option><option value="sigma">Residual scale (σ)</option><option value="nu">Student-t degrees of freedom (ν)</option>
+            <option value="home_adv">National home advantage</option><option value="home_offset">School home offset</option><option value="home_total">School home advantage</option><option value="sigma">Residual scale (σ)</option><option value="nu">Student-t degrees of freedom (ν)</option>
           </select></label>
           <label for="cfb-chart-mode">Distribution view<select id="cfb-chart-mode" data-cfb-chart-mode><option value="density">Density / probability mass</option><option value="cdf">Cumulative probability</option></select></label>
         </div>
@@ -198,7 +198,8 @@ description: "My college football rankings: what teams have earned from the game
     <p>Overlapping distributions show why a single numbered position can hide uncertainty. The paired merit probability below the plot directly compares the two teams across their joint merit draws. A value of 70% means the first team has higher merit in roughly seven out of ten draws. Comparisons count strictly greater merit. It does not mean a 70% chance of beating the other team on the field.</p>
     <dl class="cfb-glossary">
       <dt>Team strength (θ)</dt><dd>Underlying strength on the scoring-margin scale, measured in points. A ten-point difference between two teams corresponds to a ten-point expected margin on a neutral field under the model. This helps put results in context; it is different from the merit a team has earned.</dd>
-      <dt>Home advantage</dt><dd>The common advantage, in points, associated with playing at home. Neutral-site games receive no home advantage.</dd>
+      <dt>National home advantage</dt><dd>The shared home effect, in points. The preceding three completed seasons help estimate it, and current-season results update that estimate. Historical games inform home effects only; this season’s team strengths start fresh.</dd>
+      <dt>School home offset and advantage</dt><dd>An FBS host’s home advantage is the national effect plus its own estimated offset. School offsets are pulled toward zero when there is little evidence for a difference. FCS hosts use the national effect, and neutral sites receive no home advantage. The historical estimates use a Gaussian approximation, with uncertainty carried into the current model.</dd>
       <dt>Residual scale (σ)</dt><dd>How much scoring margins tend to vary around what team strengths and venue suggest. Larger values allow more unpredictable results. It is a scale parameter, not literally the standard deviation. The model uses an eight-point minimum throughout the season.</dd>
       <dt>Degrees of freedom (ν)</dt><dd>How readily the model allows unusually extreme margins. Smaller values give more room for surprising blowouts rather than forcing every score to fit a narrow pattern.</dd>
     </dl>

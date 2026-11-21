@@ -105,3 +105,14 @@ def load_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections
     result['source'] = {name: {k: value[k] for k in ('source', 'parameters', 'retrieved_at', 'payload_sha256')}
                         for name, value in sources.items()}
     return result
+
+
+def load_fit_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections_path=CORRECTIONS):
+    """Production input path: current games plus exactly three prior seasons."""
+    from home_history_inputs import load_history
+    result = load_inputs(season, through_week=through_week, as_of=as_of, root=root, corrections_path=corrections_path)
+    result['home_history'] = load_history(season, root=root, corrections_path=corrections_path)
+    slots = {result['teams'][i]['id']: slot+1 for slot, i in enumerate(result['fbs_indices'])}
+    # Slot zero denotes an FCS host: national home effect, with no school offset.
+    result['data']['host'] = [slots.get(g['home_id'], 0) for g in result['games']]
+    return result
