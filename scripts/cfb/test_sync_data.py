@@ -86,6 +86,68 @@ class DataTests(unittest.TestCase):
             self.run_sync()
         self.assertEqual(before, self.saved())
 
+    def test_unclassified_opponents_are_audited_without_blocking_joint_sync(self):
+        before = self.run_sync()
+        fcs = self.raw['/games-fcs'][0]
+        self.raw['/games-fcs'] += [
+            dict(fcs, id=202, awayId=90, awayTeam='Unclassified visitor', awayClassification=None),
+            dict(fcs, id=203, homeId=91, homeTeam='Unclassified host', homeClassification=None),
+            dict(fcs, id=204, awayId=92, awayTeam='Division II visitor', awayClassification='ii'),
+        ]
+        after = self.run_sync()
+        self.assertEqual(after['requests'], 2)
+        self.assertEqual(after['eligible_completed_games'], 2)
+        self.assertEqual(after['fcs_teams'], 2)
+        self.assertEqual(after['model_input_sha256'], before['model_input_sha256'])
+        self.assertEqual(after['exclusion_counts'], {'unclassified_team': 2, 'outside_division_i': 1})
+        saved = json.loads((self.destination / '2026' / 'normalized.json').read_text())
+        games = {g['id']: g for g in saved['games']}
+        for ident, side in ((202, 'away'), (203, 'home')):
+            self.assertFalse(games[ident]['eligible'])
+            self.assertEqual(games[ident]['exclusions'], ['unclassified_team'])
+            self.assertEqual(games[ident]['unclassified_sides'], [side])
+        self.assertEqual({g['id'] for g in saved['games'] if g['eligible']}, {101, 201})
+        raw = json.loads((self.destination / '2026' / 'games-fcs.json').read_text())['payload']
+        self.assertIsNone(next(g for g in raw if g['id'] == 202)['awayClassification'])
+
+    def test_missing_labels_reuse_established_membership_before_excluding_games(self):
+        self.raw['/games'][0]['homeClassification'] = None
+        # FCS membership comes from game 201, which is processed after game 102.
+        self.raw['/games'].append(dict(self.raw['/games'][0], id=102,
+            awayId=8, awayTeam='FCS A', awayClassification=None))
+        result = self.run_sync()
+        self.assertEqual(result['eligible_completed_games'], 3)
+        self.assertEqual(result['exclusion_counts'], {})
+        saved = json.loads((self.destination / '2026' / 'normalized.json').read_text())
+        games = {g['id']: g for g in saved['games']}
+        self.assertTrue(games[102]['eligible'])
+        self.assertEqual(games[101]['inferred_classifications'], {'home': 'fbs'})
+        self.assertEqual(games[102]['inferred_classifications'], {'home': 'fbs', 'away': 'fcs'})
+
+    def test_unexpected_classification_reports_the_game_and_preserves_saved_data(self):
+        self.run_sync()
+        before = self.saved()
+        self.raw['/games-fcs'][0]['awayClassification'] = 'unexpected'
+        with self.assertRaisesRegex(ValueError, "Unknown game team classification: season 2026, game 201, away team 'FCS B' .*unexpected"):
+            self.run_sync()
+        self.assertEqual(before, self.saved())
+
+    def test_conflicting_fcs_classification_still_blocks_sync(self):
+        self.run_sync()
+        before = self.saved()
+        self.raw['/games-fcs'].append(dict(self.raw['/games-fcs'][0], id=202, awayClassification='ii'))
+        with self.assertRaisesRegex(ValueError, "disagrees with season membership: season 2026, game 202, away team 'FCS B'"):
+            self.run_sync()
+        self.assertEqual(before, self.saved())
+
+    def test_newly_missing_membership_cannot_silently_drop_saved_final_games(self):
+        self.run_sync()
+        before = self.saved()
+        self.raw['/games-fcs'][0].update(homeClassification=None, awayClassification=None)
+        with self.assertRaisesRegex(ValueError, 'Previously eligible final games disappeared'):
+            self.run_sync()
+        self.assertEqual(before, self.saved())
+
     def test_correction_changes_inputs_without_duplicate_games(self):
         before = self.run_sync()
         self.raw['/games'][0]['homePoints'] = 30

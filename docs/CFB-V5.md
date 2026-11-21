@@ -25,6 +25,13 @@ research evidence, not a public weekly result.
   import uses four CFBD requests; a scheduled refresh uses two game requests.
   Historical weekly fits reuse these files. Conflicting shared game records,
   missing feeds or invalid final scores stop publication.
+- CFBD's game classification fields are nullable. A missing label is recovered
+  only from the season's FBS roster or explicit FCS membership elsewhere in the
+  same saved season. Otherwise the game stays in the saved audit with an
+  `unclassified_team` exclusion and the affected side; it is not model evidence.
+  Explicit lower-division games remain excluded. Conflicting labels still stop
+  the import, and a refresh cannot silently remove a previously eligible final.
+  Classification errors identify the season, game, side, team and received value.
 - Fit regular-season FBS–FBS, FBS–FCS and FCS–FCS margins jointly, with the same
   Student-t likelihood, priors, home advantage and eight-point residual-scale
   floor throughout the season. Venue corrections and weekly cutoffs are applied
@@ -98,3 +105,11 @@ FCS ingestion/scoring/publication checks and migration checks were updated in
 source but not run. No dependencies were downloaded, no HMC or API calls were
 run, and no browser UI or larger integer-program validation was performed.
 No current or historical production refit is claimed complete by this change.
+
+In the subsequent nullable-classification failure fix, all 19 focused offline
+importer tests passed (`python3 -B scripts/cfb/test_sync_data.py`). These include
+unclassified home/away opponents, established-membership recovery, contradictory
+labels, unchanged model inputs for excluded games, and preservation of saved
+data on failure. Temporary fixtures were removed. No live CFBD requests or model
+fits were run for this fix. The nullable field contract was checked against the
+[CFBD Game model](https://github.com/CFBD/cfbd-python/blob/main/cfbd/models/game.py).

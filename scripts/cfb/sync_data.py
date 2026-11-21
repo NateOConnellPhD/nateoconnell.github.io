@@ -111,6 +111,12 @@ def read_saved(path, season, endpoint, parameters):
     return result
 
 
+def game_team_context(row, side):
+    return (f"season {row.get('season')}, game {row.get('id')}, "
+            f"{side} team {row.get(side + 'Team')!r} (ID {row.get(side + 'Id')}), "
+            f"classification {row.get(side + 'Classification')!r}")
+
+
 def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False):
     """Keep future/non-final games for audit, but never in eligible model inputs.
 
@@ -138,7 +144,7 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
                 team = {'id': ident, 'name': text(row.get(side + 'Team'), side + 'Team'),
                         'conference': row.get(side + 'Conference'), 'classification': 'fcs'}
                 if ident in fbs_ids or (ident in roster and roster[ident] != team):
-                    raise ValueError('Inconsistent FCS membership in season games')
+                    raise ValueError('Inconsistent FCS membership in season games: ' + game_team_context(row, side))
                 roster[ident] = team
         for ident in fbs_ids: roster[ident]['classification'] = 'fbs'
     weeks = set()
@@ -176,12 +182,26 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
         week = integer(row.get('week'), 'week')
         if (kind, week) not in weeks:
             raise ValueError('Game week absent from cached calendar; refresh metadata explicitly')
+        unclassified = []
+        inferred = {}
         for side, team_id in (('home', home), ('away', away)):
             classification = row.get(side + 'Classification')
-            if classification not in ('fbs', 'fcs', 'ii', 'iii', 'ii/iii'):
-                raise ValueError('Unknown game team classification')
+            # CFBD's game classifications are nullable. Recover only membership
+            # established by the season FBS roster or an explicit FCS game row.
+            # Never assume that an opponent of an FCS team is also Division I.
+            if classification is None:
+                classification = 'fbs' if team_id in fbs_ids else roster.get(team_id, {}).get('classification')
+                if classification is None:
+                    unclassified.append(side)
+                    continue
+                inferred[side] = classification
+            elif classification not in ('fbs', 'fcs', 'ii', 'iii', 'ii/iii'):
+                raise ValueError('Unknown game team classification: ' + game_team_context(row, side))
             if (classification == 'fbs') != (team_id in fbs_ids):
-                raise ValueError('Game FBS membership disagrees with season roster; review metadata')
+                raise ValueError('Game FBS membership disagrees with season roster; review metadata: '
+                                 + game_team_context(row, side))
+            if include_fcs and team_id in roster and classification != roster[team_id]['classification']:
+                raise ValueError('Game classification disagrees with season membership: ' + game_team_context(row, side))
         hp, ap = row.get('homePoints'), row.get('awayPoints')
         if final:
             integer(hp, 'homePoints')
@@ -191,7 +211,9 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
         reasons = []
         if kind != 'regular':
             reasons.append('postseason_not_in_scope')
-        if home not in roster or away not in roster:
+        if unclassified:
+            reasons.append('unclassified_team')
+        elif home not in roster or away not in roster:
             reasons.append('outside_division_i' if include_fcs else 'not_fbs_vs_fbs')
         if not final:
             reasons.append('not_completed')
@@ -200,7 +222,7 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
         if not reasons and hp == ap:
             raise ValueError('Tied Division I final requires an explicit tie policy')
         excluded.update(reasons)
-        normalized.append({'id': ident, 'season': season, 'week': week, 'season_type': kind,
+        game = {'id': ident, 'season': season, 'week': week, 'season_type': kind,
             'start_date': start.isoformat(), 'neutral_site': neutral, 'completed': final,
             'home_id': home, 'away_id': away,
             'home_name': text(row.get('homeTeam'), 'homeTeam'),
@@ -209,7 +231,12 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False)
             'home_fbs': home in fbs_ids, 'away_fbs': away in fbs_ids,
             # In-progress scores are never inputs to the model.
             'home_points': hp if final else None, 'away_points': ap if final else None,
-            'eligible': not reasons, 'exclusions': reasons})
+            'eligible': not reasons, 'exclusions': reasons}
+        if unclassified:
+            game['unclassified_sides'] = unclassified
+        if inferred:
+            game['inferred_classifications'] = inferred
+        normalized.append(game)
     normalized.sort(key=lambda row: (row['start_date'], row['id']))
     roster_list = [roster[key] for key in sorted(roster)]
     eligible = [row for row in normalized if row['eligible']]
