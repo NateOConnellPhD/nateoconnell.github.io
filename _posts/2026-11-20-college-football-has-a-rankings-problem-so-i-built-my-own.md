@@ -90,7 +90,7 @@ The entire system is based on five principles:
 1. Actual wins and losses are the foundation of merit.
 2. Opponent quality is learned from the entire network of FBS and FCS game results.
 3. Scoring margins provide additional information, with bounded credit for increasingly large victories.
-4. Head-to-head and common-opponent results determine qualifying comparisons through explicit posterior-probability thresholds or proximity in the raw rankings, with conflicts resolved by a consistent evidence hierarchy.
+4. Head-to-head and common-opponent results determine qualifying comparisons through explicit posterior-probability thresholds or proximity in the rankings, with conflicts resolved by a consistent evidence hierarchy.
 5. Rankings should communicate uncertainty rather than manufacture precision.
 
 This is founded on fairness and transparency, and rankings are purely based on merit of what's happened on the field. The implementation uses a Bayesian model framework, but the underlying idea is fairly straightforward.
@@ -101,7 +101,7 @@ Imagine three teams: Team A beats Team B by 35 points. Team B loses its next fou
 
 **College football is a network of interconnected game outcomes.** The mathematical model needs to account for that network. I start with a scoring-margin version of a paired-comparison model, related in spirit to the Bradley–Terry framework. Rather than fitting only whether a team won or lost, I use the final scoring margin from completed FBS-versus-FBS, FBS-versus-FCS, and FCS-versus-FCS games. Why? Because a win by 3 is not the same as a win by 28.
 
-Including FCS teams matters because an FBS win against an FCS opponent should not count for literally nothing. Tennessee, for example, beat Furman 56–9. Leaving that game out entirely meant Tennessee was effectively missing a win in its comparison with Alabama. I now estimate FCS opponents using the same scoring-margin model and count FBS teams’ results against them. The FCS teams help establish opponent quality; they are not candidates for the FBS rankings. The 2026 fit through November 19 uses 1,350 games involving 138 FBS and 128 FCS teams.
+Including FCS teams matters because an FBS win against an FCS opponent should not count for literally nothing. Tennessee, for example, beat Furman 56–9. Leaving that game out entirely meant Tennessee was effectively missing a win in its comparison with Alabama. I now estimate FCS opponents using the same scoring-margin model and count FBS teams’ results against them. The FCS teams help establish opponent quality; they are not candidates for the FBS rankings. FCS playoff games don't count; conference championship games, FBS or FCS, do. The 2026 fit through November 19 uses 1,350 games involving 138 FBS and 128 FCS teams.
 
 
 
@@ -124,18 +124,24 @@ For neutral-site games, we don't award either team a home-field advantage. With 
 $$
 \boxed{
 Y_g\mid\boldsymbol\theta,h,\sigma,\nu
-\sim t_\nu\!\left(\theta_{h(g)}-\theta_{a(g)}+z_gh,\ \sigma\right).
+\sim t_\nu\!\left(\theta_{h(g)}-\theta_{a(g)}+z_gh_{h(g)},\ \sigma\right).
 }
 $$
 
-The expected scoring margin is the difference in the teams' strengths, adjusted for home field. The parameter $$h$$ is home-field advantage in points; $$\sigma$$ describes ordinary game-to-game variation; and $$\nu$$ controls the heaviness of the tails. I use a Student's *t* distribution because football scores are noisy and sometimes extreme. A few strange blowouts shouldn't completely dictate estimates of team strength, but I also don't want to throw away the information contained in actual scoring margins.
+The expected scoring margin is the difference in the teams' strengths, adjusted for home field. The parameter $$h_{h(g)}$$ is the home-field advantage, in points, at the home team's stadium; $$\sigma$$ describes ordinary game-to-game variation; and $$\nu$$ controls the heaviness of the tails. I use a Student's *t* distribution because football scores are noisy and sometimes extreme. A few strange blowouts shouldn't completely dictate estimates of team strength, but I also don't want to throw away the information contained in actual scoring margins.
 
 A Bayesian model also requires prior distributions. Here is the actual specification used in the 2026 implementation:
 
 $$
 \begin{aligned}
-\theta_i &\overset{\mathrm{iid}}{\sim} N(0,14^2),\\
-h &\sim N(2,2.5^2),\\
+\theta_i &= \mu_{d(i)}+\gamma_{c(i)}+\tau_{d(i)}\,z_i,
+&z_i &\overset{\mathrm{iid}}{\sim} N(0,1),\\
+\gamma_c &= \tau_{\mathrm{conf}}\,w_c,
+&w_c &\overset{\mathrm{iid}}{\sim} N(0,1),\\
+\mu_{\mathrm{FBS}} &= 0,
+&\mu_{\mathrm{FCS}},\ \tau_{\mathrm{FBS}},\ \tau_{\mathrm{FCS}},\ \tau_{\mathrm{conf}}&\ \text{flat},\\
+h_k &= h_0+u_k,
+&(h_0,u_1,\ldots,u_K) &\sim N\!\left(\widehat{\boldsymbol\mu}_{\mathrm{hist}},\ \widehat\Sigma_{\mathrm{hist}}+\Delta\right),\\
 \eta_\sigma &\sim N(\log 6,0.75^2),
 &\sigma &=8+e^{\eta_\sigma},\\
 \eta_\nu &\sim N(\log 5,0.9^2),
@@ -143,22 +149,32 @@ h &\sim N(2,2.5^2),\\
 \end{aligned}
 $$
 
-Every team starts with **the same prior**, centered at zero with a 14-point prior standard deviation. No teams get a higher prior because of recruiting, conference affiliation, history, or a preseason ranking. The home-field prior is centered at two points. The eight-point lower bound is on the Student's *t* **scale**, not the standard deviation of team strength; it's a conservative regularization choice that prevents the model from estimating implausibly little game-to-game variation when only a handful of results exist early in the season. The same specification is used throughout the season.
+Here $$d(i)$$ is team $$i$$'s division (FBS or FCS) and $$c(i)$$ is its conference. No teams get a higher prior because of recruiting, conference affiliation, history, or a preseason ranking. Every FBS team starts with **the same prior**, every FCS team starts with the same prior, and every conference gets the same prior. The FBS average is fixed at zero only to anchor the scale, since the likelihood only sees differences in strength. The FCS average, the spread of teams within each division, and the spread between conferences all have flat priors and are estimated from this season's games. Home-field advantage is the one place past seasons are used: a national home-field term plus a small adjustment for each FBS stadium ($$h_0$$ and $$u_k$$), learned from FBS-versus-FBS scores over the previous three seasons (2023–2025 for this year), with a little extra variance $$\Delta$$ to allow for year-to-year change. Past seasons never inform how good a team is. The eight-point lower bound is on the Student's *t* **scale**, not the standard deviation of team strength; it's a conservative regularization choice that prevents the model from estimating implausibly little game-to-game variation when only a handful of results exist early in the season. The same specification is used throughout the season.
 
-With $$D=\{Y_1,\ldots,Y_G\}$$ denoting all included FBS and FCS game margins and $$\Theta=(\boldsymbol\theta,h,\sigma,\nu)$$, Bayes' rule gives
+With $$D=\{Y_1,\ldots,Y_G\}$$ denoting all included FBS and FCS game margins and $$\Theta=(\boldsymbol\theta,\boldsymbol\mu,\boldsymbol\gamma,\boldsymbol\tau,\mathbf h,\sigma,\nu)$$, Bayes' rule gives
 
 $$
 \boxed{
 p(\Theta\mid D)
 \propto
 p(\Theta)\prod_{g=1}^{G}
-t_\nu\!\left(Y_g\mid\theta_{h(g)}-\theta_{a(g)}+z_gh,\sigma\right).
+t_\nu\!\left(Y_g\mid\theta_{h(g)}-\theta_{a(g)}+z_gh_{h(g)},\sigma\right).
 }
 $$
 
 In plain English, the posterior combines the same starting assumptions for every team with the likelihood of all the scores we actually observed. I fit this joint posterior using Hamiltonian Monte Carlo, with four independent chains. Rather than getting a single strength number for Georgia or Texas, I get thousands of draws representing plausible combinations of **all** team strengths, home-field advantage, and game variability. As additional games are played, the posterior updates, and the network supplies more information about the relative quality of teams that may never face each other.
 
 This is why strength of schedule emerges from the results rather than from arbitrary conference weights. Nothing in the prior says the SEC or Big Ten should be stronger than anyone else. If a conference consistently performs better against outside opponents, that evidence propagates through the network. And because the model is Bayesian, the uncertainty in comparisons between weakly connected teams remains visible.
+
+### Why conferences show up in the prior
+
+My first version gave every team, FBS and FCS, the exact same $$N(0,14^2)$$ prior. That sounds like the fairest possible choice. It isn't, and I only found that out by testing it.
+
+Most games are played inside a conference. The only evidence about whether the Big Ten is better than the Mountain West comes from the relatively small number of non-conference games. If every team gets pulled toward one shared average, the gaps between conferences get squeezed. Teams in weaker conferences look a little better than they are, teams in stronger conferences look a little worse, and that feeds straight into how hard everyone's schedule looks. The same thing happens between FBS and FCS, which were never one population of teams to begin with.
+
+To check, I simulated entire seasons on the real 2026 schedule from team strengths I chose, so I knew every team's true merit, and ran the full pipeline on each fake season. With the single shared prior, the 90% intervals contained the true merit only 42–73% of the time, depending on how the fake seasons were generated. And the misses weren't random. Merit was overstated for teams in the MAC (+0.77 on average), Conference USA (+0.70), and the Sun Belt (+0.68), and understated for SEC teams (−0.27). That's a conference bias, which is exactly what I'm trying to keep out.
+
+So now FBS and FCS each get their own average, and conferences are treated as what they are: clusters of teams that mostly play each other. Every conference gets the same prior. The model estimates where each conference sits, and how far apart conferences are, from this season's results alone. If conferences didn't actually differ, that spread would go to zero and every team would be back to sharing one prior. In the same simulations, the 90% intervals now contain the true merit about 88–91% of the time, and the conference pattern mostly disappears. For 2026, the model puts the spread between conferences at about 11 points and the FCS average about 37 points below FBS.
 
 ### What it means for every team to be estimated simultaneously
 
@@ -180,7 +196,7 @@ $$
 
 This is the score function, not a rule that directly assigns ranking points. The sign $$x_{gi}$$ makes a game push the two participating teams in opposite directions, while the residual $$r_g$$ captures whether the observed margin was larger or smaller than the model expected. The denominator reduces the influence of extreme residuals, one reason for using a Student's *t* model. When we update a team's strength, that changes how well we explain all of its other games, so the other teams' strengths adjust in response. HMC explores the joint posterior that balances these pressures across the entire schedule.
 
-There is a particularly clean way to see the network structure in a simplified version of the model. If game errors were normal instead of Student's *t*, and we temporarily treated home-field advantage and residual variation as fixed, the posterior would also be normal. Writing $$\tau=14$$ for the team-strength prior standard deviation, its posterior covariance matrix $$V$$ and posterior mean $$\widehat{\boldsymbol\theta}$$ would satisfy
+There is a particularly clean way to see the network structure in a simplified version of the model. If game errors were normal instead of Student's *t*, and we temporarily treated home-field advantage and residual variation as fixed, the posterior would also be normal. Writing $$\tau=14$$ for a single shared team-strength prior standard deviation, its posterior covariance matrix $$V$$ and posterior mean $$\widehat{\boldsymbol\theta}$$ would satisfy
 
 $$
 \boxed{
@@ -191,13 +207,13 @@ V^{-1}=\tau^{-2}I+\sigma^{-2}X^\top X,
 }
 $$
 
-The matrix $$X^\top X$$ is the graph Laplacian of the schedule network, counting games between teams and connecting opponents through its off-diagonal entries. Inverting the full matrix couples the posterior estimates across teams. **A score in a game involving B can change our estimate of A even when A has not played another game.** That closed-form calculation is for the simpler normal-error example; the actual published model uses the Student's *t* likelihood and samples the joint posterior with HMC, rather than relying on this normal approximation.
+The matrix $$X^\top X$$ is the graph Laplacian of the schedule network, counting games between teams and connecting opponents through its off-diagonal entries. Inverting the full matrix couples the posterior estimates across teams. **A score in a game involving B can change our estimate of A even when A has not played another game.** That closed-form calculation is for the simpler normal-error example; the actual published model uses the Student's *t* likelihood and the division and conference prior, and samples the joint posterior with HMC, rather than relying on this normal approximation.
 
 For a small numerical illustration, suppose A beats B by 14 on a neutral field. Under the simplified normal-error model, A's posterior mean strength is about **+4.7 points**. Then B beats C by 21, and A's estimate rises to **+7.9**: beating B now means more because B has demonstrated its own quality. When C subsequently beats D by 7, A's estimate moves again, to **+8.7**. A hasn't played another game in either update. The new information has traveled through B and C. The full FBS–FCS network works on exactly that principle, with many more games and a more flexible likelihood.
 
 ![A four-team example of posterior information propagating from one matchup to another](/assets/images/editor-e400e7df-2f5e-49b3-8c91-e5e35125c52c.png)
 
-*Figure 2. A worked illustration using a normal-error paired-score model with the same 14-point exchangeable prior standard deviation. The changes in A's posterior mean are mathematically calculated for this toy example, not estimated from 2026 teams. The production model uses the Student's t likelihood.*
+*Figure 2. A worked illustration using a normal-error paired-score model with a single 14-point exchangeable prior standard deviation. The changes in A's posterior mean are mathematically calculated for this toy example, not estimated from 2026 teams. The production model uses the Student's t likelihood and the division and conference prior.*
 
 This also explains a subtle feature of weekly rankings. A team can be idle for a week, and the model can still learn something new about its strength because its previous opponents played. That doesn't mean the idle team has suddenly *earned another win*. Its actual game results and win–loss record remain fixed. What changes is the context in which we evaluate those results—and, consequently, their estimated merit. The model distinguishes new evidence about an opponent from a new achievement by the team itself.
 
@@ -207,13 +223,13 @@ But there's another important distinction: **these underlying strength estimates
 
 Here's where the model gets interesting. Suppose Ohio State beats Alabama by 17 points. How impressive is that? One way to answer is to imagine a fixed reference-quality team—say, a team with approximately top-25 FBS strength—facing Alabama at the same venue. Based on the fitted model, what scoring margin would we expect that reference team to achieve? We can calculate an entire probability distribution of possible margins, then ask where Ohio State's actual 17-point victory falls within it.
 
-The reference team isn't a particular school. In each posterior draw, I use the **25th-highest latent strength among FBS teams** as the benchmark. This means the reference itself is allowed to be uncertain, rather than pretending we know exactly how good the 25th-best team is. For a result by team $$i$$ against opponent $$j$$, let $$m_{ig}$$ be the actual margin from team $$i$$'s perspective, and let $$v_{ig}$$ be $$+1$$ at home, $$0$$ on a neutral field, and $$-1$$ away. The reference team's scoring-margin distribution has cumulative distribution function
+The reference team isn't a particular school. In each posterior draw, I use the **25th-highest latent strength among FBS teams** as the benchmark. This means the reference itself is allowed to be uncertain, rather than pretending we know exactly how good the 25th-best team is. For a result by team $$i$$ against opponent $$j$$, let $$m_{ig}$$ be the actual margin from team $$i$$'s perspective, and let $$v_{ig}$$ be $$+1$$ at home, $$0$$ on a neutral field, and $$-1$$ away, with $$h_g$$ the home-field advantage at that game's stadium. The reference team's scoring-margin distribution has cumulative distribution function
 
 $$
 \boxed{
 F_{ig}(m\mid\Theta)=
 T_\nu\!\left(
-\frac{m-(\theta_{\mathrm{ref}}-\theta_j+v_{ig}h)}{\sigma}
+\frac{m-(\theta_{\mathrm{ref}}-\theta_j+v_{ig}h_g)}{\sigma}
 \right),
 }
 $$
@@ -334,35 +350,37 @@ $$
 
 Suppose Team A has higher *average* merit than Team B, but B beat A head-to-head. If $$p_{AB}=0.85$$, the model gives A an 85% probability of having earned more merit despite losing that game. How should those two pieces of evidence be reconciled? My solution is to make the decision rule explicit, and to let readers change it themselves. There are three independently adjustable probability thresholds. They aren't weights added to a score. **Every percentage determines whether a particular ranking rule applies.**
 
-The first is the **head-to-head threshold**, which I'm initially setting at **90%**. If B beat A, that actual result qualifies to put B ahead when the probability of A having higher earned merit is **below 90%**. But there's a second way the result can qualify: if A and B are within **two positions in the original, unadjusted merit ranking**. So if two teams have the same record and are ranked eighth and ninth by raw merit, I don't want their head-to-head result ignored just because the model assigns the team that lost a 95% probability of higher overall merit. The two-position condition is an **OR**, not an additional restriction. The same logic applies to teams farther apart if their posterior merit distributions overlap enough.
+The first is the **head-to-head threshold**, which I'm initially setting at **95%**. If B beat A, that actual result qualifies to put B ahead when the probability of A having higher earned merit is **below 95%**. In other words, if the tails of their merit distributions overlap at all, the head-to-head result gets the benefit. Merit only overrides it when there's less than a 5% chance B actually earned more. But there's a second way the result can qualify: if A and B are within **two positions in the ranking**. So if two teams have the same record and are ranked eighth and ninth, I don't want their head-to-head result ignored just because the model assigns the team that lost a 97% probability of higher overall merit. The two-position condition is an **OR**, not an additional restriction. The same logic applies to teams farther apart if their posterior merit distributions overlap enough.
 
-The second is the **common-opponent threshold**, initially **70%**. **This rule is used only when two teams have not played each other at all.** If they played, head-to-head has priority, even if they split their games or the head-to-head result wasn't strong enough to change the ranking. We do not go hunting through common opponents for another reason to move them. When two teams never met, I compare their win–loss results against opponents they both played. A team has an unambiguous advantage only if it did at least as well against *every* common FBS opponent and strictly better against at least one. That advantage qualifies when the opposing merit probability is below 70%, **or** when the teams are within two raw-ranking positions. Scoring margins against those opponents already contribute to the underlying merit estimates; this particular rule concerns actual wins and losses.
+The second is the **common-opponent threshold**, initially **70%**. **This rule is used only when two teams have not played each other at all.** If they played, head-to-head has priority, even if they split their games or the head-to-head result wasn't strong enough to change the ranking. We do not go hunting through common opponents for another reason to move them. When two teams never met, I compare their win–loss results against opponents they both played. A team has an unambiguous advantage only if it did at least as well against *every* common FBS opponent and strictly better against at least one. That advantage qualifies when the opposing merit probability is below 70%, **or** when the teams are within two ranking positions. Scoring margins against those opponents already contribute to the underlying merit estimates; this particular rule concerns actual wins and losses.
 
-The third is **merit protection**, initially **90%**. It identifies comparisons where the posterior gives one team at least a 90% probability of higher earned merit. Unlike the head-to-head and common-opponent rules, this is evaluated for **every pair of FBS teams**. It's a strong preference for retaining the merit ordering, but it isn't an absolute veto when it conflicts with a greater number of qualifying higher-priority actual-result comparisons. The three probability sliders are independent, and the raw-rank proximity window will be adjustable separately.
+The third is **merit protection**, initially **90%**. It identifies comparisons where the posterior gives one team at least a 90% probability of higher earned merit. Unlike the head-to-head and common-opponent rules, this is evaluated for **every pair of FBS teams**. It's a strong preference for retaining the merit ordering, but it isn't an absolute veto when it conflicts with a greater number of qualifying higher-priority actual-result comparisons. The three probability sliders are independent, and the proximity window will be adjustable separately.
 
-For teams $$A$$ and $$B$$, let $$r_A^{\mathrm{raw}}$$ and $$r_B^{\mathrm{raw}}$$ be their positions **before** head-to-head or common-opponent adjustments. When B has the qualifying actual-result advantage and A has greater mean merit, the eligibility rule is
+For teams $$A$$ and $$B$$, let $$r_A$$ and $$r_B$$ be their positions **in the current ordering**. When B has the qualifying actual-result advantage and A has greater mean merit, the eligibility rule is
 
 $$
 \boxed{
 P(\mathcal M_A>\mathcal M_B\mid D)\lt q_{\mathrm{rule}}
 \quad\text{or}\quad
-|r_A^{\mathrm{raw}}-r_B^{\mathrm{raw}}|\le 2.
+|r_A-r_B|\le 2.
 }
 $$
 
-Here $$q_{\mathrm{rule}}$$ is 90% for head-to-head or 70% for common opponents by default. Using the **original raw ranks** matters: we can't let one adjustment change which other comparisons qualify. And the two-position window is only an alternative *eligibility* condition, not a maximum distance a team can move.
+Here $$q_{\mathrm{rule}}$$ is 95% for head-to-head or 70% for common opponents by default. Using the **current ordering** matters, because fixing one conflict can change which others come into view. The process runs in rounds. Start from the merit ranking, apply every comparison that qualifies, and re-rank. If that puts two teams within two spots of each other, and they have the same record and a head-to-head or common-opponent result, that comparison now qualifies too, and the ranking gets resolved again. This keeps going until nothing new comes into view. Once a comparison qualifies it stays qualified, so the process always finishes. And the two-position window is only an alternative *eligibility* condition, not a maximum distance a team can move.
 
 For now, the default is to apply these rules only to teams with **identical overall win–loss records**, including games against FCS opponents. That, too, will be a visible on/off setting. The Bayesian merit scores, posterior probabilities, and strength-of-schedule estimates do not change when someone adjusts these settings. Only the rules constructing the final published order change.
 
-But qualifications can conflict. And this isn't merely hypothetical. In the 2026 results, Texas beat Tennessee, and Tennessee beat Alabama. Those qualifying direct results imply **Texas ahead of Tennessee ahead of Alabama**. Yet the model gives Alabama greater aggregate merit than Texas, with about 95.8% posterior support. If we insist that the Alabama–Texas merit ordering is unbreakable, we can't honor both of the actual head-to-head results. I don't think the indirect comparison should defeat a consistent chain of qualifying direct games.
+But qualifications can conflict. And this isn't merely hypothetical. In the 2026 results, Texas beat Tennessee, and Tennessee beat Alabama. Those qualifying direct results imply **Texas ahead of Tennessee ahead of Alabama**. Yet the model gives Alabama greater aggregate merit than Tennessee, with about 92.8% posterior support, which clears the 90% merit-protection bar. (Tennessee's win still qualifies, because 92.8% is below the 95% head-to-head threshold.) If we insist that the Alabama–Tennessee merit ordering is unbreakable, we have to throw out Tennessee's head-to-head win. I don't think an aggregate merit preference should defeat a consistent chain of qualifying direct games.
 
-So the algorithm resolves those conflicts **globally**, in order of evidence priority. Subject to the separate undefeated Power Four protection, it first chooses an ordering satisfying as many qualifying head-to-head comparisons as possible. Among equally good orders, it satisfies as many qualifying common-opponent comparisons as possible. Next come the high-confidence merit preferences. Finally, it uses the original mean-merit order as a deterministic tie-break wherever the higher-priority rules leave room. There is no hidden bonus for head-to-head, no hand-chosen weight for common opponents, and no numerical penalty for moving a team several positions. If direct results themselves form a cycle—A beat B, B beat C, and C beat A—the algorithm must necessarily leave at least one unsatisfied, so the lower-priority evidence resolves which order to use. Every unsatisfied requirement can be audited.
+So the algorithm resolves those conflicts **globally**, in order of evidence priority. Subject to the separate undefeated Power Four protection, it first chooses an ordering satisfying as many qualifying head-to-head comparisons as possible. Among equally good orders, it satisfies as many qualifying common-opponent comparisons as possible. Next come the high-confidence merit preferences. Finally, every team that isn't pinned down by those results fills in by merit: among the orders that satisfy them, it picks the one that disagrees with the merit ranking the fewest times. There is no hidden bonus for head-to-head, no hand-chosen weight for common opponents, and no numerical penalty for moving a team several positions. If direct results themselves form a cycle—A beat B, B beat C, and C beat A—the algorithm must necessarily leave at least one unsatisfied, so the lower-priority evidence resolves which order to use. Every unsatisfied requirement can be audited.
 
-In the Texas–Tennessee–Alabama triangle, the two direct results can both be honored by letting the Alabama-over-Texas merit preference yield. That puts **Texas eighth, Tennessee ninth, and Alabama tenth** in the updated November 19 rankings. Texas Tech remains eleventh. It's not an arbitrary swapping of positions, and it doesn't change any team's estimated earned merit. The distinction is between what the season-wide model estimates and what the declared ranking rules do with conflicting evidence.
+In the Texas–Tennessee–Alabama triangle, the two direct results can both be honored by letting the Alabama-over-Tennessee merit preference yield. That puts **Texas eighth, Tennessee ninth, and Alabama tenth** in the updated November 19 rankings. Texas Tech remains eleventh. It's not an arbitrary swapping of positions, and it doesn't change any team's estimated earned merit. The distinction is between what the season-wide model estimates and what the declared ranking rules do with conflicting evidence.
+
+Indiana shows how the fill-in works. Its merit (5.18) is below Alabama's (5.52) but above both Texas (4.95) and Tennessee (4.79). Once the head-to-head results lock in Texas, then Tennessee, then Alabama, there's no spot where Indiana is below Alabama *and* above Texas. So it goes wherever it disagrees with the merit ranking the fewest times. Ahead of all three, Indiana is out of merit order with only Alabama. Anywhere else, it's out of order with two of them. Indiana is seventh.
 
 ![Decision hierarchy with explicit branches for merit protection, played head-to-head, and never-played common opponents](/assets/images/editor-cae040ba-1ecb-451b-b2ff-29bb757efe94.png)
 
-*Figure 5. The existing illustration depicts the previous V4 ranking hierarchy and needs replacement with the V5 hierarchy: eligible direct results first, eligible common-opponent results second, conditional merit protection third, with eligibility determined by posterior thresholds **or** proximity within two raw-merit positions. The underlying merit model does not change when these controls move.*
+*Figure 5. The existing illustration depicts the previous V4 ranking hierarchy and needs replacement with the current hierarchy: eligible direct results first, eligible common-opponent results second, conditional merit protection third, everyone else filled in by merit, with eligibility determined by posterior thresholds **or** proximity within two positions in the current ordering. The underlying merit model does not change when these controls move.*
 
 There is also one separate, explicit fairness rule: an undefeated Power Four team with at least eight completed FBS games and no losses to FBS or FCS opponents stays ahead of teams with two or more total losses. That is a stated protection for an undefeated résumé, not something I claim the likelihood mathematically proves, and readers will be able to turn it on or off. **Merit establishes the baseline; actual head-to-head and common-opponent results determine qualifying comparisons under the published rules.** Where the rules conflict, the conflict is visible rather than concealed inside a set of arbitrary weights.
 
@@ -385,11 +403,11 @@ $$
 
 For each draw, I can also compute a **raw merit rank**, $$R_i^{(s)}=1+\sum_{j\neq i}\mathbf1(\mathcal M_j^{(s)}>\mathcal M_i^{(s)})$$, and then estimate $$P(R_i\le25)$$ as the fraction of draws putting that team among the top 25 *by merit*. This is separate from the official numbered ranking, which can also reflect the declared head-to-head and common-opponent rules. It matters not to confuse those two quantities.
 
-Consider Utah and UCLA in the updated 2026 fit through November 19. Utah has higher mean merit (7.273 versus 5.968), and Utah has greater merit in **98.8%** of the 2,800 saved posterior draws. In the earlier FBS-only fit, the corresponding probability was only **53.3%**. Including FCS results changed the opponent-strength network and, with it, the evaluation of games that both teams had already played. That is why I want to report the uncertainty rather than treat the numbered ranking as the entire result.
+Consider Utah and UCLA in the updated 2026 fit through November 19. Utah has higher mean merit (7.233 versus 6.570), and Utah has greater merit in **82.1%** of the 4,000 saved posterior draws. In the earlier FBS-only fit, the corresponding probability was only **53.3%**. Including FCS results and grouping teams by conference changed the opponent-strength network and, with it, the evaluation of games that both teams had already played. That is why I want to report the uncertainty rather than treat the numbered ranking as the entire result.
 
 ![Utah versus UCLA actual posterior merit comparison: Utah ahead in 53.3 percent of draws, so neither ranking is protected at 90 percent](/assets/images/editor-0ef481ed-0b19-4a68-a257-087a4a069b26.png)
 
-*Figure 6. This existing graphic shows the earlier FBS-only fit, where Utah had higher merit in 53.3% of draws. In the updated FCS-inclusive fit, Utah has higher merit in **98.8%** of draws; the graphic needs to be regenerated to show those distributions. These probabilities describe **earned merit**, not a prediction of a head-to-head game. The paired gamewise LOO posterior draws are approximate.*
+*Figure 6. This existing graphic shows the earlier FBS-only fit, where Utah had higher merit in 53.3% of draws. In the updated fit, Utah has higher merit in **82.1%** of draws; the graphic needs to be regenerated to show those distributions. These probabilities describe **earned merit**, not a prediction of a head-to-head game. The paired gamewise LOO posterior draws are approximate.*
 
 ## Why I won't publish rankings in Week 1
 
@@ -405,11 +423,11 @@ Once enough results accumulate, I'll begin publishing the **Margin of Merit Top 
 
 I was curious how an entirely results-based model would compare with the rankings everyone argues about every Tuesday. I ran Margin of Merit on the **2026 season through November 19** and compared it with the [AP poll released November 16](https://www.collegepollarchive.com/football/ap/seasons.cfm?appollid=1279&seasonid=2026) and the [CFP committee's November 17 rankings](https://collegefootballplayoff.com/news/2026/11/17/rankings). Neither poll, nor any preseason rating, recruiting ranking, or conference reputation, is used anywhere in the model. Every FBS team begins with the same prior, and its evaluation comes from this season's actual game scores.
 
-The agreement is surprisingly strong. Margin of Merit shares **21 of its Top 25 teams with the AP** and **19 with the CFP**. It has all ten of the AP's top ten teams, and nine of the CFP's. Among teams that appear in both Top 25 lists, Spearman's rank correlation is **0.952** against the AP and **0.858** against the CFP. Those correlations describe the *ordering of shared teams*; they don't account for teams that one list excludes, which is why I report the overlap separately. The earlier comparison was also plotted:
+The agreement is surprisingly strong. Margin of Merit shares **21 of its Top 25 teams with the AP** and **20 with the CFP**. It has all ten of the AP's top ten teams, and nine of the CFP's. Among teams that appear in both Top 25 lists, Spearman's rank correlation is **0.948** against the AP and **0.883** against the CFP. Those correlations describe the *ordering of shared teams*; they don't account for teams that one list excludes, which is why I report the overlap separately. The earlier comparison was also plotted:
 
 ![Margin of Merit 2026 ranks versus the AP Top 25 and CFP rankings, showing strong agreement and several notable outliers](/assets/images/editor-dd7edb55-0fb5-4aa3-bcac-04c61a72eb4e.png)
 
-*Figure 7. The existing graphic compares the earlier rankings with the AP poll from November 16 and CFP rankings from November 17; it needs to be regenerated using the updated FCS-inclusive V5 results described here. Each dot represents a team appearing in both Top 25 lists. Polls were not used to fit or tune Margin of Merit. The six FBS games on November 17–19 are included in Margin of Merit but occurred after the AP and CFP snapshots.*
+*Figure 7. The existing graphic compares the earlier rankings with the AP poll from November 16 and CFP rankings from November 17; it needs to be regenerated using the updated results described here. Each dot represents a team appearing in both Top 25 lists. Polls were not used to fit or tune Margin of Merit. The six FBS games on November 17–19 are included in Margin of Merit but occurred after the AP and CFP snapshots.*
 
 Here are some of the more interesting comparisons:
 
@@ -418,18 +436,18 @@ Here are some of the more interesting comparisons:
 | Notre Dame | **3** | 3 | 6 |
 | Georgia | **2** | 1 | 1 |
 | Utah | **1** | 2 | 2 |
-| UCLA | **6** | 4 | 4 |
-| Miami | **4** | 5 | 7 |
+| UCLA | **4** | 4 | 4 |
+| Miami | **5** | 5 | 7 |
 | Alabama | **10** | 7 | 3 |
-| Wake Forest | **5** | 10 | 11 |
-| Liberty | **17** | 22 | — |
-| LSU | **19** | — | — |
-| New Mexico | **18** | — | — |
-| Duke | **23** | — | — |
+| Wake Forest | **6** | 10 | 11 |
+| Liberty | **18** | 22 | — |
+| LSU | **17** | — | — |
+| New Mexico | **23** | — | — |
+| Duke | **24** | — | — |
 
-The biggest differences are also the most interesting ones to investigate. Utah comes out first by earned merit, compared with second in both polls, while the committee has Alabama third and my ranking places it tenth. Alabama has higher aggregate merit than Texas and Tennessee, but the qualifying head-to-head results put Texas ahead of Tennessee ahead of Alabama. New Mexico makes my Top 25 at eighteenth despite playing a relatively weak schedule, because its eight victories, including one against an FCS opponent, and actual scoring margins accumulate enough credit to put it there. LSU is nineteenth with a 6–4 overall record, demonstrating the opposite side of the calculation: a team can absorb more losses against a difficult schedule and still accumulate meaningful merit. Neither New Mexico nor LSU appears in either poll's Top 25. Liberty is seventeenth in Margin of Merit, compared with twenty-second in the AP and unranked by the CFP.
+The biggest differences are also the most interesting ones to investigate. Utah comes out first by earned merit, compared with second in both polls, while the committee has Alabama third and my ranking places it tenth. Alabama has higher aggregate merit than Texas and Tennessee, but the qualifying head-to-head results put Texas ahead of Tennessee ahead of Alabama. New Mexico makes my Top 25 at twenty-third despite playing a relatively weak schedule, because its eight victories, including one against an FCS opponent, and actual scoring margins accumulate enough credit to put it there. LSU is seventeenth with a 6–4 overall record, demonstrating the opposite side of the calculation: a team can absorb more losses against a difficult schedule and still accumulate meaningful merit. Neither New Mexico nor LSU appears in either poll's Top 25. Liberty is eighteenth in Margin of Merit, compared with twenty-second in the AP and unranked by the CFP.
 
-I find the agreement at the top interesting but also reassuring, particularly because the model has no information about which programs are traditionally powerful or which conference they're supposed to play in. This model has literal no conference or "power index" at all (in case that's not clear by now). But agreement with a poll isn't proof that my rankings are correct. The model still makes choices about the merit function, reference-team quality, prior distributions, and the rules for resolving uncertain comparisons. What interests me here though is that much of the national picture emerges from wins, losses, and scores alone when compared to the CFP committee rankings and AP, while the remaining disagreements are concrete enough to examine and debate fairly. We can identify which actual results and statistical assumptions put New Mexico eighteenth, rather than settling for an argument about which team *looks* better.
+I find the agreement at the top interesting but also reassuring, particularly because the model has no information about which programs are traditionally powerful or how good their conference is supposed to be. This model has literal no conference rating or "power index" at all (in case that's not clear by now). Conferences only enter as groups of teams that mostly play each other, every one with the same prior. But agreement with a poll isn't proof that my rankings are correct. The model still makes choices about the merit function, reference-team quality, prior distributions, and the rules for resolving uncertain comparisons. What interests me here though is that much of the national picture emerges from wins, losses, and scores alone when compared to the CFP committee rankings and AP, while the remaining disagreements are concrete enough to examine and debate fairly. We can identify which actual results and statistical assumptions put New Mexico twenty-third, rather than settling for an argument about which team *looks* better.
 
 ## Is this the perfect ranking?
 
