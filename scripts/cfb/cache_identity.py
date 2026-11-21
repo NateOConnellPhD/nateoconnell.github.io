@@ -3,6 +3,9 @@ import hashlib
 from pathlib import Path
 
 REFIT_GENERATION = 'margin-of-merit-2026-11-21'
+# An ordering-only revision rebuilds every published week while retaining
+# compatible current-model posterior and LOO caches.
+PUBLICATION_GENERATION = REFIT_GENERATION + '-no-p4'
 
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
            'ranking_policy_v5.py', 'exact_order.py', 'sync_data.py', 'season_inputs.py',

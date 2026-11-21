@@ -24,7 +24,7 @@ class Element {
 
 function row(season, week, version = 'new') {
   const id = `${season}-${week}-${version}`;
-  return {season, week, id, games: week, methodology: 'margin-of-merit-2026-11-21', json: `${id}.json`, csv: `${id}.csv`,
+  return {season, week, id, games: week, methodology: 'margin-of-merit-2026-11-21-no-p4', json: `${id}.json`, csv: `${id}.csv`,
     data_cutoff: `${season}-09-${String(week + 1).padStart(2, '0')}T00:00:00Z`, published_at: `${season}-11-21T00:00:00Z`};
 }
 const rows = [row(2026, 12), row(2026, 12, 'old'), row(2026, 10), row(2026, 0), row(2024, 16), row(2024, 2)];
@@ -106,6 +106,11 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.equal(pending.shown.length, 0, 'A missing linked week must not silently load another week');
   assert.equal(pending.get('results').hidden, true);
   assert.match(pending.get('status').textContent, /2026 week 11/);
+  const obsoleteIndex = JSON.parse(JSON.stringify(index));
+  obsoleteIndex.snapshots.forEach(r => { r.methodology = 'margin-of-merit-2026-11-21'; });
+  const obsolete = await page('?season=2026&week=12', obsoleteIndex);
+  assert.equal(obsolete.shown.length, 0, 'Never display orders using the removed P4 policy');
+  assert.equal(obsolete.get('results').hidden, true);
   const exact = await page('?snapshot=2026-12-old&season=2024&week=2');
   assert.equal(exact.shown.at(-1), '2026-12-old', 'Exact snapshot links keep their original revision');
   assert.equal(exact.get('week').value, '12');
@@ -151,14 +156,16 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const malformed = await page('', weeklyIndex, {...fixtures, '2026-10-new': {teams: teams([3, 1, 2, 4]), week: 11}});
   assert.match(malformed.get('comparison').textContent, /Week 10 could not be loaded/);
 
-  const specification = {version: 'margin-of-merit-order-2026-11-21', merit_protection: .9,
-    head_to_head: .9, common_opponents: .7, proximity: 2, equal_records_only: true, undefeated_p4_protection: true};
+  const specification = {version: 'margin-of-merit-order-2026-11-21-no-p4', merit_protection: .9,
+    head_to_head: .9, common_opponents: .7, proximity: 2, equal_records_only: true};
   const policyFixtures = Object.fromEntries(Object.entries(fixtures).map(([id, value]) => [id, {...value,
     specification, policy_inputs: {schema: 'margin-of-merit-policy-input-v5', id}, order: [1, 2, 3, 4]}]));
   const calls = [];
   const custom = await page('', weeklyIndex, policyFixtures, input => {
     calls.push(input.id); return {order: input.id.includes('-10-') ? [4, 1, 2, 3] : [4, 3, 2, 1]};
   });
+  assert.equal(custom.get('reset').textContent, 'Official defaults');
+  assert.equal(custom.get('p4').handlers.input, undefined, 'The removed control has no handler');
   custom.get('protect').value = '85'; custom.get('protect').handlers.input();
   await new Promise(resolve => setTimeout(resolve, 200)); await settle();
   assert.deepEqual(calls, ['2026-11-new', '2026-10-new'], 'Apply custom rules to both weeks');

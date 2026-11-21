@@ -35,7 +35,7 @@
   async function read(row) {
     if (!snapshots.has(row.id)) {
       const value = await fetchJSON(url(row.json));
-      if (value.methodology !== 'margin-of-merit-2026-11-21' || !value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams) ||
+      if (value.methodology !== 'margin-of-merit-2026-11-21-no-p4' || !value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams) ||
           value.season !== row.season || value.week !== row.week) {
         throw new Error('Unpublished or invalid ranking');
       }
@@ -154,17 +154,17 @@
   }
   const thresholdControls = {protect: 'merit_protection', direct: 'head_to_head', common: 'common_opponents'};
   const percent = value => `${(value * 100).toFixed(2)}%`;
-  const ruleNames = {merit_protection: 'Merit protection', undefeated_p4: 'Undefeated Power Four protection',
+  const ruleNames = {merit_protection: 'Merit protection',
     head_to_head: 'Head-to-head', common_opponents: 'Common opponents'};
   const teamName = id => current?.teams.find(t => t.id === id)?.name || current?.policy_inputs?.opponents?.find(t => t.id === id)?.name || String(id);
-  const isV5 = () => current?.specification?.version === 'margin-of-merit-order-2026-11-21';
+  const isV5 = () => current?.specification?.version === 'margin-of-merit-order-2026-11-21-no-p4';
   const wins = team => team.wins;
   const losses = team => team.losses;
   function settings() {
     return {version: current.specification.version,
       proximity: Number(el('proximity').value),
       ...Object.fromEntries(Object.entries(thresholdControls).map(([key, field]) => [field, Number(el(key).value) / 100])),
-      equal_records_only: el('equal').checked, undefeated_p4_protection: el('p4').checked};
+      equal_records_only: el('equal').checked};
   }
   function ruleSentences() {
     for (const key of Object.keys(thresholdControls)) el(`${key}-value`).textContent = `${el(key).value}%`;
@@ -198,10 +198,9 @@
     if (supported) {
       for (const [key, field] of Object.entries(thresholdControls)) el(key).value = Math.round(current.specification[field] * 100);
       el('equal').checked = current.specification.equal_records_only;
-      el('p4').checked = current.specification.undefeated_p4_protection;
       el('proximity-control').hidden = false;
       el('proximity').value = current.specification.proximity ?? 2;
-      el('reset').textContent = 'Official V5 defaults';
+      el('reset').textContent = 'Official defaults';
       policyResult = current;
       const active = current.teams.filter(t => t.rank != null).sort((a,b) => a.name.localeCompare(b.name));
       el('team-a').replaceChildren(...active.map(t => option(t.id, t.name)));
@@ -283,7 +282,7 @@
       const ids=current.policy_inputs.teams.map(t=>t.id), p=current.policy_inputs.probabilities;
       paragraph(details, `Merit preference: ${percent(p[ids.indexOf(row.winner_id)][ids.indexOf(row.loser_id)])} probability that ${teamName(row.winner_id)} has greater merit; selected threshold ${percent(row.threshold)}.`);
     } else paragraph(details, `${ruleNames[row.type]}. Probability that ${teamName(row.loser_id)} has higher earned merit: ${percent(row.p_loser_higher_merit)}.${row.threshold != null ? ` Selected threshold: ${percent(row.threshold)}.` : ''}`);
-    const routes = {both: 'probability and proximity', probability: 'probability threshold', proximity: 'initial ranking proximity', neither: 'neither condition', posterior_merit: 'merit probability', hard_undefeated_p4: 'undefeated-team restriction'};
+    const routes = {both: 'probability and proximity', probability: 'probability threshold', proximity: 'initial ranking proximity', neither: 'neither condition', posterior_merit: 'merit probability'};
     if (row.admission_iteration) paragraph(details, `Admitted after reorder ${row.admission_iteration}: the teams were #${row.winner_rank_at_admission} and #${row.loser_rank_at_admission}, ${row.rank_gap_at_admission} places apart. This comparison stays admitted in subsequent reorders.`);
     if (row.qualification && !row.admission_iteration) paragraph(details, `Qualifying route: ${routes[row.qualification] || row.qualification}. Raw-rank distance: ${row.raw_rank_gap} places.${row.proximity != null ? ` Selected window: ±${row.proximity}.` : ''}`);
     if (row.game_ids) for (const id of row.game_ids) {
@@ -491,7 +490,7 @@
   }
   el('latest').addEventListener('click', latest);
   el('current').addEventListener('click', latest);
-  for (const key of [...Object.keys(thresholdControls), 'proximity', 'equal', 'p4']) el(key).addEventListener('input', () => {
+  for (const key of [...Object.keys(thresholdControls), 'proximity', 'equal']) el(key).addEventListener('input', () => {
     ruleSentences(); policyGeneration++; window.CFBPolicy?.cancel(); clearTimeout(policyFrame); policyFrame = setTimeout(applyPolicy, 180);
   });
   el('reset').addEventListener('click', () => { setOfficialPolicy(); render(); });
@@ -533,7 +532,7 @@
     try {
       index = await fetchJSON(root.dataset.index, 'no-store');
       if (index.schema !== 'margin-of-merit-index-v1' || !Array.isArray(index.snapshots)) throw new Error('Invalid archive');
-      index.snapshots = index.snapshots.filter(r => r.week_complete !== false && r.methodology === 'margin-of-merit-2026-11-21');
+      index.snapshots = index.snapshots.filter(r => r.week_complete !== false && r.methodology === 'margin-of-merit-2026-11-21-no-p4');
       if (!index.snapshots.some(r => r.id === index.latest)) index.latest = index.snapshots[0]?.id || null;
       const seasons = [...new Set([...index.snapshots.map(r => r.season), ...(index.archive || []).map(s => s.season)])].sort((a,b) => b-a);
       if (!seasons.length) {

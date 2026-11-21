@@ -30,20 +30,19 @@ class ArchiveRangeTests(unittest.TestCase):
     def tearDownClass(cls):
         if cls.created_base: cls.base.rmdir()
 
-    def test_same_rules_allow_one_loss_above_undefeated_in_every_season(self):
+    def test_same_rules_allow_two_losses_above_undefeated_in_every_season(self):
         roster = teams(3)
         roster[0]['conference'] = 'ACC'
         states = []
         for season in range(2002, 2027):
-            # A: 8–0; B: 8–1; C: 1–16. B has the higher estimated merit.
-            results = games([(1, 3)] * 8 + [(2, 3)] * 8 + [(3, 2)])
+            # A: 8–0; B: 8–2; C: 2–16. B has the higher estimated merit.
+            results = games([(1, 3)] * 8 + [(2, 3)] * 8 + [(3, 2)] * 2)
             for game in results:
                 game['season'] = season
             state = prepare_policy(roster, results, [2, 3, 0], probability(3, {(2, 1): .99}), season=season)
             result = order_policy(state)
             self.assertEqual(result['order'], [2, 1, 3])
-            self.assertEqual(result['protected_team_ids'], [1])
-            self.assertFalse(any(a['type'] == 'undefeated_p4' and a['loser_id'] == 2 for a in result['audit']))
+            self.assertFalse(any(a['type'] == 'undefeated_p4' for a in result['audit']))
             states.append(state)
         with self.assertRaisesRegex(ValueError, '2002'):
             prepare_policy(roster, [], [2, 3, 0], probability(3), season=2001)

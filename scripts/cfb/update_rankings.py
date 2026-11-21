@@ -15,7 +15,7 @@ import sys
 
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, UTC, digest, encoded, instant, sync
-from cache_identity import SOURCES, publication_sources, REFIT_GENERATION
+from cache_identity import SOURCES, publication_sources, PUBLICATION_GENERATION
 
 PUBLIC = ROOT / 'assets' / 'data' / 'cfb'
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
@@ -29,7 +29,7 @@ def current_season(now):
 
 def request_key(inputs):
     return digest({'inputs': inputs['fit_input_sha256'], 'venue_corrections': inputs['venue_corrections_sha256'],
-                   'home_history': inputs['home_history']['input_sha256'], 'methodology': REFIT_GENERATION,
+                   'home_history': inputs['home_history']['input_sha256'], 'methodology': PUBLICATION_GENERATION,
                    'through_week': inputs.get('through_week'),
                    'sources': publication_sources(inputs['season']), 'seed': 20261120, 'exact_loo': True})
 
@@ -40,14 +40,14 @@ def read_index(destination=PUBLIC):
         'schema': SCHEMA, 'latest': None, 'snapshots': [], 'last_attempt': None}
     if index.get('schema') != SCHEMA or not isinstance(index.get('snapshots'), list):
         raise ValueError('Unrecognized ranking archive index')
-    # A new methodology requires a new fit for every season/week. Never offer
-    # old rules or reinterpret old draws as current-model results.
+    # Every season/week must use the current model and ordering rules.
+    # Policy-only revisions reuse compatible fits, but never old published orders.
     old_rows = index['snapshots']
-    index['snapshots'] = [r for r in old_rows if r.get('methodology') == REFIT_GENERATION]
+    index['snapshots'] = [r for r in old_rows if r.get('methodology') == PUBLICATION_GENERATION]
     allowed = {r['id'] for r in index['snapshots']}
     if index.get('latest') not in allowed:
         index['latest'] = index['snapshots'][0]['id'] if index['snapshots'] else None
-    if index.get('methodology') != REFIT_GENERATION:
+    if index.get('methodology') != PUBLICATION_GENERATION:
         coverage = {r['season']: r for r in index.get('archive', [])}
         for row in old_rows:
             if row.get('week_complete') is False: continue
@@ -58,9 +58,9 @@ def read_index(destination=PUBLIC):
             for week in season['weeks']: week['snapshot'] = None
             season['weeks'].sort(key=lambda w: w['week'])
         index['archive'] = sorted(coverage.values(), key=lambda r: r['season'], reverse=True)
-        index['backfill'] = {'status': 'pending', 'reason': 'Refitting every season and week under the current model and rules.',
+        index['backfill'] = {'status': 'pending', 'reason': 'Rebuilding every season and week under the current model and rules.',
                              'first_season': 2002}
-    index['methodology'] = REFIT_GENERATION
+    index['methodology'] = PUBLICATION_GENERATION
     return index
 
 
@@ -135,7 +135,7 @@ def validate_candidate(result, inputs):
                                           policy_input['probabilities'], season=inputs['season'],
                                           specification=CANONICAL, opponents=opponents))
     for field in ('specification', 'policy_sha256', 'policy_inputs', 'order', 'raw_order',
-                  'unranked', 'confidence_lock_count', 'protected_team_ids', 'protection_exceptions', 'audit', 'optimization', 'dynamic_trace'):
+                  'unranked', 'confidence_lock_count', 'audit', 'optimization', 'dynamic_trace'):
         if result[field] != expected[field]:
             raise ValueError('Candidate v5 policy replay failed: ' + field)
     rows = result['teams']
@@ -194,7 +194,7 @@ def publish(result, inputs, key, now, destination=PUBLIC):
         week = max(g['week'] for g in inputs['games'])
     snapshot = {**result, 'schema': 'margin-of-merit-snapshot-v1',
                 'status': 'published', 'publication_ready': True, 'request_key': key,
-                'methodology': REFIT_GENERATION,
+                'methodology': PUBLICATION_GENERATION,
                 'published_at': now.isoformat(), 'data_observed_at': inputs['source']['games']['retrieved_at'],
                 'latest_game_kickoff': max(g['start_date'] for g in inputs['games']),
                 'week': week, 'kind': kind,
@@ -219,7 +219,7 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     writer.writeheader()
     writer.writerows(snapshot['teams'])
     index = read_index(destination)
-    row = {'id': ident, 'methodology': REFIT_GENERATION, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']), 'kind': kind,
+    row = {'id': ident, 'methodology': PUBLICATION_GENERATION, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']), 'kind': kind,
            'published_at': snapshot['published_at'], 'data_observed_at': snapshot['data_observed_at'],
            'data_cutoff': snapshot['data_cutoff'], 'request_key': key, 'sha256': checksum,
            'json': relative.with_suffix('.json').as_posix(), 'csv': relative.with_suffix('.csv').as_posix()}

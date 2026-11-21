@@ -24,6 +24,16 @@ def fixture(n=4, *, games=(), probabilities=None, means=None, opponents=(), spec
         specification=spec, opponents=other)
 
 
+def undefeated_fixture(conference='SEC'):
+    # A is 8–0 against FBS; B lost to A and an FCS opponent, but has more merit.
+    state = fixture(n=9, games=[(1,i,20,10) for i in range(2,10)] + [(1001,2,20,10)],
+                    means=[0,5]+[-5]*7, probabilities=[(1,2,.01)])
+    payload = state['payload']
+    for team in payload['teams']: team['conference'] = conference
+    return prepare_policy(payload['teams'], [g for g in payload['games'] if g['id'] < 1000],
+        payload['means'], payload['probabilities'], season=2026, opponents=payload['opponents'])
+
+
 class V5Tests(unittest.TestCase):
     def result(self, **kwargs):
         return order_policy(fixture(**kwargs))
@@ -104,7 +114,8 @@ class V5Tests(unittest.TestCase):
                 fixture(n=3,games=[(1,2,10,0),(2,3,10,0),(3,1,10,0)]),
                 fixture(games=[(2,3,20,10),(3,1,20,10)],spec=replace(CANONICAL,equal_records_only=False)),
                 fixture(n=6,games=[(4,5,24,21),(5,2,24,21),(4,6,24,21),(6,2,24,21)],
-                        probabilities=[(2,5,.93)],spec=replace(CANONICAL,head_to_head=.9,equal_records_only=False))]
+                        probabilities=[(2,5,.93)],spec=replace(CANONICAL,head_to_head=.9,equal_records_only=False)),
+                undefeated_fixture(), undefeated_fixture(None)]
         node=os.environ.get('NODE')
         if not node: self.skipTest('Set NODE for JavaScript parity')
         output=subprocess.run([node,str(Path(__file__).with_name('check_policy_v5.cjs'))],
@@ -143,15 +154,24 @@ class V5Tests(unittest.TestCase):
         self.assertEqual(r['raw_order'],[1,2,3,4])
         self.assertEqual(json.dumps(s['payload'],sort_keys=True),before)
 
-    def test_fcs_games_do_not_satisfy_eight_fbs_minimum(self):
-        s=fixture(n=3,games=[(2,1,21,0),(3,1,21,0)])
-        s['wins'][1]=8
-        r=order_policy(s)
-        self.assertEqual(r['protected_team_ids'],[])
-        s['wins_fbs'][1]=8
-        r=order_policy(s)
-        self.assertIn(2,r['protected_team_ids'])
-        self.assertLess(r['order'].index(2),r['order'].index(1))
+    def test_undefeated_team_has_no_conference_protection(self):
+        expected = order_policy(undefeated_fixture())
+        self.assertEqual(expected['order'][:2], [2,1])
+        self.assertNotIn('protected_team_ids', expected)
+        self.assertNotIn('undefeated_p4_protection', expected['specification'])
+        self.assertFalse(any(r['type']=='undefeated_p4' for r in expected['audit']))
+        for conference in ('ACC','Big Ten','Big 12','SEC','Sun Belt','Independent',None):
+            with self.subTest(conference=conference):
+                state = undefeated_fixture(conference)
+                self.assertEqual((state['wins'][0],state['losses'][0],state['wins_fbs'][0]), (8,0,8))
+                self.assertEqual(state['losses'][1], 2)
+                actual = order_policy(state)
+                for key in ('order','audit','optimization','dynamic_trace'):
+                    self.assertEqual(actual[key],expected[key])
+
+    def test_removed_rule_cannot_be_enabled(self):
+        with self.assertRaises(TypeError):
+            replace(CANONICAL,undefeated_p4_protection=True)
 
 
 if __name__=='__main__': unittest.main()

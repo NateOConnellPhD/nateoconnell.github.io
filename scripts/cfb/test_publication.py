@@ -89,6 +89,27 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(migrated['archive'][0]['weeks'], [{'week': 12, 'snapshot': None}])
         self.assertTrue((self.public / row['json']).exists())
 
+    def test_removed_p4_policy_requires_new_orders_not_a_new_fit_generation(self):
+        from cache_identity import REFIT_GENERATION, PUBLICATION_GENERATION
+        self.assertEqual(REFIT_GENERATION, 'margin-of-merit-2026-11-21')
+        row = self.publish()
+        path = self.public / 'index.json'
+        index = json.loads(path.read_text())
+        # This was the immediately preceding publication with the same model.
+        index['methodology'] = index['snapshots'][0]['methodology'] = REFIT_GENERATION
+        path.write_text(json.dumps(index))
+        migrated = live.read_index(self.public)
+        self.assertEqual(migrated['methodology'], PUBLICATION_GENERATION)
+        self.assertEqual(migrated['snapshots'], [])
+        self.assertIsNone(migrated['latest'])
+        self.assertIsNone(live.matching_snapshot(migrated, 'one', self.public))
+        self.assertEqual(migrated['archive'][0]['weeks'], [{'week': 12, 'snapshot': None}])
+        self.assertTrue((self.public / row['json']).exists())
+        bad = copy.deepcopy(self.result)
+        bad['specification']['undefeated_p4_protection'] = True
+        with self.assertRaisesRegex(ValueError, 'specification'):
+            live.validate_candidate(bad, self.inputs)
+
     def test_bad_candidate_cannot_change_last_good_files(self):
         self.publish()
         original = {p: p.read_bytes() for p in self.public.rglob('*') if p.is_file()}

@@ -1,7 +1,7 @@
 """FCS-aware v5 ordering of frozen FBS merit. No sampling or network calls.
 
 The exact objective is H2H, common opponents, merit protection, raw inversions,
-then stable IDs, subject to the retained undefeated-P4 hard requirements.
+then stable IDs. No ordering rule depends on conference membership.
 """
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
@@ -15,29 +15,27 @@ from sync_data import digest
 
 @dataclass(frozen=True)
 class Specification:
-    version: str = 'margin-of-merit-order-2026-11-21'
+    version: str = 'margin-of-merit-order-2026-11-21-no-p4'
     merit_protection: float = .90
     head_to_head: float = .95
     common_opponents: float = .70
     proximity: int = 2
     equal_records_only: bool = True
-    undefeated_p4_protection: bool = True
 
     def __post_init__(self):
-        if self.version != 'margin-of-merit-order-2026-11-21':
+        if self.version != 'margin-of-merit-order-2026-11-21-no-p4':
             raise ValueError('Unrecognized ranking policy')
         for value in (self.merit_protection, self.head_to_head, self.common_opponents):
             if type(value) not in (float, int) or not math.isfinite(value) or not .5 <= value <= .99:
                 raise ValueError('Thresholds must lie between 50% and 99%')
         if type(self.proximity) is not int or not 0 <= self.proximity <= 200:
             raise ValueError('Proximity must be an integer from 0 to 200')
-        if any(type(v) is not bool for v in (self.equal_records_only, self.undefeated_p4_protection)):
+        if type(self.equal_records_only) is not bool:
             raise ValueError('Policy toggles must be boolean')
 
 
 CANONICAL = Specification()
-POWER_FOUR = frozenset(('ACC', 'Big Ten', 'Big 12', 'SEC'))
-PRIORITY = {'undefeated_p4': 0, 'head_to_head': 1, 'common_opponents': 2, 'merit_protection': 3}
+PRIORITY = {'head_to_head': 1, 'common_opponents': 2, 'merit_protection': 3}
 PolicyConflict = UnsolvedOrder
 
 
@@ -45,7 +43,7 @@ def prepare_policy(teams, games, means, probabilities, *, season, specification=
     """Teams are FBS; opponents lists FCS teams present in scored games.
 
     Strict greater-than probabilities can sum to less than one when draws tie.
-    The common-opponent pool and eight-FBS-game P4 minimum retain the baseline.
+    The common-opponent pool is FBS-only.
     Overall records include FCS games. All ranks and proximity use FBS only.
     """
     if type(season) is not int or season < 2002:
@@ -96,9 +94,6 @@ def prepare_policy(teams, games, means, probabilities, *, season, specification=
                 wins_fbs[i] += won; losses_fbs[i] += 1 - won
     raw = sorted((i for i in range(n) if wins[i] + losses[i]), key=lambda i: (-means[i], ids[i]))
     ranks = {i: k+1 for k, i in enumerate(raw)}
-    if specification.undefeated_p4_protection and any(wins_fbs[i] >= 8 and not losses[i] and
-            (not isinstance(teams[i].get('conference'), str) or not teams[i]['conference'].strip()) for i in raw):
-        raise ValueError('Missing season conference for an undefeated team')
     payload = {'schema': 'margin-of-merit-policy-input-v5', 'season': season,
         'teams': [{k: t.get(k) for k in ('id', 'name', 'conference')} for t in teams],
         'opponents': [dict(id=t['id'], name=t['name'], classification='fcs') for t in sorted(opponents, key=lambda t: t['id'])],
@@ -126,12 +121,6 @@ def order_policy(state):
             requirements.append(dict(before=ranks[w]-1, after=ranks[l]-1, priority=PRIORITY[kind]))
         return row
 
-    protected = [i for i in raw if spec['undefeated_p4_protection'] and
-        state['teams'][i].get('conference') in POWER_FOUR and state['wins_fbs'][i] >= 8 and not losses[i]]
-    for w in protected:
-        for l in raw:
-            if losses[l] >= 2:
-                decision(w, l, 'undefeated_p4', eligible=True, qualification='hard_undefeated_p4')
     for i, j in combinations(raw, 2):
         # Both directions count independently at q=.5 (a genuine exact tie).
         for w, l in ((i, j), (j, i)):
@@ -213,7 +202,7 @@ def order_policy(state):
     for row in audit:
         if row['status'] != 'overridden_by_global_objective': continue
         start, end = row['loser_id'], row['winner_id']
-        for ceiling in range(4):
+        for ceiling in range(1, 4):
             parents, queue = {start: None}, deque([start])
             while queue and end not in parents:
                 a = queue.popleft()
@@ -232,7 +221,7 @@ def order_policy(state):
     return dict(specification=spec, policy_sha256=digest(spec), order=[ids[i] for i in order],
         raw_order=[ids[i] for i in raw], unranked=sorted(i for i in ids if i not in positions),
         confidence_lock_count=sum(r['type'] == 'merit_protection' for r in audit),
-        protected_team_ids=[ids[i] for i in protected], protection_exceptions=[], audit=audit,
+        audit=audit,
         policy_inputs=state['payload'], optimization=certificate, dynamic_trace=dynamic_trace,
         completion='Exact lexicographic global optimum, then minimum raw-order inversions and stable IDs.',
         rank_interpretation='Policy order; uncertainty summaries describe raw earned merit separately.')

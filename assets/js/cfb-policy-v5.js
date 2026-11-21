@@ -1,18 +1,19 @@
 /* FCS-aware policy replay; probabilities and raw merit remain immutable. */
 ((global)=>{
   'use strict';
-  const defaults=Object.freeze({version:'margin-of-merit-order-2026-11-21',merit_protection:.9,head_to_head:.95,common_opponents:.7,
-    proximity:2,equal_records_only:true,undefeated_p4_protection:true});
-  const priorities={undefeated_p4:0,head_to_head:1,common_opponents:2,merit_protection:3};
+  const defaults=Object.freeze({version:'margin-of-merit-order-2026-11-21-no-p4',merit_protection:.9,head_to_head:.95,common_opponents:.7,
+    proximity:2,equal_records_only:true});
+  const priorities={head_to_head:1,common_opponents:2,merit_protection:3};
   const sum=list=>list.reduce((a,b)=>a+b,0);
   async function run(input,settings=defaults,loadHighs,solverOptions={}) {
     const spec={...defaults,...settings};
+    if(Object.keys(settings).some(key=>!Object.hasOwn(defaults,key))) throw Error('Unrecognized policy setting.');
     if(input?.schema!=='margin-of-merit-policy-input-v5'||spec.version!==defaults.version||!Number.isInteger(input.season)||input.season<2002)
       throw Error('Missing FCS-aware comparison inputs.');
     for(const key of ['merit_protection','head_to_head','common_opponents'])
       if(!Number.isFinite(spec[key])||spec[key]<.5||spec[key]>.99) throw Error('Thresholds must be between 50% and 99%.');
     if(!Number.isInteger(spec.proximity)||spec.proximity<0||spec.proximity>200) throw Error('Proximity must be an integer from 0 to 200.');
-    for(const key of ['equal_records_only','undefeated_p4_protection']) if(typeof spec[key]!=='boolean') throw Error('Invalid policy toggle.');
+    if(typeof spec.equal_records_only!=='boolean') throw Error('Invalid policy toggle.');
     const {teams,opponents,means,probabilities:p}=input,n=teams.length,ids=teams.map(t=>t.id),index=new Map(ids.map((id,i)=>[id,i]));
     const all=teams.concat(opponents), known=new Set(all.map(t=>t.id));
     if(!n||index.size!==n||known.size!==all.length||all.some(t=>!Number.isInteger(t.id)||t.id<1||typeof t.name!=='string'||!t.name)||
@@ -20,7 +21,7 @@
         !means.every(Number.isFinite)||p.length!==n||p.some(row=>row.length!==n||row.some(x=>!Number.isFinite(x)||x<0||x>1))) throw Error('Invalid FBS/FCS comparison dimensions.');
     for(let i=0;i<n;i++) {if(p[i][i]!==0)throw Error('Expected strict greater-than probabilities.');
       for(let j=i+1;j<n;j++)if(p[i][j]+p[j][i]>1+1e-12)throw Error('Invalid pair probabilities.');}
-    const wins=Array(n).fill(0),losses=Array(n).fill(0),winsFBS=Array(n).fill(0),vs=Array.from({length:n},()=>new Map());
+    const wins=Array(n).fill(0),losses=Array(n).fill(0),vs=Array.from({length:n},()=>new Map());
     const seen=new Set(),games=[...input.games].sort((a,b)=>a.id-b.id);
     for(const g of games) {
       if(seen.has(g.id)||g.season!==input.season||!g.eligible||!g.completed||g.season_type!=='regular'||!known.has(g.home_id)||
@@ -29,22 +30,17 @@
       seen.add(g.id);
       for(const [id,opponent,won] of [[g.home_id,g.away_id,Number(g.home_points>g.away_points)],[g.away_id,g.home_id,Number(g.away_points>g.home_points)]]) {
         const i=index.get(id);if(i==null)continue;
-        wins[i]+=won;losses[i]+=1-won;if(index.has(opponent))winsFBS[i]+=won;
+        wins[i]+=won;losses[i]+=1-won;
         if(!vs[i].has(opponent))vs[i].set(opponent,[]);vs[i].get(opponent).push(won);
       }
     }
     const raw=ids.map((_,i)=>i).filter(i=>wins[i]+losses[i]).sort((i,j)=>means[j]-means[i]||ids[i]-ids[j]);
     const ranks=new Map(raw.map((i,k)=>[i,k+1])),audit=[],requirements=[];
-    if(spec.undefeated_p4_protection&&raw.some(i=>winsFBS[i]>=8&&!losses[i]&&(typeof teams[i].conference!=='string'||!teams[i].conference.trim())))
-      throw Error('Missing season conference for an undefeated team.');
     function decision(w,l,type,meta) {
       const row={type,priority:priorities[type],winner_id:ids[w],loser_id:ids[l],winner_record:[wins[w],losses[w]],loser_record:[wins[l],losses[l]],
         winner_raw_rank:ranks.get(w),loser_raw_rank:ranks.get(l),raw_rank_gap:Math.abs(ranks.get(w)-ranks.get(l)),p_loser_higher_merit:p[l][w],...meta};
       audit.push(row);if(row.eligible) requirements.push({before:ranks.get(w)-1,after:ranks.get(l)-1,priority:priorities[type]});
     }
-    const p4=new Set(['ACC','Big Ten','Big 12','SEC']);
-    const protectedTeams=raw.filter(i=>spec.undefeated_p4_protection&&p4.has(teams[i].conference)&&winsFBS[i]>=8&&!losses[i]);
-    for(const w of protectedTeams)for(const l of raw)if(losses[l]>=2)decision(w,l,'undefeated_p4',{eligible:true,qualification:'hard_undefeated_p4'});
     for(let a=0;a<raw.length;a++)for(let b=a+1;b<raw.length;b++) {
       const i=raw[a],j=raw[b];
       for(const [w,l]of [[i,j],[j,i]])if(p[w][l]>=spec.merit_protection)decision(w,l,'merit_protection',{
@@ -100,7 +96,7 @@
     }
     for(const row of audit)if(row.status==='overridden_by_global_objective') {
       const start=row.loser_id,end=row.winner_id;let parents;
-      for(let ceiling=0;ceiling<4;ceiling++) {
+      for(let ceiling=1;ceiling<4;ceiling++) {
         parents=new Map([[start,null]]);const queue=[start];
         for(let k=0;k<queue.length&&!parents.has(end);k++) {
           const a=queue[k];for(const b of [...graph.get(a).keys()].sort((a,b)=>a-b))if(!parents.has(b)&&priorities[graph.get(a).get(b)]<=ceiling){parents.set(b,a);queue.push(b);}
@@ -112,7 +108,7 @@
       row.resolution='Global lexicographic optimum: direct results, common opponents, merit protection, raw inversions, stable IDs.';
     }
     return {specification:spec,order:order.map(i=>ids[i]),raw_order:raw.map(i=>ids[i]),unranked:ids.filter(id=>!positions.has(id)).sort((a,b)=>a-b),
-      confidence_lock_count:audit.filter(r=>r.type==='merit_protection').length,protected_team_ids:protectedTeams.map(i=>ids[i]),protection_exceptions:[],audit,optimization:solved.optimization,dynamic_trace:dynamicTrace};
+      confidence_lock_count:audit.filter(r=>r.type==='merit_protection').length,audit,optimization:solved.optimization,dynamic_trace:dynamicTrace};
   }
   const api={run,defaults};if(typeof module!=='undefined'&&module.exports)module.exports=api;else global.CFBPolicyV5=api;
 })(globalThis);
