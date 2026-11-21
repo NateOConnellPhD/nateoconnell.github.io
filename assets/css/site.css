@@ -101,7 +101,8 @@ h3{font-size:1.65rem;line-height:1.28;letter-spacing:-.025em}
 .research-group{scroll-margin-top:28px}
 .research-group + .research-group{margin-top:72px}
 .research-group h2{font-size:clamp(2rem,3.6vw,2.85rem)}
-.research-group>.prose{margin-bottom:32px}
+.research-group>.prose{max-width:none;margin-bottom:32px}
+.research-group .work-row p{max-width:none}
 .post-tags{display:flex;flex-wrap:wrap;gap:12px;margin-top:13px;font-size:.66rem;color:var(--blue)}
 .notebook{padding-top:78px}
 .contact-section{position:relative;padding:60px 56px;margin:80px 0;background:var(--tint);border-top:2px solid var(--blue)}
