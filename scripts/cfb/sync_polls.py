@@ -75,8 +75,8 @@ def normalize(season, payload, teams):
 
 def sync_polls(season, key, *, destination=DATA, public=PUBLIC, now=None, fetcher=fetch):
     now = now or dt.datetime.now(UTC)
-    if type(season) is not int or not 2024 <= season <= now.year:
-        raise ValueError('Poll season must be from 2024 through the current year')
+    if type(season) is not int or not 2002 <= season <= now.year:
+        raise ValueError('Poll season must be from 2002 through the current year')
     folder = Path(destination) / str(season)
     teams = read_saved(folder / 'teams.json', season, '/teams/fbs', {'year': season})
     if teams is None:
@@ -121,7 +121,7 @@ def main():
     # Only seasons with a saved, checked roster are eligible. No new roster,
     # game fetch, numerical environment, or HMC run is triggered here.
     seasons = sorted(int(p.name) for p in DATA.iterdir()
-                     if p.is_dir() and p.name.isdigit() and int(p.name) >= 2024 and (p / 'teams.json').exists())
+                     if p.is_dir() and p.name.isdigit() and int(p.name) >= 2002 and (p / 'teams.json').exists())
     for season in seasons:
         print(json.dumps(sync_polls(season, os.environ.get('CFBD_API_KEY', ''))), flush=True)
 

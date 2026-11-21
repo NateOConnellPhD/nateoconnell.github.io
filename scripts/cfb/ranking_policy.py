@@ -45,10 +45,11 @@ def prepare_policy(teams, games, means, probabilities, *, season, specification=
     """p includes half of exact ties. Roster conferences must be season-specific.
 
     Input games have already passed the season/cutoff/FBS checks. Teams without
-    eligible games stay unranked. Modern P4 protection is not projected backward.
+    eligible games stay unranked. The same declared rules apply in every season;
+    no era-specific conference substitutions are introduced here.
     """
-    if type(season) is not int or season < 2024:
-        raise ValueError('Pre-2024 conference protection needs an explicit historical policy')
+    if type(season) is not int or season < 2002:
+        raise ValueError('Use a season from 2002 onward')
     ids = [t['id'] for t in teams]
     names = [t['name'] for t in teams]
     n = len(ids)

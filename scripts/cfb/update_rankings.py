@@ -15,14 +15,12 @@ import sys
 
 from season_inputs import load_inputs
 from sync_data import ROOT, UTC, digest, encoded, instant, sync
+from cache_identity import SOURCES, publication_sources
 
 PUBLIC = ROOT / 'assets' / 'data' / 'cfb'
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
 PLAN = TASK / 'update-plan.json'
 SCHEMA = 'margin-of-merit-index-v1'
-SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
-           'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py',
-           'posterior_summary.py', 'historical_rankings.py')
 
 
 def current_season(now):
@@ -30,11 +28,9 @@ def current_season(now):
 
 
 def request_key(inputs):
-    import hashlib
     return digest({'inputs': inputs['fit_input_sha256'], 'venue_corrections': inputs['venue_corrections_sha256'],
                    'through_week': inputs.get('through_week'),
-                   'sources': {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-                               for name in SOURCES}, 'seed': 20261120, 'exact_loo': True})
+                   'sources': publication_sources(inputs['season']), 'seed': 20261120, 'exact_loo': True})
 
 
 def read_index(destination=PUBLIC):
@@ -195,8 +191,8 @@ def publish(result, inputs, key, now, destination=PUBLIC):
 def prepare(season, refresh_metadata=False):
     now = dt.datetime.now(UTC)
     year = current_season(now) if season == 'current' else int(season)
-    if not 2024 <= year <= now.year:
-        raise ValueError('Use 2024 or later; earlier conference policies need explicit configuration')
+    if not 2002 <= year <= now.year:
+        raise ValueError('Use a season from 2002 through the current year')
     fetched = sync(year, os.environ.get('CFBD_API_KEY', ''), refresh_metadata=refresh_metadata)
     inputs = load_inputs(year)
     key = request_key(inputs)
@@ -244,7 +240,7 @@ def main():
     parser.add_argument('phase', choices=('prepare', 'complete', 'failed'))
     parser.add_argument('--season', default='current')
     parser.add_argument('--refresh-metadata', action='store_true')
-    parser.add_argument('--history', action='store_true', help='Resume one missing weekly reconstruction, 2024 onward')
+    parser.add_argument('--history', action='store_true', help='Resume one missing weekly reconstruction, 2002 onward')
     args = parser.parse_args()
     if args.phase == 'prepare':
         if args.history:
@@ -258,6 +254,9 @@ def main():
     else:
         if not json.loads(PLAN.read_text()).get('needs_fit', True) and json.loads(PLAN.read_text()).get('history_done'):
             print('All eligible historical weeks are saved; nothing to fit.')
+            return
+        if json.loads(PLAN.read_text()).get('history_scan_only'):
+            print('Saved historical data; continuing to the next season with eligible games.')
             return
         row = complete()
         if os.environ.get('GITHUB_STEP_SUMMARY'):

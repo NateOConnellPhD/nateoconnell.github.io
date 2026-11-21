@@ -21,7 +21,7 @@ The explorer exposes top-8/10/25 probabilities, actual paired merit probabilitie
 
 ## Historical fitting
 
-After a successful current update, `cfb-rankings.yml` explicitly dispatches its `history` mode. It reuses saved season data, fetching missing seasons once (three requests per missing season), and enumerates closed regular-season weeks from 2024 onward. One worker handles one missing or stale week, initially favoring the latest closed week in each year so all seasons become browsable early.
+After a successful current update, `cfb-rankings.yml` explicitly dispatches its `history` mode. It reuses saved season data, fetching at most one missing season per job (three requests per missing season), and enumerates closed regular-season weeks from 2002 onward. One worker handles one missing or stale week, initially favoring the latest closed week in each year so all seasons become browsable early. Seasons still awaiting data remain explicitly pending and cannot make the queue report completion.
 
 Every fit uses only games through that week's calendar cutoff, the same model and scoring, and the usual MCMC/LOO/publication checks. It never reconstructs early rankings from the final-season posterior. Successful workers save immutable JSON/CSV snapshots and compact `seasons/YEAR/history.json` files, commit, and dispatch the next worker. The queue stops when complete or on failure. Resume through **Update and publish CFB rankings → Run workflow → mode: history**. Scheduled current updates also resume it.
 
@@ -29,7 +29,7 @@ There is one numerical worker at a time, with the existing 35-minute numerical l
 
 GitHub permits explicit `workflow_dispatch` calls using `GITHUB_TOKEN`; `actions: write` is granted for this. See [GitHub's token documentation](https://docs.github.com/en/actions/concepts/security/github_token). The finite missing-week queue and checked snapshot reuse terminate the dispatch sequence.
 
-Coverage begins in 2024 because the specified undefeated Power Four rule assumes that conference era. Earlier seasons need an explicit historical conference policy. Reconstruction labels describe observed final scores filtered by historical kickoff/week cutoffs; they do not claim those rankings were published then or that exact historical final-status timestamps were archived.
+The archive extends to 2002, subject to saved data and fit validation, using the same model and declared ranking rules. Existing 2024–2026 checked results remain reusable through the exact source-identity compatibility bridge described in [CFB.md](CFB.md). Reconstruction labels describe observed final scores filtered by historical kickoff/week cutoffs; they do not claim those rankings were published then or that exact historical final-status timestamps were archived.
 
 ## Browsing and comparisons
 

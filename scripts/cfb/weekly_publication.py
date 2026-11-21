@@ -66,8 +66,8 @@ def refresh_index(destination=pipeline.PUBLIC, root=DATA):
 def prepare(season, refresh_metadata=False):
     now = dt.datetime.now(UTC)
     year = pipeline.current_season(now) if season == 'current' else int(season)
-    if not 2024 <= year <= now.year:
-        raise ValueError('Use 2024 or later; earlier conference policies need explicit configuration')
+    if not 2002 <= year <= now.year:
+        raise ValueError('Use a season from 2002 through the current year')
     fetched = sync(year, os.environ.get('CFBD_API_KEY', ''), refresh_metadata=refresh_metadata)
     plan = current_plan(year, dt.datetime.now(UTC))
     plan['requests'] = fetched['requests']
@@ -99,6 +99,8 @@ def main():
             print('No completed week with eligible games yet; retaining the last published rankings.')
         elif plan.get('history_done'):
             print('All eligible historical weeks are saved; nothing to fit.')
+        elif plan.get('history_scan_only'):
+            print('Saved historical data; continuing to the next season with eligible games.')
         else:
             row = pipeline.complete()
             if plan.get('mode') == 'current':

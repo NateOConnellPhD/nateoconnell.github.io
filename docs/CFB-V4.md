@@ -15,7 +15,9 @@ remain reusable because their model/scoring identities have not changed.
   ordering for every pair. The declared P4 exception precedes these comparisons:
   an undefeated ACC/Big Ten/Big 12/SEC team with at least eight FBS games precedes
   teams with two or more FBS losses. Direct overrides are recorded. Season-specific
-  roster conferences are used; pre-2024 protection remains explicitly unsupported.
+  roster conferences are used. The historical extension uses this same declared
+  rule; it adds no conference-era substitutions and does not place undefeated
+  teams automatically above one-loss teams.
 - If two teams played at least once, **only** their direct series is considered.
   A split, threshold failure, or conflict never falls back to common opponents.
 - Only pairs that never played can use common-opponent dominance: no worse win

@@ -9,7 +9,7 @@ on:
         type: choice
         options: [current, history]
       season:
-        description: 'Season: current, or a year from 2024 onward'
+        description: 'Season: current, or a year from 2002 onward'
         default: 'current'
         required: true
         type: string
@@ -61,6 +61,7 @@ jobs:
           python3 -B scripts/cfb/test_posterior_summary.py
           python3 -B scripts/cfb/test_history.py
           python3 -B scripts/cfb/test_weekly_publication.py
+          python3 -B scripts/cfb/test_archive_range.py
       - name: Fetch the season once and check for changed inputs
         id: prepare
         env:

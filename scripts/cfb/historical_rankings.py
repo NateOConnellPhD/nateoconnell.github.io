@@ -10,7 +10,7 @@ import os
 from sync_data import DATA, UTC, encoded, instant, sync
 from season_inputs import load_inputs
 
-FIRST_SEASON = 2024  # The specified undefeated-P4 policy starts here.
+FIRST_SEASON = 2002  # Earliest season supported by the saved-calendar input path.
 
 
 def closed_weeks(calendar, observed):
@@ -48,13 +48,22 @@ def prepare_history():
                                  read_index, request_key, write_index)
     now = dt.datetime.now(UTC)
     index = read_index()
-    queue, coverage = [], []
+    queue, coverage, pending_seasons = [], [], []
+    fetched_season = None
     for season in range(current_season(now), FIRST_SEASON - 1, -1):
         folder = DATA / str(season)
         # The live workflow refreshes current-season data. Historical sources
         # are fetched just once; explicit data sync can later apply corrections.
         if not all((folder / (name + '.json')).exists() for name in ('teams', 'calendar', 'games')):
+            # Discover at most one new season per job, then commit its inputs
+            # with the checked result. A later bad season must not discard an
+            # entire historical import and cause all those API calls to repeat.
+            if fetched_season is not None:
+                pending_seasons.append(season)
+                coverage.append({'season': season, 'weeks': [], 'status': 'awaiting_data'})
+                continue
             sync(season, os.environ.get('CFBD_API_KEY', ''))
+            fetched_season = season
         calendar = json.loads((folder / 'calendar.json').read_text())['payload']
         observed = instant(json.loads((folder / 'games.json').read_text())['retrieved_at'])
         slots = []
@@ -72,11 +81,14 @@ def prepare_history():
                 queue.append({'season': season, 'through_week': week, 'key': key, 'needs_fit': True, 'depth': depth})
         coverage.append({'season': season, 'weeks': sorted(slots, key=lambda s: s['week'])})
     index['archive'] = coverage
-    index['backfill'] = {'status': 'pending' if queue else 'complete', 'remaining': len(queue), 'at': now.isoformat()}
+    pending = bool(queue or pending_seasons)
+    index['backfill'] = {'status': 'pending' if pending else 'complete', 'remaining': len(queue),
+                         'pending_seasons': pending_seasons, 'first_season': FIRST_SEASON, 'at': now.isoformat()}
     # Make every season browsable early, then work backward across seasons.
     queue.sort(key=lambda p: (p['depth'], -p['season']))
     plan = {k: v for k, v in queue[0].items() if k != 'depth'} if queue else {
-        'season': current_season(now), 'needs_fit': False, 'history_done': True}
+        'season': current_season(now), 'needs_fit': False,
+        'history_done': not pending, 'history_scan_only': pending}
     TASK.mkdir(parents=True, exist_ok=True)
     PLAN.write_bytes(encoded(plan))
     write_index(index)
@@ -84,5 +96,5 @@ def prepare_history():
         with open(os.environ['GITHUB_OUTPUT'], 'a') as handle:
             handle.write(f"season={plan['season']}\nkey={plan.get('key', 'complete')}\n"
                          f"needs_fit={str(plan['needs_fit']).lower()}\n"
-                         f"continue_history={str(bool(queue)).lower()}\n")
-    print(json.dumps({'next': plan, 'remaining': len(queue)}), flush=True)
+                         f"continue_history={str(pending).lower()}\n")
+    print(json.dumps({'next': plan, 'remaining': len(queue), 'pending_seasons': pending_seasons}), flush=True)

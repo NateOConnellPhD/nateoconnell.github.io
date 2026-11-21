@@ -1,0 +1,28 @@
+{
+  "reason": "Exact source compatibility for the 2002 archive extension; no model, scoring or existing ordering calculations changed.",
+  "previous": {
+    "model.py": "06bc9147d240c1e2b21cd4e02004a3393affcb2e06fcbe99765f1eac65a3ac62",
+    "refit_2024.py": "4da002abce9638a0f2302af66bfa244289c86e90555765f81e95516aece6e0c3",
+    "loo_scoring.py": "7a7196d393eb715f99bd9fa892da7212e9b3f0268de0ab1ae0ea4b306648c0e4",
+    "ranking_policy.py": "7a820ec8137a8a8ec8266784056bf3ba42328520567b861502edc3c4f1178530",
+    "season_inputs.py": "beb350dda6e6a36f065951f0b914a1a2d1cb4a57cae4dfd354b35c51c9145d4f",
+    "fit_saved_season.py": "383570212f35d204d80176d304b97fea9e05be498eb17cf9ce8275d3f6162760",
+    "requirements.txt": "62bd32a765ef7c67c702afa34c8134967f62be29c2bad06ae8eba4a94acc26b8",
+    "update_rankings.py": "e7f30095170d4a3f7eaad8e1979c9a1f7b64638e03d52c8f2f11a4e87ed75656",
+    "posterior_summary.py": "5eee3bfd5c382e68c8ece5fed17f18762a06876e9d64617bcfc3bad7e4bf7be4",
+    "historical_rankings.py": "caa421d5bc905cbee9aa8d78e3ca2c9f80beecda2757e16133da404588069185"
+  },
+  "current": {
+    "model.py": "06bc9147d240c1e2b21cd4e02004a3393affcb2e06fcbe99765f1eac65a3ac62",
+    "refit_2024.py": "4da002abce9638a0f2302af66bfa244289c86e90555765f81e95516aece6e0c3",
+    "loo_scoring.py": "7a7196d393eb715f99bd9fa892da7212e9b3f0268de0ab1ae0ea4b306648c0e4",
+    "ranking_policy.py": "5d6a7efccc21842afcb47c7248b2c2f8b02528dbede22232554e8624017cf3e8",
+    "season_inputs.py": "beb350dda6e6a36f065951f0b914a1a2d1cb4a57cae4dfd354b35c51c9145d4f",
+    "fit_saved_season.py": "f76bcfe028b81972e53fb800b0557aaa1b1ce488a0d2a71aaa5b7232ca463a67",
+    "requirements.txt": "62bd32a765ef7c67c702afa34c8134967f62be29c2bad06ae8eba4a94acc26b8",
+    "update_rankings.py": "44852d49a7cc0e534544418af6733dbaa6d88bbea9310457a87a825be6fb814c",
+    "posterior_summary.py": "5eee3bfd5c382e68c8ece5fed17f18762a06876e9d64617bcfc3bad7e4bf7be4",
+    "historical_rankings.py": "ad3b7cecb6afb4e711baa1a8236be98df759519e932fc5a0411a5c8b661a4e0d",
+    "cache_identity.py": "c1691fbe2738ca9ca5a7506cf488224cf1e3648b64cb2134b36be8b0a2d8ff37"
+  }
+}

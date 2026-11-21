@@ -26,6 +26,9 @@ def file_hash(path):
 
 
 def source_hash(name):
+    if name == 'fit_saved_season.py':
+        from cache_identity import runner_identity
+        return runner_identity()
     return file_hash(Path(__file__).with_name(name))
 
 
@@ -41,8 +44,8 @@ def checked_cache(folder, filename):
 
 
 def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False):
-    if season < 2024:
-        raise ValueError('Historical protection policy must be selected before pre-2024 ranking runs')
+    if type(season) is not int or season < 2002:
+        raise ValueError('Use a season from 2002 onward')
     inputs = load_inputs(season, through_week=through_week, as_of=as_of)
     packages = {name: version(name) for name in ('numpy', 'scipy', 'jax', 'jaxlib', 'numpyro', 'arviz')}
     # Check dependency availability before creating output. Do not install anything.

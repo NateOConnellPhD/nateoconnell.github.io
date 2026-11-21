@@ -8,7 +8,8 @@
   const sum = list => list.reduce((a, b) => a + b, 0);
   function run(input, settings = defaults) {
     const spec = {...defaults, ...settings};
-    if (input?.schema !== 'margin-of-merit-policy-input-v4' || spec.version !== defaults.version || input.season < 2024) {
+    if (input?.schema !== 'margin-of-merit-policy-input-v4' || spec.version !== defaults.version ||
+        !Number.isInteger(input.season) || input.season < 2002) {
       throw new Error('This saved update does not include the information needed to adjust its ranking rules.');
     }
     for (const key of ['merit_protection', 'head_to_head', 'common_opponents']) {

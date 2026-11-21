@@ -127,8 +127,10 @@
   function renderArchive() {
     const grid = el('archive-grid'); grid.replaceChildren();
     const season = Number(el('season').value), weeks = seasonWeeks(season);
+    const awaitingData = index.archive?.find(s => s.season === season)?.status === 'awaiting_data';
     el('archive').hidden = !el('season').value;
-    el('archive-title').textContent = `${season} season · ${weeks.filter(w => w.row).length} of ${weeks.length} weeks available`;
+    el('archive-title').textContent = awaitingData ? `${season} season · awaiting saved game data`
+      : `${season} season · ${weeks.filter(w => w.row).length} of ${weeks.length} weeks available`;
     el('archive-status').textContent = index.backfill?.status === 'failed'
       ? 'Historical fitting stopped on a failed check. Completed weeks remain available; missing weeks are not estimated or filled in.'
       : index.backfill?.status === 'pending' ? 'Historical reconstruction is in progress. Completed weeks become available as they pass the model checks.'

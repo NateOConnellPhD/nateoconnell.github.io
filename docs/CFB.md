@@ -6,7 +6,7 @@ The production entry point is now `.github/workflows/cfb-rankings.yml`, named
 **Update and publish CFB rankings**. Pushing changes to that workflow or
 `scripts/cfb/` starts a current-season update automatically. It also runs Mondays
 at 8:17 a.m. America/New_York, August–December, and supports **Run workflow**
-with season `current` (or a specified year from 2024). January–July selects the
+with season `current` (or a specified year from 2002). January–July selects the
 previous season for manual updates. The older data-only workflow is for
 maintenance; it does not publish rankings.
 
@@ -76,8 +76,8 @@ Maintained source now includes PSIS scoring, a reference ordering policy, and
 comparison commands. The first live CFBD sync succeeded for 2024; the saved
 inputs have been audited against the reference, including documented venue
 corrections. See [the data audit](CFB-2024-DATA-AUDIT.md). The new production
-connection is described above; pre-2024 conference policy and historical
-backfills still need separate work.
+connection is described above. The historical queue now extends to 2002;
+historical results become available only after their individual fits pass.
 The earlier v2 handoff changed the ordering policy, not the statistical model
 or importer. Its ordering implementation is now archived; v4 is canonical.
 The 2024 saved-data run passed
@@ -153,8 +153,8 @@ copied into the public archive as if they were newly checked live results.
 runs the canonical four-chain NUTS fit (1,000 warmup and 1,000 retained draws
 per chain), checks diagnostics, calculates checked PSIS-LOO merit, then applies
 v4. It supports `--through-week` and an explicit timezone-aware `--as-of` cutoff.
-It makes no network calls, installs nothing, and never publishes. Pre-2024
-ranking runs stop until an explicit historical conference policy is chosen.
+It makes no network calls, installs nothing, and never publishes. Seasons from
+2002 onward use the same model, scoring and declared ordering rules.
 
 Use the pinned numerical environment only after the working-protocol approval
 for this validation. The command and all library caches write under
@@ -311,11 +311,32 @@ names and conference changes. Historical weekly cutoffs need dated games and
 completion evidence; date-only inputs must be identified as a retrospective
 reconstruction, not an exact reproduction of a contemporaneous live feed.
 
-The modern undefeated-P4 protection needs an explicit policy for older eras
-(including the former Power Five). Do not project today's conferences backward.
-Seasons with tied final scores require an explicit tie-credit policy before
-inclusion. These are historical policy decisions, not changes to the margin
-likelihood. A season with unresolved eligibility or policy stays unpublished.
+The archive's former 2024 lower bound was an implementation restriction, not a
+requirement of the statistical model. The queue now reaches 2002 and imports
+at most one uncached season per job, then continues automatically. Its progress
+records both missing fits and seasons whose data have not been fetched; it
+cannot report completion while either remains. Saved source responses are
+reused across weeks and visits.
+
+No conference-era substitutions or new ranking exceptions accompany this
+extension. The declared ordering rules are unchanged, using each season's own
+roster metadata. In particular, the existing eight-game undefeated safeguard
+only applies against teams with **two or more FBS losses**; it does not prevent
+a one-loss team from ranking above an undefeated team. Seasons with invalid
+or incomplete inputs remain subject to the existing validation gates.
+
+`history_cache_compatibility.json` records exact source hashes before and after
+this date-range extension. `cache_identity.py` preserves the already checked
+2024–2026 publication keys and equivalent HMC/LOO runner identities only while
+the complete source bundle matches that reviewed revision. Any subsequent
+source edit disables this bridge. New historical results carry the full new
+source identity. Existing immutable snapshots are not rewritten.
+
+The range-extension checks passed offline: historical queue discovery and
+termination through 2002, saved historical poll reuse, and identical Python/
+JavaScript ordering in 25 season fixtures. All 43 saved completed-week results
+also replayed with identical orders, audits and publication keys. No historical
+API fetches, numerical fits, or rendered browser tests ran for this change.
 
 The provider currently lists 1,000 calls/month on its free tier, including core
 games/teams and historical data. Cache rosters and backfills; fetch a season's
