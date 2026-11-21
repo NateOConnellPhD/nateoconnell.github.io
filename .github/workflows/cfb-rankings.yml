@@ -21,7 +21,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/cfb/**'
-      - 'assets/js/cfb-policy.js'
+      - 'assets/js/cfb-policy*.js'
+      - 'assets/js/cfb-exact-order.js'
       - '.github/workflows/cfb-rankings.yml'
   schedule:
     - cron: '17 8 * 8-12 1'
@@ -55,9 +56,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-      - name: Check v4 ranking rules and browser parity without fitting
+      - name: Check current ranking policy and data boundaries without fitting
         run: |
-          python3 -B scripts/cfb/check_policy_v4.py
+          NODE=node python3 -B scripts/cfb/test_policy_v5.py
+          python3 -B scripts/cfb/test_sync_data.py
+          python3 -B scripts/cfb/test_season_inputs.py
           python3 -B scripts/cfb/test_posterior_summary.py
           python3 -B scripts/cfb/test_history.py
           python3 -B scripts/cfb/test_weekly_publication.py
@@ -91,9 +94,9 @@ jobs:
             .codex-tmp/cfb-refit/fits
             .codex-tmp/cfb-refit/scores
             .codex-tmp/cfb-refit/exact
-          key: cfb-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}
+          key: cfb-v5-fcs-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}
           restore-keys: |
-            cfb-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
+            cfb-v5-fcs-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
       - name: Install pinned numerical packages into the disposable environment
         if: steps.prepare.outputs.needs_fit == 'true'
         run: |

@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from ranking_policy import rank_merit
-from test_ranking_policy import teams, games
+from policy_fixtures import teams, games
 
 
 class DrawTests(unittest.TestCase):
@@ -23,7 +23,8 @@ class DrawTests(unittest.TestCase):
         self.assertEqual(a['rank'], 1)
         self.assertEqual(a['raw_merit_rank'], 2)
         self.assertEqual(a['raw_rank_mean'], 2)
-        self.assertEqual(len(result['protection_exceptions']), 1)
+        self.assertTrue(any(r['type'] == 'merit_protection' and
+                            r['status'] == 'overridden_by_global_objective' for r in result['audit']))
 
     def test_no_game_teams_get_null_probabilities(self):
         result = rank_merit(teams(3), games([(1, 2)]), np.tile([1., -1., 0.], (20, 1)), season=2024)

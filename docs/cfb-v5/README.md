@@ -1,6 +1,8 @@
 # V5 corrected-baseline review
 
-Supplied frozen games through November 19, 2026; includes a partial week. Not a completed-week publication.
+Supplied frozen games through November 19, 2026; includes a partial week. This is an offline policy comparison, not a completed-week publication or a substitute for the required full refits.
+
+See [the production migration](../CFB-V5.md): every season and week must be refit under the current model and rules; no old-policy replay is offered on the website.
 
 All 138 posterior merit means, pairwise probabilities and overall records were reproduced from 2,800 supplied draws and 758 scored FBS games. No HMC was run. The private draws and original inputs were not copied into the repository.
 
@@ -62,7 +64,7 @@ The decision audit records the qualifying route, actual game IDs, frozen raw ran
 - The entire 138-team replay has identical Python/JavaScript ranks, audit decisions and exact objective.
 - The four requested proximity settings use the same frozen probabilities and means; no merit or SOS calculation changes.
 - The supplied prototype sampling diagnostics were not revalidated as production NUTS diagnostics. This review does not publish the partial-week snapshot as a completed week.
-- Larger integer-program cases still require the approved numerical/dependency check; this replay only needed small exact DP blocks.
+- Larger integer-program cases and production FCS integration have not been run. The owner requested source review only after the checks above; this replay only needed small exact DP blocks.
 
 ```sh
 python3 -B scripts/cfb/review_v5.py context_not_for_upload/Margin_of_Merit_V5_COMPLETE

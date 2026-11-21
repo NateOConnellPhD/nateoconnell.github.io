@@ -27,7 +27,10 @@ def current_plan(season, now, root=DATA, destination=pipeline.PUBLIC):
                        {'year': season, 'seasonType': 'both', 'classification': 'fbs'})
     if saved is None:
         raise ValueError(f'Missing saved games for {season}')
-    weeks = closed_weeks(calendar_for(season, root), min(now, instant(saved['retrieved_at'])))
+    fcs = read_saved(root / str(season) / 'games-fcs.json', season, '/games',
+                     {'year': season, 'seasonType': 'both', 'classification': 'fcs'})
+    if fcs is None: raise ValueError(f'Missing saved FCS games for {season}; sync the season first')
+    weeks = closed_weeks(calendar_for(season, root), min(now, instant(saved['retrieved_at']), instant(fcs['retrieved_at'])))
     for week in weeks:
         try:
             inputs = load_inputs(season, through_week=week, root=root)
@@ -111,7 +114,7 @@ def main():
             if os.environ.get('GITHUB_STEP_SUMMARY'):
                 with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as handle:
                     handle.write(f"## Margin of Merit: {row['season']}, through Week {row['week']}\n\n"
-                                 f"{row['games']} completed FBS–FBS games. Saved snapshot: `{row['id']}`.\n\n"
+                                 f"{row['games']} completed Division I games in the joint fit; FBS teams ranked. Saved snapshot: `{row['id']}`.\n\n"
                                  "[View rankings](https://nateoconnell.com/blog/cfb/) after the Pages build.\n")
     refresh_index()
 

@@ -14,12 +14,20 @@ def flatten(samples):
             for k in ('theta', 'home_adv', 'sigma', 'nu')}
 
 
-def game_values(samples, data, game, reference_rank=25, reference=None):
-    n = samples['theta'].shape[1]
+def reference_strength(samples, reference_rank=25, reference_indices=None):
+    theta = samples['theta'] if reference_indices is None else samples['theta'][:, reference_indices]
+    n = theta.shape[1]
+    if not 1 <= reference_rank <= n:
+        raise ValueError('Reference rank outside the FBS roster')
+    return np.partition(theta, n-reference_rank, axis=1)[:, n-reference_rank]
+
+
+def game_values(samples, data, game, reference_rank=25, reference=None, *, reference_indices=None):
+    n = samples['theta'].shape[1] if reference_indices is None else len(reference_indices)
     if not 1 <= reference_rank <= n:
         raise ValueError('Reference rank outside the season roster')
     if reference is None:
-        reference = np.partition(samples['theta'], n - reference_rank, axis=1)[:, n - reference_rank]
+        reference = reference_strength(samples, reference_rank, reference_indices)
     h, a, venue, margin = (data[key][game] for key in ('home', 'away', 'venue', 'margin'))
     mu_h = reference - samples['theta'][:, a] + samples['home_adv'] * venue
     mu_a = reference - samples['theta'][:, h] - samples['home_adv'] * venue
@@ -56,7 +64,8 @@ def log_likelihood(flat, data):
     return student.logpdf(np.asarray(data['margin'])[None, :], flat['nu'][:, None], loc=mu, scale=flat['sigma'][:, None])
 
 
-def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None):
+def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None,
+          reference_indices=None, scored_indices=None):
     flat = flatten(samples)
     draws, n = flat['theta'].shape
     if not 1 <= reference_rank <= n:
@@ -68,7 +77,13 @@ def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None):
         reff = min(1., float(np.concatenate([np.asarray(v).ravel() for v in ess.data_vars.values()]).mean()) / draws)
     if not np.isfinite(reff) or reff <= 0:
         raise ValueError('Invalid relative MCMC efficiency')
-    weights, k = loo_weights(log_likelihood(flat, data), reff)
+    selected = list(range(len(data['margin']))) if scored_indices is None else list(scored_indices)
+    if len(set(selected)) != len(selected) or any(i < 0 or i >= len(data['margin']) for i in selected):
+        raise ValueError('Invalid scored-game indices')
+    selected_weights, selected_k = loo_weights(log_likelihood(flat, data)[:, selected], reff)
+    weights = np.full((len(data['margin']), draws), 1 / draws)
+    k = np.zeros(len(data['margin']))
+    weights[selected] = selected_weights; k[selected] = selected_k
     cutoff = min(.7, 1. - 1. / np.log10(draws))
     bad = np.flatnonzero(~np.isfinite(k) | (k > cutoff))
     if len(bad) and exact_refitter is None:
@@ -78,9 +93,11 @@ def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None):
         # The callback must refit with this observation omitted and check MCMC.
         exact[int(game)] = exact_refitter(int(game))
         weights[game] = 1 / draws  # Not used for an exact-refit marginal.
-    result = aggregate_credits(flat, data, weights, reference_rank, exact=exact)
+    result = aggregate_credits(flat, data, weights, reference_rank, exact=exact,
+        reference_indices=reference_indices, scored_indices=selected)
     result['weights'] = weights
-    for game, row in enumerate(result['audit']):
+    for row in result['audit']:
+        game = row['game']
         row['pareto_k'] = float(k[game]) if np.isfinite(k[game]) else None
         row['method'] = 'exact_loo' if game in exact else 'psis_loo'
     finite_k = k[np.isfinite(k)]
@@ -91,7 +108,8 @@ def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None):
     return result
 
 
-def aggregate_credits(flat, data, weights, reference_rank=25, *, exact=None):
+def aggregate_credits(flat, data, weights, reference_rank=25, *, exact=None,
+                      reference_indices=None, scored_indices=None):
     """Accumulate validated per-game marginals; weights determine the target.
 
     Production callers must use score(), which obtains and checks LOO weights.
@@ -106,8 +124,10 @@ def aggregate_credits(flat, data, weights, reference_rank=25, *, exact=None):
     merit, sos = np.zeros((draws, n)), np.zeros((draws, n))
     counts = np.bincount(data['home'], minlength=n) + np.bincount(data['away'], minlength=n)
     audit, error = [], 0.
-    reference = np.partition(flat['theta'], n - reference_rank, axis=1)[:, n - reference_rank]
+    reference = reference_strength(flat, reference_rank, reference_indices)
+    selected = set(range(len(data['margin']))) if scored_indices is None else set(scored_indices)
     for game, (h, a, margin) in enumerate(zip(data['home'], data['away'], data['margin'])):
+        if game not in selected: continue
         raw = game_values(flat, data, game, reference_rank, reference)
         if game in exact:
             replacement = exact[game]

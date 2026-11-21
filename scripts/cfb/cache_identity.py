@@ -8,8 +8,10 @@ import hashlib
 import json
 from pathlib import Path
 
+REFIT_GENERATION = 'margin-of-merit-v5-fcs-refit'
+
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
-           'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py',
+           'ranking_policy_v5.py', 'exact_order.py', 'sync_data.py', 'season_inputs.py', 'fit_saved_season.py', 'requirements.txt', 'update_rankings.py',
            'posterior_summary.py', 'historical_rankings.py', 'cache_identity.py')
 
 

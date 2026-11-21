@@ -1,4 +1,4 @@
-"""Fit saved season inputs and produce a v2 candidate for review; never publish.
+"""Fit saved season inputs and produce a v5 candidate for review; never publish.
 
 No API calls or downloads. Run in the approved pinned numerical environment.
 Fits and LOO scores have separate cache identities so policy-only changes reuse
@@ -14,6 +14,7 @@ from pathlib import Path
 import time
 
 from model import CANONICAL as MODEL, fit
+from cache_identity import REFIT_GENERATION
 from ranking_policy import CANONICAL as POLICY
 from season_inputs import load_inputs
 from sync_data import ROOT, digest
@@ -63,7 +64,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
 
     started = time.monotonic()
     model_data = {'team_ids': [t['id'] for t in inputs['teams']], 'data': inputs['data']}
-    fit_identity = {'model': asdict(MODEL), 'model_source': source_hash('model.py'),
+    fit_identity = {'refit_generation': REFIT_GENERATION, 'model': asdict(MODEL), 'model_source': source_hash('model.py'),
                     'diagnostic_source': source_hash('refit_2024.py'),
                     'model_data_sha256': digest(model_data), 'packages': packages,
                     'seed': seed, 'warmup': 1000, 'draws': 1000, 'chains': 4}
@@ -93,7 +94,9 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
     score_identity = {'fit_key': fit_key, 'posterior_sha256': report['array_sha256'],
                       'scorer_source': source_hash('loo_scoring.py'), 'reference_rank': 25,
                       'exact_loo': exact_loo, 'exact_runner_source': source_hash('fit_saved_season.py') if exact_loo else None,
-                      'game_ids': [g['id'] for g in inputs['games']]}
+                      'game_ids': [g['id'] for g in inputs['games']],
+                      'reference_team_ids': [inputs['teams'][i]['id'] for i in inputs['fbs_indices']],
+                      'scored_game_indices': inputs['scored_game_indices']}
     score_key = digest(score_identity)
     scored_folder = TASK / 'scores' / score_key
     reused_score = scored_folder.exists()
@@ -122,14 +125,15 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
             exact_samples, diagnostics, _ = describe(sampler)
             if not diagnostics['sampling_checks_passed']:
                 raise ValueError('Exact LOO failed sampling diagnostics; last published ranking is preserved')
-            quantities = game_values(flatten(exact_samples), inputs['data'], game)
+            quantities = game_values(flatten(exact_samples), inputs['data'], game, reference_indices=inputs['fbs_indices'])
             folder.mkdir(parents=True)
             np.savez_compressed(folder / 'quantities.npz', **quantities)
             write_json(folder / 'report.json', {'identity': ident, 'diagnostics': diagnostics,
                        'array_sha256': file_hash(folder / 'quantities.npz')})
             return quantities
 
-        scored = score(samples, inputs['data'], exact_refitter=refit_game if exact_loo else None)
+        scored = score(samples, inputs['data'], exact_refitter=refit_game if exact_loo else None,
+                       reference_indices=inputs['fbs_indices'], scored_indices=inputs['scored_game_indices'])
         merit, sos = scored['merit'], scored['sos']
         scored_folder.mkdir(parents=True)
         np.savez_compressed(scored_folder / 'merit.npz', merit=merit, sos=sos)
@@ -145,7 +149,8 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
         row['sos_lo90'] = float(np.quantile(values, .05)) if row['status'] == 'ranked' else None
         row['sos_hi90'] = float(np.quantile(values, .95)) if row['status'] == 'ranked' else None
     ranking_identity = {'score_key': score_key, 'merit_sha256': score_report['array_sha256'],
-                        'policy': asdict(POLICY), 'policy_source': source_hash('ranking_policy.py'),
+                        'policy': asdict(POLICY), 'policy_source': source_hash('ranking_policy_v5.py'),
+                        'optimizer_source': source_hash('exact_order.py'),
                         'input_preparation_source': source_hash('season_inputs.py'),
                         'runner_source': source_hash('fit_saved_season.py'),
                         'inputs': {k: v for k, v in inputs.items() if k not in ('data', 'games', 'teams')}}

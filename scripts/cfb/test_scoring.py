@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 from scipy.stats import norm
-from loo_scoring import game_values, loo_weights, transport
+from loo_scoring import game_values, loo_weights, transport, reference_strength, aggregate_credits
 from reference_policy import ReferencePolicy, components
 
 
@@ -75,6 +75,18 @@ class CreditTests(unittest.TestCase):
 
     def sample(self):
         return {'theta':np.zeros((4,25)), 'home_adv':np.full(4,3.), 'sigma':np.full(4,14.), 'nu':np.full(4,10.)}
+
+    def test_fcs_strength_informs_opponents_but_not_reference_or_extra_merit(self):
+        sample = self.sample()
+        sample['theta'] = np.column_stack([sample['theta'], np.full((4, 2), 100.)])
+        np.testing.assert_allclose(reference_strength(sample, 25, list(range(25))), 0.)
+        data = games([(0, 25, 0, 7), (25, 26, 0, 14)])
+        weights = np.full((2, 4), .25)
+        result = aggregate_credits(sample, data, weights, reference_indices=list(range(25)), scored_indices=[0])
+        expected = game_values(sample, data, 0, reference_indices=list(range(25)))['home_cdf']
+        np.testing.assert_allclose(result['merit'][:, 0], expected)
+        self.assertEqual([r['game'] for r in result['audit']], [0])
+        self.assertTrue(np.all(result['merit'][:, 26] == 0.))
 
     def test_neutral_site_ignores_home_advantage_and_has_expected_signs(self):
         data = games([(0,1,0,7)])

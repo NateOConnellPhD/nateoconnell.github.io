@@ -15,7 +15,7 @@ import sys
 
 from season_inputs import load_inputs
 from sync_data import ROOT, UTC, digest, encoded, instant, sync
-from cache_identity import SOURCES, publication_sources
+from cache_identity import SOURCES, publication_sources, REFIT_GENERATION
 
 PUBLIC = ROOT / 'assets' / 'data' / 'cfb'
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
@@ -39,6 +39,27 @@ def read_index(destination=PUBLIC):
         'schema': SCHEMA, 'latest': None, 'snapshots': [], 'last_attempt': None}
     if index.get('schema') != SCHEMA or not isinstance(index.get('snapshots'), list):
         raise ValueError('Unrecognized ranking archive index')
+    # A new methodology requires a new fit for every season/week. Never offer
+    # old rules or reinterpret old draws as current-model results.
+    old_rows = index['snapshots']
+    index['snapshots'] = [r for r in old_rows if r.get('methodology') == REFIT_GENERATION]
+    allowed = {r['id'] for r in index['snapshots']}
+    if index.get('latest') not in allowed:
+        index['latest'] = index['snapshots'][0]['id'] if index['snapshots'] else None
+    if index.get('methodology') != REFIT_GENERATION:
+        coverage = {r['season']: r for r in index.get('archive', [])}
+        for row in old_rows:
+            if row.get('week_complete') is False: continue
+            season = coverage.setdefault(row['season'], {'season': row['season'], 'weeks': []})
+            if not any(w['week'] == row['week'] for w in season['weeks']):
+                season['weeks'].append({'week': row['week'], 'snapshot': None})
+        for season in coverage.values():
+            for week in season['weeks']: week['snapshot'] = None
+            season['weeks'].sort(key=lambda w: w['week'])
+        index['archive'] = sorted(coverage.values(), key=lambda r: r['season'], reverse=True)
+        index['backfill'] = {'status': 'pending', 'reason': 'Refitting every season and week under the current model and rules.',
+                             'first_season': 2002}
+    index['methodology'] = REFIT_GENERATION
     return index
 
 
@@ -91,15 +112,17 @@ def validate_candidate(result, inputs):
     # must not publish an order that the reader controls cannot reproduce.
     from ranking_policy import CANONICAL, order_policy, prepare_policy
     policy_input = result['policy_inputs']
-    expected = order_policy(prepare_policy(inputs['teams'], inputs['games'], policy_input['means'],
+    fbs = [t for t in inputs['teams'] if t.get('classification', 'fbs') == 'fbs']
+    opponents = [t for t in inputs['teams'] if t.get('classification') == 'fcs']
+    expected = order_policy(prepare_policy(fbs, inputs['games'], policy_input['means'],
                                           policy_input['probabilities'], season=inputs['season'],
-                                          specification=CANONICAL))
+                                          specification=CANONICAL, opponents=opponents))
     for field in ('specification', 'policy_sha256', 'policy_inputs', 'order', 'raw_order',
-                  'unranked', 'confidence_lock_count', 'protected_team_ids', 'protection_exceptions', 'audit'):
+                  'unranked', 'confidence_lock_count', 'protected_team_ids', 'protection_exceptions', 'audit', 'optimization'):
         if result[field] != expected[field]:
-            raise ValueError('Candidate v4 policy replay failed: ' + field)
+            raise ValueError('Candidate v5 policy replay failed: ' + field)
     rows = result['teams']
-    if len(rows) != len(inputs['teams']) or {r['id'] for r in rows} != {t['id'] for t in inputs['teams']}:
+    if len(rows) != len(fbs) or {r['id'] for r in rows} != {t['id'] for t in fbs}:
         raise ValueError('Candidate roster does not match the season roster')
     ranked = [r for r in rows if r['status'] == 'ranked']
     if sorted(r['rank'] for r in ranked) != list(range(1, len(ranked) + 1)):
@@ -107,15 +130,22 @@ def validate_candidate(result, inputs):
     if [r['id'] for r in sorted(ranked, key=lambda r: r['rank'])] != result['order']:
         raise ValueError('Candidate rank order is inconsistent')
     counts = {t['id']: [0, 0] for t in inputs['teams']}
-    means = dict(zip((t['id'] for t in inputs['teams']), policy_input['means']))
+    means = dict(zip((t['id'] for t in fbs), policy_input['means']))
+    fbs_counts = {t['id']: [0, 0] for t in fbs}
+    fbs_ids = set(fbs_counts)
     for g in inputs['games']:
         home_won = g['home_points'] > g['away_points']
         counts[g['home_id']][int(not home_won)] += 1
         counts[g['away_id']][int(home_won)] += 1
+        if g['home_id'] in fbs_ids and g['away_id'] in fbs_ids:
+            fbs_counts[g['home_id']][int(not home_won)] += 1
+            fbs_counts[g['away_id']][int(home_won)] += 1
     for row in rows:
         if not math.isclose(row['merit_mean'], means[row['id']], rel_tol=0, abs_tol=1e-12):
             raise ValueError('Policy means do not match published merit summaries')
-        if [row['wins_fbs'], row['losses_fbs']] != counts[row['id']]:
+        if ([row['wins'], row['losses']] != counts[row['id']] or
+                [row['wins_fbs'], row['losses_fbs']] != fbs_counts[row['id']] or
+                [row['wins_fcs'], row['losses_fcs']] != [a-b for a,b in zip(counts[row['id']], fbs_counts[row['id']])]):
             raise ValueError('Published records do not match eligible games')
         if row['status'] != 'ranked':
             if sum(counts[row['id']]) or row['rank'] is not None:
@@ -147,10 +177,12 @@ def publish(result, inputs, key, now, destination=PUBLIC):
         week = max(g['week'] for g in inputs['games'])
     snapshot = {**result, 'schema': 'margin-of-merit-snapshot-v1',
                 'status': 'published', 'publication_ready': True, 'request_key': key,
+                'methodology': REFIT_GENERATION,
                 'published_at': now.isoformat(), 'data_observed_at': inputs['source']['games']['retrieved_at'],
                 'latest_game_kickoff': max(g['start_date'] for g in inputs['games']),
                 'week': week, 'kind': kind,
-                'scope': 'Completed regular-season FBS–FBS games, including conference championships; no bowls/CFP.',
+                'scope': 'Completed regular-season FBS–FBS, FBS–FCS and FCS–FCS games in the joint model; FBS rankings and records include FCS games. No bowls/CFP.',
+                'scored_games': len(inputs['scored_game_indices']),
                 'game_ids': [g['id'] for g in inputs['games']]}
     checksum = digest(snapshot)
     ident = f"{inputs['season']}-w{week:02d}-{checksum[:16]}"
@@ -159,7 +191,7 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     body = encoded(snapshot)
     if json_path.exists() and json_path.read_bytes() != body:
         raise ValueError('Refusing to replace an immutable historical snapshot')
-    columns = ('rank', 'name', 'conference', 'wins_fbs', 'losses_fbs', 'merit_mean', 'merit_median', 'merit_sd', 'merit_lo90',
+    columns = ('rank', 'name', 'conference', 'wins', 'losses', 'wins_fbs', 'losses_fbs', 'wins_fcs', 'losses_fcs', 'merit_mean', 'merit_median', 'merit_sd', 'merit_lo90',
                'merit_hi90', 'raw_merit_rank', 'raw_rank_lo90', 'raw_rank_hi90', 'p_raw_merit_top8',
                'p_raw_merit_top10', 'p_raw_merit_top25', 'raw_rank_mean', 'raw_rank_median', 'raw_rank_sd',
                'sos_median', 'sos_sd', 'sos_lo90', 'sos_hi90', 'sos_mean')
@@ -170,7 +202,7 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     writer.writeheader()
     writer.writerows(snapshot['teams'])
     index = read_index(destination)
-    row = {'id': ident, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']), 'kind': kind,
+    row = {'id': ident, 'methodology': REFIT_GENERATION, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']), 'kind': kind,
            'published_at': snapshot['published_at'], 'data_observed_at': snapshot['data_observed_at'],
            'data_cutoff': snapshot['data_cutoff'], 'request_key': key, 'sha256': checksum,
            'json': relative.with_suffix('.json').as_posix(), 'csv': relative.with_suffix('.csv').as_posix()}
@@ -261,7 +293,7 @@ def main():
         row = complete()
         if os.environ.get('GITHUB_STEP_SUMMARY'):
             with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as handle:
-                handle.write(f"## Margin of Merit: {row['season']}\n\n{row['games']} completed FBS–FBS games. "
+                handle.write(f"## Margin of Merit: {row['season']}\n\n{row['games']} completed Division I games in the joint fit; FBS teams ranked. "
                              f"[View rankings](https://nateoconnell.com/blog/cfb/)\n\n"
                              f"Saved snapshot: `{row['id']}`. The following step commits the files and requests a Pages build.\n")
 

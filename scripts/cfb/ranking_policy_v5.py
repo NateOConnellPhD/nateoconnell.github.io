@@ -215,3 +215,55 @@ def replay(payload, specification=CANONICAL):
         raise ValueError('Missing FCS-aware v5 comparison inputs')
     return order_policy(prepare_policy(payload['teams'], payload['games'], payload['means'],
         payload['probabilities'], season=payload['season'], specification=specification, opponents=payload['opponents']))
+
+
+def rank_merit(teams, games, merit_draws, *, season, specification=CANONICAL):
+    """Joint FBS/FCS LOO draws -> FBS-only v5 order and raw-rank uncertainty."""
+    import numpy as np
+
+    draws = np.asarray(merit_draws, dtype=float)
+    if draws.ndim != 2 or draws.shape[1] != len(teams) or draws.shape[0] < 2 or not np.isfinite(draws).all():
+        raise ValueError('Expected finite paired merit draws with columns in saved roster order')
+    fbs = [i for i,t in enumerate(teams) if t.get('classification', 'fbs') == 'fbs']
+    opponents = [t for t in teams if t.get('classification') == 'fcs']
+    teams = [teams[i] for i in fbs]
+    draws = draws[:, fbs]
+    n = len(teams)
+    p = np.zeros((n, n))
+    for i, j in combinations(range(n), 2):
+        p[i, j] = np.mean(draws[:, i] > draws[:, j])
+        p[j, i] = np.mean(draws[:, j] > draws[:, i])
+    state = prepare_policy(teams, games, draws.mean(axis=0), p, season=season, specification=specification, opponents=opponents)
+    result = order_policy(state)
+    positions = {ident: k + 1 for k, ident in enumerate(result['order'])}
+    active = state['raw']
+    raw_draws = draws[:, active]
+    rows = []
+    for i, team in enumerate(teams):
+        row = {**team, 'wins': state['wins'][i], 'losses': state['losses'][i],
+               'wins_fbs': state['wins_fbs'][i], 'losses_fbs': state['losses_fbs'][i],
+               'wins_fcs': state['wins'][i]-state['wins_fbs'][i],
+               'losses_fcs': state['losses'][i]-state['losses_fbs'][i],
+               'rank': positions.get(team['id']), 'raw_merit_rank': state['raw_rank'].get(i),
+               'merit_mean': float(draws[:, i].mean()),
+               'merit_lo90': float(np.quantile(draws[:, i], .05)),
+               'merit_hi90': float(np.quantile(draws[:, i], .95))}
+        if i in active:
+            higher = np.sum(raw_draws > draws[:, i, None], axis=1)
+            equal = np.sum(raw_draws == draws[:, i, None], axis=1)
+            ranks = 1 + higher + (equal - 1) / 2
+            row.update(raw_rank_mean=float(ranks.mean()), raw_rank_lo90=float(np.quantile(ranks, .05)),
+                       raw_rank_hi90=float(np.quantile(ranks, .95)), status='ranked')
+            row.update({f'p_raw_merit_top{k}': float(np.clip((k - higher) / equal, 0, 1).mean()) for k in (8, 10, 25)})
+        else:
+            row.update({key: None for key in ('raw_rank_mean', 'raw_rank_lo90', 'raw_rank_hi90',
+                                              'p_raw_merit_top8', 'p_raw_merit_top10', 'p_raw_merit_top25')})
+            row['status'] = 'no_eligible_games'
+        rows.append(row)
+    for k in (8, 10, 25):
+        if not math.isclose(sum(r[f'p_raw_merit_top{k}'] or 0 for r in rows), min(k, len(active)), abs_tol=1e-8):
+            raise ValueError('Raw top-K probability accounting failed')
+    result['teams'] = sorted(rows, key=lambda r: (r['rank'] is None, r['rank'] or 0, r['id']))
+    result['uncertainty'] = 'Raw merit from paired marginal-quantile LOO transport; joint dependence is approximate.'
+    result['publication_ready'] = False
+    return result

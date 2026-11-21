@@ -1,7 +1,7 @@
 """Fetch and retain one CFBD season; standard library only, no inference.
 
-First sync: season-specific FBS teams, calendar, and games (three requests).
-Later syncs: one games request, reusing the saved metadata. No automatic retry.
+First sync: FBS roster, calendar, FBS games and FCS games (four requests).
+Later syncs: two games requests, reusing metadata. Historical sources are cached. No automatic retry.
 All responses are validated before existing saved files are replaced.
 """
 import argparse
@@ -111,7 +111,7 @@ def read_saved(path, season, endpoint, parameters):
     return result
 
 
-def normalize(season, teams, calendar, games, observed_at):
+def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False):
     """Keep future/non-final games for audit, but never in eligible model inputs.
 
     This describes status observed at retrieval. A later fetch cannot establish
@@ -129,6 +129,18 @@ def normalize(season, teams, calendar, games, observed_at):
             raise ValueError('Non-FBS team in season FBS roster')
         roster[ident] = {'id': ident, 'name': text(team.get('school'), 'school'),
                          'conference': team.get('conference')}
+    fbs_ids = set(roster)
+    if include_fcs:
+        for row in games:
+            for side in ('home', 'away'):
+                if row.get(side + 'Classification') != 'fcs': continue
+                ident = integer(row.get(side + 'Id'), side + 'Id', 1)
+                team = {'id': ident, 'name': text(row.get(side + 'Team'), side + 'Team'),
+                        'conference': row.get(side + 'Conference'), 'classification': 'fcs'}
+                if ident in fbs_ids or (ident in roster and roster[ident] != team):
+                    raise ValueError('Inconsistent FCS membership in season games')
+                roster[ident] = team
+        for ident in fbs_ids: roster[ident]['classification'] = 'fbs'
     weeks = set()
     if not calendar:
         raise ValueError('Empty season calendar')
@@ -168,7 +180,7 @@ def normalize(season, teams, calendar, games, observed_at):
             classification = row.get(side + 'Classification')
             if classification not in ('fbs', 'fcs', 'ii', 'iii', 'ii/iii'):
                 raise ValueError('Unknown game team classification')
-            if (classification == 'fbs') != (team_id in roster):
+            if (classification == 'fbs') != (team_id in fbs_ids):
                 raise ValueError('Game FBS membership disagrees with season roster; review metadata')
         hp, ap = row.get('homePoints'), row.get('awayPoints')
         if final:
@@ -180,13 +192,13 @@ def normalize(season, teams, calendar, games, observed_at):
         if kind != 'regular':
             reasons.append('postseason_not_in_scope')
         if home not in roster or away not in roster:
-            reasons.append('not_fbs_vs_fbs')
+            reasons.append('outside_division_i' if include_fcs else 'not_fbs_vs_fbs')
         if not final:
             reasons.append('not_completed')
         if start > observed_at:
             reasons.append('future_game')
         if not reasons and hp == ap:
-            raise ValueError('Tied FBS final requires an explicit tie policy')
+            raise ValueError('Tied Division I final requires an explicit tie policy')
         excluded.update(reasons)
         normalized.append({'id': ident, 'season': season, 'week': week, 'season_type': kind,
             'start_date': start.isoformat(), 'neutral_site': neutral, 'completed': final,
@@ -194,7 +206,7 @@ def normalize(season, teams, calendar, games, observed_at):
             'home_name': text(row.get('homeTeam'), 'homeTeam'),
             'away_name': text(row.get('awayTeam'), 'awayTeam'),
             'home_conference': row.get('homeConference'), 'away_conference': row.get('awayConference'),
-            'home_fbs': home in roster, 'away_fbs': away in roster,
+            'home_fbs': home in fbs_ids, 'away_fbs': away in fbs_ids,
             # In-progress scores are never inputs to the model.
             'home_points': hp if final else None, 'away_points': ap if final else None,
             'eligible': not reasons, 'exclusions': reasons})
@@ -204,11 +216,27 @@ def normalize(season, teams, calendar, games, observed_at):
     played = {row[key] for row in eligible for key in ('home_id', 'away_id')}
     return {'schema': SCHEMA, 'season': season, 'teams': roster_list, 'games': normalized,
         'model_input_sha256': digest({'schema': SCHEMA, 'season': season, 'teams': roster_list, 'games': eligible}),
-        'summary': {'fbs_teams': len(roster), 'saved_games': len(games), 'eligible_completed_games': len(eligible),
-                    'teams_without_fbs_games': sorted(set(roster) - played),
+        'summary': {'fbs_teams': len(fbs_ids), 'fcs_teams': len(roster)-len(fbs_ids), 'saved_games': len(games), 'eligible_completed_games': len(eligible),
+                    'teams_without_fbs_games': sorted(fbs_ids - played),
+                    'scope': 'joint_fbs_fcs' if include_fcs else 'fbs_only',
                     'exclusion_counts': dict(sorted(excluded.items())),
                     'publication_ready': False,
                     'note': 'Data validation only. Rankings require model, LOO, policy, and readiness checks.'}}
+
+
+def merge_games(primary, additional):
+    """An FBS/FCS meeting may appear in both responses; count it once."""
+    games = {}
+    for feed in (primary, additional):
+        seen = set()
+        for row in feed:
+            ident = integer(row.get('id'), 'game.id', 1)
+            if ident in seen: raise ValueError('Duplicate game ID within a feed')
+            seen.add(ident)
+            if ident in games and games[ident] != row:
+                raise ValueError('FBS/FCS feeds disagree on a shared game; saved data were preserved')
+            games[ident] = row
+    return [games[key] for key in sorted(games)]
 
 
 def sync(season, key, *, destination=DATA, refresh_metadata=False, fetcher=fetch, now=None):
@@ -221,20 +249,25 @@ def sync(season, key, *, destination=DATA, refresh_metadata=False, fetcher=fetch
     folder = Path(destination) / str(season)
     endpoints = {'teams.json': ('/teams/fbs', {'year': season}),
                  'calendar.json': ('/calendar', {'year': season}),
-                 'games.json': ('/games', {'year': season, 'seasonType': 'both', 'classification': 'fbs'})}
+                 'games.json': ('/games', {'year': season, 'seasonType': 'both', 'classification': 'fbs'}),
+                 'games-fcs.json': ('/games', {'year': season, 'seasonType': 'both', 'classification': 'fcs'})}
     proposed, calls = {}, 0
     for name, (endpoint, parameters) in endpoints.items():
         old = read_saved(folder / name, season, endpoint, parameters)
-        if name != 'games.json' and old is not None and not refresh_metadata:
+        if name not in ('games.json', 'games-fcs.json') and old is not None and not refresh_metadata:
             proposed[name] = old
             continue
         payload = fetcher(endpoint, parameters, key)
+        if name in ('games.json', 'games-fcs.json') and not payload:
+            raise ValueError('Empty ' + name + ' response; joint FBS/FCS coverage cannot be established')
         calls += 1
         fresh = envelope(season, endpoint, parameters, payload, now.isoformat())
-        # Preserve byte-identical files when only retrieval time has changed.
-        proposed[name] = old if old and old['payload_sha256'] == fresh['payload_sha256'] else fresh
+        # Reobserving games advances the joint cutoff even when scores are unchanged.
+        # Metadata timestamps do not affect that cutoff.
+        proposed[name] = old if name not in ('games.json', 'games-fcs.json') and old and old['payload_sha256'] == fresh['payload_sha256'] else fresh
     result = normalize(season, proposed['teams.json']['payload'], proposed['calendar.json']['payload'],
-                       proposed['games.json']['payload'], now)
+                       merge_games(proposed['games.json']['payload'], proposed['games-fcs.json']['payload']),
+                       now, include_fcs=True)
     previous = folder / 'normalized.json'
     old = json.loads(previous.read_text()) if previous.exists() else None
     if old:

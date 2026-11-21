@@ -7,7 +7,7 @@ the feed records kickoff and final status, not exact historical completion time.
 import json
 from pathlib import Path
 
-from sync_data import DATA, digest, instant, normalize, read_saved
+from sync_data import DATA, digest, instant, normalize, read_saved, merge_games
 
 CORRECTIONS = Path(__file__).with_name('venue_corrections.json')
 
@@ -52,7 +52,12 @@ def prepare(normalized, raw_games, corrections, *, cutoff, through_week=None):
             'away': [index[g['away_id']] for g in games],
             'venue': [int(not g['neutral_site']) for g in games],
             'margin': [g['home_points'] - g['away_points'] for g in games]}
+    fbs_indices = [i for i, t in enumerate(teams) if t.get('classification', 'fbs') == 'fbs']
+    scored = [i for i, g in enumerate(games) if g['home_fbs'] or g['away_fbs']]
+    if not scored:
+        raise ValueError('No eligible completed games at the selected cutoff')
     return {'season': season, 'teams': teams, 'games': games, 'data': data,
+            'fbs_indices': fbs_indices, 'scored_game_indices': scored, 'statistical_scope': normalized['summary'].get('scope', 'fbs_only'),
             'fit_input_sha256': digest({'teams': teams, 'games': games}),
             'venue_corrections': audit, 'venue_corrections_sha256': digest(audit),
             'cutoff': cutoff.isoformat(), 'through_week': through_week,
@@ -68,13 +73,18 @@ def load_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections
         ('teams', '/teams/fbs', {'year': season}),
         ('calendar', '/calendar', {'year': season}),
         ('games', '/games', {'year': season, 'seasonType': 'both', 'classification': 'fbs'}),
+        ('games-fcs', '/games', {'year': season, 'seasonType': 'both', 'classification': 'fcs'}),
     ):
         sources[name] = read_saved(folder / (name + '.json'), season, endpoint, params)
         if sources[name] is None:
             raise ValueError(f'Missing saved {name}; run the data-sync workflow for this season')
-    observed = instant(sources['games']['retrieved_at'])
+    if not sources['games']['payload'] or not sources['games-fcs']['payload']:
+        raise ValueError('Joint FBS/FCS fitting requires both saved game feeds')
+    observed = min(instant(sources[key]['retrieved_at']) for key in ('games', 'games-fcs'))
+    raw_games = merge_games(sources['games']['payload'], sources['games-fcs']['payload'])
     normalized = normalize(season, sources['teams']['payload'], sources['calendar']['payload'],
-                           sources['games']['payload'], observed)
+                           raw_games, max(instant(sources[key]['retrieved_at']) for key in ('games', 'games-fcs')),
+                           include_fcs=True)
     cutoff = instant(as_of) if as_of else observed
     if through_week is not None:
         if type(through_week) is not int or through_week < 0:
@@ -90,7 +100,7 @@ def load_inputs(season, *, through_week=None, as_of=None, root=DATA, corrections
     if cutoff > observed:
         raise ValueError('Cutoff is later than the saved data observation')
     corrections = json.loads(Path(corrections_path).read_text())
-    result = prepare(normalized, sources['games']['payload'], corrections,
+    result = prepare(normalized, raw_games, corrections,
                      cutoff=cutoff, through_week=through_week)
     result['source'] = {name: {k: value[k] for k in ('source', 'parameters', 'retrieved_at', 'payload_sha256')}
                         for name, value in sources.items()}

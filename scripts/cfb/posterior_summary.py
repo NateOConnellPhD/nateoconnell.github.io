@@ -61,9 +61,10 @@ def attach(result, inputs, task):
     flat = flatten(samples)
     merit, sos = scores['merit'], scores['sos']
     rows = {r['id']: r for r in result['teams']}
-    active = [i for i, t in enumerate(inputs['teams']) if rows[t['id']]['status'] == 'ranked']
+    active = [i for i, t in enumerate(inputs['teams']) if t['id'] in rows and rows[t['id']]['status'] == 'ranked']
     output = {}
     for i, team in enumerate(inputs['teams']):
+        if team['id'] not in rows: continue
         row = rows[team['id']]
         metrics = {'strength': summarize(flat['theta'][:, i])}
         if i in active:

@@ -1,5 +1,7 @@
 # Margin of Merit: model and automated updates
 
+**Current migration:** [CFB-V5.md](CFB-V5.md) defines the required full FCS-inclusive refit of every season and week. Old numerical validation reports below describe earlier work, not validation of this migration.
+
 ## Current-season publishing
 
 The production entry point is now `.github/workflows/cfb-rankings.yml`, named
@@ -12,11 +14,11 @@ maintenance; it does not publish rankings.
 
 The new workflow uses the existing `CFBD_API_KEY` repository secret, saves the
 source responses, installs the pinned numerical dependencies on GitHub only
-when a new ranking is needed, runs the canonical model and v4 policy, commits
+when a new ranking is needed, runs the joint FBS/FCS model and current v5 policy, commits
 JSON/CSV snapshots under `assets/data/cfb/`, and explicitly requests a Pages
 build. It does not use OpenAI or require the owner's computer to remain on.
-The first current-season import makes three API requests; subsequent imports
-normally make one. Visitors only read stored files.
+The first current-season import makes four API requests; subsequent imports
+normally make two (FBS and FCS games). Visitors only read stored files.
 
 `/blog/cfb/` is linked from the blog's CFB rankings tab. It reads the public
 index and selected snapshot, with season/update selection, searches across all
@@ -24,8 +26,7 @@ teams, conference filtering, sorting, raw-rank uncertainty, CSV/JSON downloads,
 and links to specific snapshots. Movement compares against the previous saved
 week only when the policy identity matches. Missing results and failed updates
 are labeled explicitly. The page retains the site's original blue palette.
-JavaScript syntax and page/selector/anchor checks passed; a rendered browser
-review was unavailable because the computer-use tool could not initialize.
+The current v5 integration has received source review only; see its validation limits in CFB-V5.md.
 
 Every successful snapshot is immutable. The index retains earlier weeks and
 revisions, but only completed weeks appear in the public rankings and history.
@@ -36,10 +37,7 @@ from the next week cannot move the current pointer forward. The Monday schedule
 runs after the provider's calendar week ends (typically early Monday morning).
 
 Index rows record `week_complete` by comparing their own saved cutoff with the
-calendar end, not today's date. The two earlier partial Week 12 snapshots remain
-immutable downloads, but are excluded from selection, current rankings and
-trajectories. Week 11 is current as of November 20, 2026. This orchestration change
-preserves numerical request keys and reuses the existing completed-week fit.
+calendar end, not today's date. Earlier partial-week snapshots and prior-methodology rankings are excluded from selection, current rankings and trajectories. Week 11 is current as of November 20, 2026. The v5 migration invalidates every prior-methodology fit and ranking. All seasons and weeks enter the refit queue.
 An unchanged input/implementation identity reuses the published
 snapshot without installing packages or fitting, even if numerical caches
 have expired. A separate Actions cache can reuse posterior/LOO arrays after
@@ -62,8 +60,7 @@ force-pushes; concurrent repository changes are merged before saving results.
 The last reported GitHub run completed ranking generation but failed the Git
 whitespace check on generated CSV rows. Commit `989518d` changed the exporter
 to LF endings. A successful deployment has not yet been verified here.
-The v4 policy update is documented in [CFB-V4.md](CFB-V4.md), including the
-saved-draw replay, browser-engine parity, and limits of that validation.
+The current policy and required full refits are documented in [CFB-V5.md](CFB-V5.md). [CFB-V4.md](CFB-V4.md) is a historical implementation report only.
 
 ## Earlier validation and remaining historical work
 
@@ -79,7 +76,7 @@ corrections. See [the data audit](CFB-2024-DATA-AUDIT.md). The new production
 connection is described above. The historical queue now extends to 2002;
 historical results become available only after their individual fits pass.
 The earlier v2 handoff changed the ordering policy, not the statistical model
-or importer. Its ordering implementation is now archived; v4 is canonical.
+or importer. Its ordering implementation is now archived; v5 is canonical for every season and week.
 The 2024 saved-data run passed
 sampling and LOO diagnostics, four numerical bridge tests passed, and a repeat
 reused both numerical caches with a byte-identical candidate. See
@@ -99,23 +96,22 @@ leave **Refresh the saved FBS team list and calendar** unchecked. Start the run
 and inspect its summary. This checks the connection and saves data; it does not
 run inference, publish rankings, or enable a schedule.
 
-The first successful sync makes three API requests and commits four files under
+The first successful sync makes four API requests and commits five files under
 `_cfb_data/seasons/2024/`:
 
 - `teams.json`: the season-specific FBS roster and source provenance.
 - `calendar.json`: the season calendar and source provenance.
-- `games.json`: the season's returned game records and source provenance.
+- `games.json`: FBS game records and source provenance.
+- `games-fcs.json`: FCS game records and source provenance; shared games are deduplicated by ID.
 - `normalized.json`: normalized records, exclusion reasons, validation counts,
   and an eligible-data hash for the future model pipeline.
 
 These are public football data saved in the repository, not the private handoff.
 The data directory is excluded from the Jekyll website. Each source envelope
-records its endpoint, query, retrieval time, and payload hash. A byte-identical
-payload retains its original envelope rather than creating a timestamp-only
-commit; the workflow log records the later check.
+records its endpoint, query, retrieval time, and payload hash. Unchanged metadata retains its original envelope. Game-feed observations advance together even if scores are unchanged, so a week can close without forcing a numerical refit.
 
 Later runs for that season reuse the saved roster and calendar and make only
-**one games request**. Explicitly refreshing metadata adds two requests. The
+**two games requests**. Explicitly refreshing metadata adds two requests. The
 importer validates the complete response before writing files, rejects missing
 previously eligible final games, and does not commit a failed sync. It retains
 scheduled/non-final games for inspection but excludes them from model inputs;
@@ -126,7 +122,7 @@ policy, and implementation versions.
 The 2024 import and reference comparison have succeeded. Future fits must use
 `season_inputs.load_inputs()` so reviewed venue corrections and cutoff filters
 are applied while raw provider files remain intact. Use a separate manual run for season
-**2026** to seed current-season files; that season's first run also needs three
+**2026** to seed current-season files; that season's first run also needs four
 requests. The weekly job reuses these saved inputs. Visitors will
 read published result files and will never call CFBD.
 
@@ -136,23 +132,20 @@ corrections, rejected responses, input eligibility, and credential-safe errors.
 The subsequent live 2024 run established endpoint access with the saved key.
 Current-season publication is now connected through the workflow described above.
 
-## Current ranking policy: v4
+## Current ranking policy: v5
 
-See [CFB-V4.md](CFB-V4.md) for the literal probability thresholds, strict
-head-to-head/common-opponent hierarchy, conflict audits, and replay checks.
-The likelihood, eight-point scale floor, LOO scoring and SOS are unchanged.
-`ranking_policy.py` is the canonical sorter. V2 source is retained under
-`scripts/cfb/archive/`; v2 numerical results remain in their dated validation
-report. Neither the original reference sorter nor the private standalone runner
-is used for new public snapshots. Private handoff arrays and tables are never
-copied into the public archive as if they were newly checked live results.
+See [CFB-V5.md](CFB-V5.md) for probability-or-proximity eligibility, exact
+lexicographic ordering, and the FCS-inclusive migration. `ranking_policy.py`
+exports the single current sorter. The source and private handoff are inputs
+to implementation and review, not prevalidated public rankings. Every season
+and weekly cutoff requires a checked fit under the current methodology.
 
 ## Saved-data candidate command
 
 `scripts/cfb/fit_saved_season.py --season 2024` prepares the reviewed inputs,
 runs the canonical four-chain NUTS fit (1,000 warmup and 1,000 retained draws
 per chain), checks diagnostics, calculates checked PSIS-LOO merit, then applies
-v4. It supports `--through-week` and an explicit timezone-aware `--as-of` cutoff.
+v5. It supports `--through-week` and an explicit timezone-aware `--as-of` cutoff.
 It makes no network calls, installs nothing, and never publishes. Seasons from
 2002 onward use the same model, scoring and declared ordering rules.
 
@@ -166,8 +159,7 @@ diagnostic source, dependency versions, seed, and sampling settings. A separate
 LOO cache uses the fit, scorer, reference rank, and game IDs. Policy and display
 changes regenerate the candidate without invalidating a reusable posterior or
 LOO result. Each cache validates stored array hashes before reuse. This is a
-local validation cache; durable website snapshots and production storage still
-need integration. The 2024 run reported 17.71 seconds initially and 0.74 seconds
+numerical cache; durable website snapshots live separately in Git. The 2024 run reported 17.71 seconds initially and 0.74 seconds
 with both numerical caches reused, excluding input preparation and imports.
 The numerical cache files were unchanged and the candidate was byte-identical.
 See the validation report above; these are local measurements, not cloud-runtime
@@ -182,7 +174,7 @@ workflow enables them automatically. A candidate remains
 
 ## One model throughout each season
 
-For completed eligible FBS games, the response is the actual home-minus-away
+For completed eligible Division I games, the response is the actual home-minus-away
 final score margin, not a betting spread:
 
 ```text
@@ -240,8 +232,8 @@ are explicit maintenance operations with labeled result revisions.
 
 Proposed update sequence:
 
-1. Once each Monday morning after the calendar week closes, make one bulk current-season
-   games request and retain the response and query provenance. The documented
+1. Once each Monday morning after the calendar week closes, make two bulk current-season
+   games requests (FBS and FCS) and retain the response and query provenance. The documented
    `/games` endpoint accepts a year with no week filter and returns a game array:
    https://api.collegefootballdata.com/api/games
    Refresh the season's saved game file so the same request captures newly
@@ -249,8 +241,7 @@ Proposed update sequence:
    separately; initial roster/calendar setup and explicit error retries are
    additional calls, not visitor-driven requests. Verify
    completed status, unique game IDs, final scores, venues, and season-specific
-   FBS membership. Exclude FCS games and postseason bowls/CFP under the current
-   scope; include eligible conference championships and Army–Navy.
+   FBS membership. Include FBS–FBS, FBS–FCS and FCS–FCS games in the joint fit; exclude postseason bowls/CFP; include eligible conference championships and Army–Navy.
 2. Compare a canonical hash of the eligible game records and roster with the last
    successful fit. Include scores, venue, eligibility, model, policy, and code
    versions. A fetch timestamp or an unfinished game's changing score must not
@@ -271,8 +262,8 @@ Proposed update sequence:
 
 The schedule uses one weekly refresh, now Monday to enforce completed weeks,
 instead of hourly/daily polling.
-With season metadata already stored, the normal in-season schedule uses one
-games request per week (roughly four or five per month). If eligible data have
+With season metadata already stored, the normal in-season schedule uses two
+games requests per week (roughly eight to ten per month), plus the separately cached polls feed. If eligible data have
 not changed, keep the prior result and skip inference. No routine off-season
 polling or historical refresh is needed. Games assigned to an open calendar
 week wait until that week closes. Provider-late results or corrections enter the
@@ -320,8 +311,8 @@ reused across weeks and visits.
 
 No conference-era substitutions or new ranking exceptions accompany this
 extension. The declared ordering rules are unchanged, using each season's own
-roster metadata. In particular, the existing eight-game undefeated safeguard
-only applies against teams with **two or more FBS losses**; it does not prevent
+roster metadata. In particular, the retained eight-FBS-game undefeated safeguard
+only applies against teams with **two or more overall losses**; it does not prevent
 a one-loss team from ranking above an undefeated team. Seasons with invalid
 or incomplete inputs remain subject to the existing validation gates.
 

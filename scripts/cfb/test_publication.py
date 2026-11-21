@@ -13,13 +13,13 @@ from unittest.mock import patch
 
 import update_rankings as live
 from ranking_policy import order_policy, prepare_policy
-from test_ranking_policy import probability
+from policy_fixtures import probability
 from sync_data import ROOT, UTC
 
 
 def fixture(season=2026):
     at = f'{season}-11-20T12:00:00+00:00'
-    inputs = {'season': season, 'fit_input_sha256': 'fixture',
+    inputs = {'season': season, 'fit_input_sha256': 'fixture', 'scored_game_indices': [0],
               'teams': [{'id': i, 'name': name, 'conference': 'ACC'} for i, name in ((1, 'A'), (2, 'B'))],
               'games': [{'id': 1, 'week': 12, 'start_date': at, 'home_id': 1, 'away_id': 2,
                          'season': season, 'eligible': True, 'completed': True, 'season_type': 'regular',
@@ -27,7 +27,8 @@ def fixture(season=2026):
     rows = []
     for i, name in enumerate(('A', 'B'), 1):
         rows.append({'id': i, 'name': name, 'conference': 'ACC', 'rank': i, 'raw_merit_rank': i,
-                     'status': 'ranked', 'wins_fbs': int(i == 1), 'losses_fbs': int(i == 2),
+                     'status': 'ranked', 'wins': int(i == 1), 'losses': int(i == 2),
+                     'wins_fcs': 0, 'losses_fcs': 0, 'wins_fbs': int(i == 1), 'losses_fbs': int(i == 2),
                      'merit_mean': 2-i, 'merit_lo90': 1-i, 'merit_hi90': 3-i,
                      'raw_rank_mean': i, 'raw_rank_lo90': i, 'raw_rank_hi90': i,
                      'sos_mean': .5, 'sos_lo90': .4, 'sos_hi90': .6,
@@ -64,6 +65,21 @@ class PublicationTests(unittest.TestCase):
 
     def publish(self, key='one'):
         return live.publish(self.result, self.inputs, key, self.now, self.public)
+
+    def test_prior_methodology_is_pending_instead_of_a_usable_ranking(self):
+        row = self.publish()
+        path = self.public / 'index.json'
+        index = json.loads(path.read_text())
+        index.pop('methodology')
+        index['snapshots'][0].pop('methodology')
+        path.write_text(json.dumps(index))
+        migrated = live.read_index(self.public)
+        self.assertEqual(migrated['snapshots'], [])
+        self.assertIsNone(migrated['latest'])
+        self.assertIsNone(live.matching_snapshot(migrated, 'one', self.public))
+        self.assertEqual(migrated['backfill']['status'], 'pending')
+        self.assertEqual(migrated['archive'][0]['weeks'], [{'week': 12, 'snapshot': None}])
+        self.assertTrue((self.public / row['json']).exists())
 
     def test_bad_candidate_cannot_change_last_good_files(self):
         self.publish()
@@ -111,7 +127,7 @@ class PublicationTests(unittest.TestCase):
         for ident in (3, 4):
             idle = dict(self.result['teams'][0], id=ident, name=f'Idle {ident}',
                         rank=None, raw_merit_rank=None, status='no_eligible_games',
-                        wins_fbs=0, losses_fbs=0, sos_mean=None,
+                        wins=0, losses=0, wins_fcs=0, losses_fcs=0, wins_fbs=0, losses_fbs=0, sos_mean=None,
                         p_raw_merit_top8=None, p_raw_merit_top10=None, p_raw_merit_top25=None)
             self.result['teams'].append(idle)
             self.inputs['teams'].append({'id': ident, 'name': idle['name'], 'conference': 'ACC'})

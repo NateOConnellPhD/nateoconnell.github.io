@@ -33,17 +33,21 @@ def fixture():
 class DataTests(unittest.TestCase):
     def setUp(self):
         self.parent = ROOT / '.codex-tmp' / 'cfb-data-review'
+        created = not self.parent.exists()
         self.parent.mkdir(parents=True, exist_ok=True)
+        if created: self.addCleanup(self.parent.rmdir)
         self.temp = tempfile.TemporaryDirectory(dir=self.parent)
         self.addCleanup(self.temp.cleanup)
         self.destination = Path(self.temp.name)
         self.raw, self.calls = fixture(), []
+        self.raw['/games-fcs'] = [dict(self.raw['/games'][0], id=201, homeId=8, awayId=9,
+            homeTeam='FCS A', awayTeam='FCS B', homeClassification='fcs', awayClassification='fcs')]
 
     def request(self, path, parameters, key):
         self.calls.append((path, parameters))
         self.assertEqual(key, 'test-only-key')
         self.assertEqual(parameters['year'], 2026)
-        return copy.deepcopy(self.raw[path])
+        return copy.deepcopy(self.raw.get('/games-fcs', []) if parameters.get('classification') == 'fcs' else self.raw[path])
 
     def run_sync(self, **kwargs):
         return sync(2026, 'test-only-key', destination=self.destination,
@@ -55,18 +59,32 @@ class DataTests(unittest.TestCase):
     def saved(self):
         return {p.name: p.read_bytes() for p in (self.destination / '2026').glob('*.json')}
 
-    def test_first_sync_then_one_request_no_op(self):
+    def test_first_sync_then_two_request_no_op(self):
         result = self.run_sync()
-        self.assertEqual(result['requests'], 3)
-        self.assertEqual(result['eligible_completed_games'], 1)
+        self.assertEqual(result['requests'], 4)
+        self.assertEqual(result['eligible_completed_games'], 2)
         self.assertEqual(result['teams_without_fbs_games'], [3])
         before = self.saved()
         result = self.run_sync()
-        self.assertEqual(result['requests'], 1)
+        self.assertEqual(result['requests'], 2)
         self.assertFalse(result['changed_files'])
         self.assertFalse(result['model_inputs_changed'])
         self.assertEqual(self.saved(), before)
-        self.assertEqual(self.calls[-1], ('/games', {'year': 2026, 'seasonType': 'both', 'classification': 'fbs'}))
+        self.assertEqual(self.calls[-1], ('/games', {'year': 2026, 'seasonType': 'both', 'classification': 'fcs'}))
+
+    def test_joint_feed_counts_shared_game_once_and_rejects_disagreement(self):
+        shared = dict(self.raw['/games'][0], id=102, awayId=8, awayTeam='FCS A', awayClassification='fcs')
+        self.raw['/games'].append(shared)
+        self.raw['/games-fcs'].append(copy.deepcopy(shared))
+        result = self.run_sync()
+        self.assertEqual(result['eligible_completed_games'], 3)
+        self.assertEqual(result['fbs_teams'], 3)
+        self.assertEqual(result['fcs_teams'], 2)
+        before = self.saved()
+        self.raw['/games-fcs'][-1]['homePoints'] += 1
+        with self.assertRaisesRegex(ValueError, 'disagree'):
+            self.run_sync()
+        self.assertEqual(before, self.saved())
 
     def test_correction_changes_inputs_without_duplicate_games(self):
         before = self.run_sync()
@@ -74,8 +92,8 @@ class DataTests(unittest.TestCase):
         after = self.run_sync()
         self.assertTrue(after['model_inputs_changed'])
         self.assertNotEqual(before['model_input_sha256'], after['model_input_sha256'])
-        self.assertEqual(after['eligible_completed_games'], 1)
-        self.assertEqual(after['requests'], 1)
+        self.assertEqual(after['eligible_completed_games'], 2)
+        self.assertEqual(after['requests'], 2)
 
     def test_failure_preserves_every_saved_file(self):
         self.run_sync()
@@ -95,6 +113,7 @@ class DataTests(unittest.TestCase):
 
     def test_first_failure_does_not_create_season_files(self):
         self.raw['/games'] = []
+        self.raw['/games-fcs'] = []
         with self.assertRaises(ValueError):
             self.run_sync()
         self.assertFalse((self.destination / '2026').exists())
@@ -150,7 +169,7 @@ class DataTests(unittest.TestCase):
 
     def test_metadata_refresh_is_explicit_and_integrity_checked(self):
         self.run_sync()
-        self.assertEqual(self.run_sync(refresh_metadata=True)['requests'], 3)
+        self.assertEqual(self.run_sync(refresh_metadata=True)['requests'], 4)
         path = self.destination / '2026' / 'teams.json'
         value = json.loads(path.read_text())
         value['payload'][0]['id'] = 999

@@ -12,12 +12,11 @@ from unittest.mock import patch
 import cache_identity as identities
 import historical_rankings as history
 import update_rankings as pipeline
-from check_policy_v4 import parity
 from ranking_policy import order_policy, prepare_policy
 from sync_data import ROOT, UTC, encoded, envelope
 from sync_polls import sync_polls
 from test_polls import TEAMS, polls
-from test_ranking_policy import games, probability, teams
+from policy_fixtures import games, probability, teams
 
 
 class ArchiveRangeTests(unittest.TestCase):
@@ -45,7 +44,6 @@ class ArchiveRangeTests(unittest.TestCase):
             self.assertEqual(result['protected_team_ids'], [1])
             self.assertFalse(any(a['type'] == 'undefeated_p4' and a['loser_id'] == 2 for a in result['audit']))
             states.append(state)
-        parity(states)
         with self.assertRaisesRegex(ValueError, '2002'):
             prepare_policy(roster, [], [2, 3, 0], probability(3), season=2001)
 
@@ -72,7 +70,7 @@ class ArchiveRangeTests(unittest.TestCase):
                 folder = data / str(season)
                 folder.mkdir(parents=True)
                 calendar = [{'week': week, 'seasonType': 'regular', 'endDate': f'{season}-09-{7*week:02d}T12:00:00Z'} for week in (1, 2)]
-                for name, payload in (('teams', []), ('calendar', calendar), ('games', [])):
+                for name, payload in (('teams', []), ('calendar', calendar), ('games', []), ('games-fcs', [])):
                     (folder / f'{name}.json').write_bytes(encoded({'payload': payload, 'retrieved_at': '2026-11-20T12:00:00Z'}))
                 fetched.append(season)
             for season in (2024, 2025, 2026):

@@ -33,7 +33,7 @@ def write_series(index, season, destination):
             raise ValueError('Historical snapshot integrity check failed')
         fields = ('id', 'name', 'rank', 'raw_merit_rank', 'merit_mean', 'merit_median',
                   'merit_lo90', 'merit_hi90', 'raw_rank_mean', 'raw_rank_median',
-                  'raw_rank_lo90', 'raw_rank_hi90', 'wins_fbs', 'losses_fbs')
+                  'raw_rank_lo90', 'raw_rank_hi90', 'wins_fbs', 'losses_fbs', 'wins', 'losses')
         weeks[row['week']] = {k: row[k] for k in ('id', 'week', 'data_cutoff', 'json')}
         weeks[row['week']].update(policy_sha256=saved['policy_sha256'], kind=saved.get('kind', 'observed'),
                                  teams=[{k: t.get(k) for k in fields} for t in saved['teams']])
@@ -54,7 +54,7 @@ def prepare_history():
         folder = DATA / str(season)
         # The live workflow refreshes current-season data. Historical sources
         # are fetched just once; explicit data sync can later apply corrections.
-        if not all((folder / (name + '.json')).exists() for name in ('teams', 'calendar', 'games')):
+        if not all((folder / (name + '.json')).exists() for name in ('teams', 'calendar', 'games', 'games-fcs')):
             # Discover at most one new season per job, then commit its inputs
             # with the checked result. A later bad season must not discard an
             # entire historical import and cause all those API calls to repeat.
@@ -65,7 +65,8 @@ def prepare_history():
             sync(season, os.environ.get('CFBD_API_KEY', ''))
             fetched_season = season
         calendar = json.loads((folder / 'calendar.json').read_text())['payload']
-        observed = instant(json.loads((folder / 'games.json').read_text())['retrieved_at'])
+        observed = min(instant(json.loads((folder / name).read_text())['retrieved_at'])
+                       for name in ('games.json', 'games-fcs.json'))
         slots = []
         for depth, week in enumerate(closed_weeks(calendar, min(now, observed))):
             try:
