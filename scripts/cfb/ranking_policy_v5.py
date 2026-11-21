@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 from itertools import combinations
 import math
+import time
 
 from exact_order import exact_order, UnsolvedOrder
 from sync_data import digest
@@ -14,16 +15,16 @@ from sync_data import digest
 
 @dataclass(frozen=True)
 class Specification:
-    version: str = 'margin-of-merit-order-v5'
+    version: str = 'margin-of-merit-order-2026-11-21'
     merit_protection: float = .90
-    head_to_head: float = .90
+    head_to_head: float = .95
     common_opponents: float = .70
     proximity: int = 2
     equal_records_only: bool = True
     undefeated_p4_protection: bool = True
 
     def __post_init__(self):
-        if self.version != 'margin-of-merit-order-v5':
+        if self.version != 'margin-of-merit-order-2026-11-21':
             raise ValueError('Unrecognized ranking policy')
         for value in (self.merit_protection, self.head_to_head, self.common_opponents):
             if type(value) not in (float, int) or not math.isfinite(value) or not .5 <= value <= .99:
@@ -169,7 +170,34 @@ def order_policy(state):
         qualification = 'both' if by_probability and by_position else 'probability' if by_probability else 'proximity' if by_position else 'neither'
         decision(w, l, kind, eligible=by_probability or by_position, qualification=qualification,
                  threshold=spec[kind], proximity=spec['proximity'], **meta)
-    local_order, certificate = exact_order([ids[i] for i in raw], requirements)
+    # Admission is monotone. Recheck proximity in each solved order, never in
+    # frozen raw ranks alone; at least one pending edge disappears per pass.
+    dynamic_trace = []
+    deadline = time.monotonic() + 120
+    iteration = 0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise UnsolvedOrder('Dynamic ranking exceeded its exact-solver time budget')
+        local_order, certificate = exact_order([ids[i] for i in raw], requirements, timeout_seconds=remaining)
+        current = {ids[raw[i]]: k+1 for k, i in enumerate(local_order)}
+        iteration += 1
+        added = []
+        for row in audit:
+            if row['eligible']: continue
+            w, l = row['winner_id'], row['loser_id']
+            gap = abs(current[w] - current[l])
+            if gap > spec['proximity']: continue
+            row.update(eligible=True, qualification=f'proximity_iteration_{iteration}',
+                       admission_iteration=iteration, winner_rank_at_admission=current[w],
+                       loser_rank_at_admission=current[l], rank_gap_at_admission=gap)
+            requirements.append(dict(before=row['winner_raw_rank']-1,
+                                     after=row['loser_raw_rank']-1, priority=row['priority']))
+            added.append(dict(iteration=iteration, type=row['type'], winner_id=w, loser_id=l,
+                winner_rank=current[w], loser_rank=current[l], rank_gap=gap,
+                raw_rank_gap=row['raw_rank_gap'], p_loser_higher_merit=row['p_loser_higher_merit']))
+        dynamic_trace.extend(added)
+        if not added: break
     order = [raw[i] for i in local_order]
     positions = {ids[i]: k+1 for k, i in enumerate(order)}
     audit.sort(key=lambda r: (r['priority'], r['winner_id'], r['loser_id']))
@@ -205,7 +233,7 @@ def order_policy(state):
         raw_order=[ids[i] for i in raw], unranked=sorted(i for i in ids if i not in positions),
         confidence_lock_count=sum(r['type'] == 'merit_protection' for r in audit),
         protected_team_ids=[ids[i] for i in protected], protection_exceptions=[], audit=audit,
-        policy_inputs=state['payload'], optimization=certificate,
+        policy_inputs=state['payload'], optimization=certificate, dynamic_trace=dynamic_trace,
         completion='Exact lexicographic global optimum, then minimum raw-order inversions and stable IDs.',
         rank_interpretation='Policy order; uncertainty summaries describe raw earned merit separately.')
 

@@ -130,7 +130,7 @@ def validate_candidate(result, inputs):
                                           policy_input['probabilities'], season=inputs['season'],
                                           specification=CANONICAL, opponents=opponents))
     for field in ('specification', 'policy_sha256', 'policy_inputs', 'order', 'raw_order',
-                  'unranked', 'confidence_lock_count', 'protected_team_ids', 'protection_exceptions', 'audit', 'optimization'):
+                  'unranked', 'confidence_lock_count', 'protected_team_ids', 'protection_exceptions', 'audit', 'optimization', 'dynamic_trace'):
         if result[field] != expected[field]:
             raise ValueError('Candidate v5 policy replay failed: ' + field)
     rows = result['teams']

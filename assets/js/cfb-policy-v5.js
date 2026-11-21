@@ -1,7 +1,7 @@
 /* FCS-aware policy replay; probabilities and raw merit remain immutable. */
 ((global)=>{
   'use strict';
-  const defaults=Object.freeze({version:'margin-of-merit-order-v5',merit_protection:.9,head_to_head:.9,common_opponents:.7,
+  const defaults=Object.freeze({version:'margin-of-merit-order-2026-11-21',merit_protection:.9,head_to_head:.95,common_opponents:.7,
     proximity:2,equal_records_only:true,undefeated_p4_protection:true});
   const priorities={undefeated_p4:0,head_to_head:1,common_opponents:2,merit_protection:3};
   const sum=list=>list.reduce((a,b)=>a+b,0);
@@ -72,7 +72,24 @@
         threshold:spec[type],proximity:spec.proximity,...meta});
     }
     const solver=typeof module!=='undefined'&&module.exports?require('./cfb-exact-order.js'):global.CFBExactOrder;
-    const solved=await solver.solve(raw.map(i=>ids[i]),requirements,loadHighs,solverOptions.subsetLimit??18);
+    const dynamicTrace=[];let solved,iteration=0;
+    // Only pending comparisons can be added: a finite, monotone fixed point.
+    while(true) {
+      solved=await solver.solve(raw.map(i=>ids[i]),requirements,loadHighs,solverOptions.subsetLimit??18);
+      const current=new Map(solved.order.map((i,k)=>[ids[raw[i]],k+1]));
+      iteration++;let added=0;
+      for(const row of audit) {
+        if(row.eligible)continue;
+        const w=row.winner_id,l=row.loser_id,gap=Math.abs(current.get(w)-current.get(l));
+        if(gap>spec.proximity)continue;
+        Object.assign(row,{eligible:true,qualification:`proximity_iteration_${iteration}`,admission_iteration:iteration,
+          winner_rank_at_admission:current.get(w),loser_rank_at_admission:current.get(l),rank_gap_at_admission:gap});
+        requirements.push({before:row.winner_raw_rank-1,after:row.loser_raw_rank-1,priority:row.priority});
+        dynamicTrace.push({iteration,type:row.type,winner_id:w,loser_id:l,winner_rank:current.get(w),loser_rank:current.get(l),
+          rank_gap:gap,raw_rank_gap:row.raw_rank_gap,p_loser_higher_merit:row.p_loser_higher_merit});added++;
+      }
+      if(!added)break;
+    }
     const order=solved.order.map(i=>raw[i]),positions=new Map(order.map((i,k)=>[ids[i],k+1]));
     audit.sort((a,b)=>a.priority-b.priority||a.winner_id-b.winner_id||a.loser_id-b.loser_id);
     const graph=new Map([...positions.keys()].map(id=>[id,new Map()]));
@@ -95,7 +112,7 @@
       row.resolution='Global lexicographic optimum: direct results, common opponents, merit protection, raw inversions, stable IDs.';
     }
     return {specification:spec,order:order.map(i=>ids[i]),raw_order:raw.map(i=>ids[i]),unranked:ids.filter(id=>!positions.has(id)).sort((a,b)=>a-b),
-      confidence_lock_count:audit.filter(r=>r.type==='merit_protection').length,protected_team_ids:protectedTeams.map(i=>ids[i]),protection_exceptions:[],audit,optimization:solved.optimization};
+      confidence_lock_count:audit.filter(r=>r.type==='merit_protection').length,protected_team_ids:protectedTeams.map(i=>ids[i]),protection_exceptions:[],audit,optimization:solved.optimization,dynamic_trace:dynamicTrace};
   }
   const api={run,defaults};if(typeof module!=='undefined'&&module.exports)module.exports=api;else global.CFBPolicyV5=api;
 })(globalThis);

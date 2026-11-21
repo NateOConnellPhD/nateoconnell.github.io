@@ -34,7 +34,7 @@ class V5Tests(unittest.TestCase):
     def test_or_window_thresholds(self):
         spec=replace(CANONICAL,equal_records_only=False)
         for gap, probability, eligible, route in ((1,.99,True,'proximity'),(2,.99,True,'proximity'),
-                (3,.99,False,'neither'),(3,.85,True,'probability'),(3,.9,False,'neither'),(1,.9,True,'proximity')):
+                (3,.99,False,'neither'),(3,.85,True,'probability'),(3,.95,False,'neither'),(1,.95,True,'proximity')):
             with self.subTest(gap=gap, probability=probability):
                 r=self.result(games=[(gap+1,1,20,10)], probabilities=[(1,gap+1,probability)],spec=spec)
                 row=self.evidence(r)[0]
@@ -102,7 +102,9 @@ class V5Tests(unittest.TestCase):
         from pathlib import Path
         states=[fixture(n=3,games=[(3,2,20,17),(2,1,26,10)],spec=replace(CANONICAL,equal_records_only=False)),
                 fixture(n=3,games=[(1,2,10,0),(2,3,10,0),(3,1,10,0)]),
-                fixture(games=[(2,3,20,10),(3,1,20,10)],spec=replace(CANONICAL,equal_records_only=False))]
+                fixture(games=[(2,3,20,10),(3,1,20,10)],spec=replace(CANONICAL,equal_records_only=False)),
+                fixture(n=6,games=[(4,5,24,21),(5,2,24,21),(4,6,24,21),(6,2,24,21)],
+                        probabilities=[(2,5,.93)],spec=replace(CANONICAL,head_to_head=.9,equal_records_only=False))]
         node=os.environ.get('NODE')
         if not node: self.skipTest('Set NODE for JavaScript parity')
         output=subprocess.run([node,str(Path(__file__).with_name('check_policy_v5.cjs'))],
@@ -115,6 +117,23 @@ class V5Tests(unittest.TestCase):
     def test_hard_cycle(self):
         with self.assertRaises(UnsolvedOrder):
             exact_order([1,2,3],[dict(before=a,after=b,priority=0) for a,b in ((0,1),(1,2),(2,0))])
+
+    def test_dynamic_admission_uses_current_not_raw_ranks(self):
+        result = self.result(n=6, games=[(4,5,24,21),(5,2,24,21),(4,6,24,21),(6,2,24,21)],
+            probabilities=[(2,5,.93)], spec=replace(CANONICAL,head_to_head=.9,equal_records_only=False))
+        self.assertEqual(result['order'], [1,3,4,5,6,2])
+        self.assertEqual([(r['winner_id'],r['loser_id'],r['iteration']) for r in result['dynamic_trace']],
+                         [(5,2,1),(6,2,1)])
+        self.assertEqual([r['raw_rank_gap'] for r in result['dynamic_trace']], [3,4])
+        self.assertTrue(all(r['rank_gap'] <= 2 for r in result['dynamic_trace']))
+        self.assertTrue(all(r['eligible'] for r in self.evidence(result) if r.get('admission_iteration')))
+
+    def test_unconstrained_indiana_fills_by_global_merit_inversions(self):
+        # Raw: Alabama, Indiana, Texas, Tennessee. Fix Texas > Tennessee > Alabama.
+        order, proof = exact_order([1,2,3,4], [dict(before=2,after=3,priority=1),
+                                             dict(before=3,after=0,priority=1)])
+        self.assertEqual(order, [1,2,3,0])  # Indiana goes ahead of the constrained chain.
+        self.assertEqual(proof['raw_inversions'], 3)
 
     def test_frozen_ties_and_no_posterior_mutation(self):
         s=fixture(means=[2,2,1,0],games=[(2,1,21,20)],spec=replace(CANONICAL,equal_records_only=False))

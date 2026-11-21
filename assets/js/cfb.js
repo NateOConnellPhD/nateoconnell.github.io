@@ -157,7 +157,7 @@
   const ruleNames = {merit_protection: 'Merit protection', undefeated_p4: 'Undefeated Power Four protection',
     head_to_head: 'Head-to-head', common_opponents: 'Common opponents'};
   const teamName = id => current?.teams.find(t => t.id === id)?.name || current?.policy_inputs?.opponents?.find(t => t.id === id)?.name || String(id);
-  const isV5 = () => current?.specification?.version === 'margin-of-merit-order-v5';
+  const isV5 = () => current?.specification?.version === 'margin-of-merit-order-2026-11-21';
   const wins = team => team.wins;
   const losses = team => team.losses;
   function settings() {
@@ -171,8 +171,8 @@
     const places=el('proximity').value;
     el('proximity-value').textContent = `±${places} places`;
     el('protect-rule').textContent = `At least ${el('protect').value}% probability of greater merit creates a merit preference. Qualifying direct and common-opponent results take priority when they conflict.`;
-    el('direct-rule').textContent = `A decisive direct result qualifies if opposing merit probability is below ${el('direct').value}% OR the teams are within ${places} places in the raw merit order. Any direct meeting rules out common-opponent fallback.`;
-    el('common-rule').textContent = `For teams that never met, dominance against every shared FBS opponent qualifies if opposing merit probability is below ${el('common').value}% OR raw ranks are within ${places} places.`;
+    el('direct-rule').textContent = `A decisive direct result qualifies if opposing merit probability is below ${el('direct').value}% OR the teams are within ${places} places in the current order. Nearby comparisons are rechecked after each reorder. Any direct meeting rules out common-opponent fallback.`;
+    el('common-rule').textContent = `For teams that never met, dominance against every shared FBS opponent qualifies if opposing merit probability is below ${el('common').value}% OR current ranks are within ${places} places.`;
     el('record-rule').textContent = 'Compare actual results only when overall wins and losses match, including FCS games.';
     el('boundary-rule').textContent = 'Merit protection includes equality at its threshold; probability eligibility uses strictly below. Proximity is a separate OR condition. Conflicts are resolved globally: direct results, common opponents, merit, then the fewest changes to the raw order.';
   }
@@ -283,8 +283,9 @@
       const ids=current.policy_inputs.teams.map(t=>t.id), p=current.policy_inputs.probabilities;
       paragraph(details, `Merit preference: ${percent(p[ids.indexOf(row.winner_id)][ids.indexOf(row.loser_id)])} probability that ${teamName(row.winner_id)} has greater merit; selected threshold ${percent(row.threshold)}.`);
     } else paragraph(details, `${ruleNames[row.type]}. Probability that ${teamName(row.loser_id)} has higher earned merit: ${percent(row.p_loser_higher_merit)}.${row.threshold != null ? ` Selected threshold: ${percent(row.threshold)}.` : ''}`);
-    const routes = {both: 'probability and proximity', probability: 'probability threshold', proximity: 'raw-rank proximity', neither: 'neither condition', posterior_merit: 'merit probability', hard_undefeated_p4: 'undefeated-team restriction'};
-    if (row.qualification) paragraph(details, `Qualifying route: ${routes[row.qualification] || row.qualification}. Raw-rank distance: ${row.raw_rank_gap} places.${row.proximity != null ? ` Selected window: ±${row.proximity}.` : ''}`);
+    const routes = {both: 'probability and proximity', probability: 'probability threshold', proximity: 'initial ranking proximity', neither: 'neither condition', posterior_merit: 'merit probability', hard_undefeated_p4: 'undefeated-team restriction'};
+    if (row.admission_iteration) paragraph(details, `Admitted after reorder ${row.admission_iteration}: the teams were #${row.winner_rank_at_admission} and #${row.loser_rank_at_admission}, ${row.rank_gap_at_admission} places apart. This comparison stays admitted in subsequent reorders.`);
+    if (row.qualification && !row.admission_iteration) paragraph(details, `Qualifying route: ${routes[row.qualification] || row.qualification}. Raw-rank distance: ${row.raw_rank_gap} places.${row.proximity != null ? ` Selected window: ±${row.proximity}.` : ''}`);
     if (row.game_ids) for (const id of row.game_ids) {
       const game=current.policy_inputs.games.find(g=>g.id===id);
       if (game) paragraph(details, `${teamName(game.home_id)} ${game.home_points} — ${teamName(game.away_id)} ${game.away_points}.`);
