@@ -52,9 +52,18 @@ against the same sampling requirements. The exact marginal replaces the PSIS
 marginal while retaining the disclosed approximate joint quantile coupling.
 Failed sampling, failed exact refits, unresolved ranking constraints, or failed
 publication validation preserve the last successful ranking. The public index
-records an unsuccessful numerical update. Failed data fetching leaves all
-previous files intact. Publication also checks roster/record parity, unique
+records unsuccessful preparation and numerical updates, preserving published
+rankings. Preparation errors include the affected game/season where available.
+An unexplained tied final still requires source verification; a 0–0 score alone
+is not evidence of cancellation. Publication also checks roster/record parity, unique
 ranks, finite summaries, and top-K probability accounting.
+
+Historical reconstruction fills the latest season backward by week before
+moving to older seasons. Older imports are deferred while a newer-season week
+is ready. Each successful job dispatches the next job. A failure stops that
+chain and records the paused state; pushing a correction or manually running
+the workflow resumes it. `backfill.remaining` counts missing weeks in scanned
+seasons; `unscanned_seasons` records years still to be inspected.
 
 The job has a 45-minute timeout and bounds its numerical steps to 35 minutes
 and 1.5 GB under `.codex-tmp/cfb-refit`. It uses one sequential sampling process

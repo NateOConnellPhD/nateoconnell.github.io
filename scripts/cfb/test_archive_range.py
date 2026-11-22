@@ -92,6 +92,16 @@ class ArchiveRangeTests(unittest.TestCase):
                  patch.object(pipeline, 'request_key', side_effect=lambda inputs: f"{inputs['season']}-{inputs['through_week']}"), \
                  patch.object(pipeline, 'matching_snapshot', side_effect=matching) as match, \
                  patch.dict(os.environ, {'GITHUB_OUTPUT': str(output)}), contextlib.redirect_stdout(io.StringIO()):
+                # Even when older years are absent, fill the prior current-season
+                # week before making another historical API request.
+                match.side_effect = lambda index, key, *a, **kw: {'id': 'current'} if key == '2026-2' else None
+                with patch.object(history, 'sync', side_effect=ValueError('bad older-season record')) as fetch:
+                    history.prepare_history()
+                    plan = json.loads((task / 'plan.json').read_text())
+                    self.assertEqual((plan['season'], plan['through_week']), (2026, 1))
+                    self.assertEqual(written[-1]['backfill']['unscanned_seasons'], list(range(2025, 2001, -1)))
+                    fetch.assert_not_called()
+                match.side_effect = matching
                 history.prepare_history()
                 self.assertEqual(fetched, [2023])
                 plan = json.loads((task / 'plan.json').read_text())
@@ -122,6 +132,13 @@ class ArchiveRangeTests(unittest.TestCase):
                 self.assertEqual(written[-1]['backfill']['status'], 'complete')
                 self.assertEqual(written[-1]['backfill']['pending_seasons'], [])
                 self.assertEqual(written[-1]['archive'][-1]['season'], 2002)
+
+                # Include the target year in an import failure, even when it
+                # occurs before a fit plan can be saved.
+                with patch.object(history, 'history_available', return_value=False), \
+                     patch.object(history, 'ensure_history', side_effect=ValueError('unresolved tie')):
+                    with self.assertRaisesRegex(ValueError, 'Historical season 2026: unresolved tie'):
+                        history.prepare_history()
 
     def test_2002_poll_import_and_closed_season_reuse(self):
         with tempfile.TemporaryDirectory(dir=self.base) as temporary:

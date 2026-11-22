@@ -1,6 +1,9 @@
-"""Offline calendar and reuse checks; no inference, network, or output files."""
+"""Offline calendar, reuse and failure checks; temporary fixtures are cleaned."""
 import copy
 import datetime as dt
+import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -128,6 +131,40 @@ class WeeklyTests(unittest.TestCase):
         weekly.mark_completed(index)
         self.assertEqual(index['latest'], 'complete-12')
         self.assertFalse(partial['week_complete'])
+
+
+class PreparationFailureTests(unittest.TestCase):
+    def test_prepare_failure_is_recorded_without_a_plan_and_can_be_committed(self):
+        base = Path(os.environ.get('CFB_TEST_TMP', weekly.DATA.parents[1] / '.codex-tmp/cfb-weekly-review'))
+        created = not base.exists()
+        base.mkdir(parents=True, exist_ok=True)
+        if created: self.addCleanup(base.rmdir)
+        with tempfile.TemporaryDirectory(dir=base) as folder:
+            for historical in (False, True):
+                with self.subTest(historical=historical):
+                    index = {'latest': 'last-good', 'snapshots': [{'id': 'last-good'}],
+                             'backfill': {'status': 'pending', 'remaining': 10}}
+                    output = Path(folder) / ('history' if historical else 'current')
+                    argv = ['weekly_publication.py', 'prepare', '--season', '2026'] + (['--history'] if historical else [])
+                    with patch.object(weekly, 'prepare', side_effect=ValueError('unresolved tied final')), \
+                         patch.object(weekly, 'prepare_history', side_effect=ValueError('unresolved tied final')), \
+                         patch.object(weekly.pipeline, 'read_index', return_value=index), \
+                         patch.object(weekly.pipeline, 'write_index') as write, \
+                         patch.object(weekly, 'refresh_index') as refresh, \
+                         patch.dict(os.environ, {'GITHUB_OUTPUT': str(output)}), patch('sys.argv', argv):
+                        with self.assertRaisesRegex(ValueError, 'unresolved tied final'):
+                            weekly.main()
+                    write.assert_called_once_with(index, weekly.pipeline.PUBLIC)
+                    self.assertEqual(index['latest'], 'last-good')
+                    self.assertEqual(index['snapshots'], [{'id': 'last-good'}])
+                    self.assertEqual(index['backfill']['remaining'], 10)
+                    failure = index['backfill' if historical else 'last_attempt']
+                    self.assertEqual(failure['status'], 'failed')
+                    self.assertEqual(failure['reason'], 'unresolved tied final')
+                    if not historical:
+                        self.assertEqual(index['backfill']['status'], 'blocked')
+                    self.assertEqual(output.read_text(), 'status_saved=true\n')
+                    refresh.assert_not_called()
 
 
 if __name__ == '__main__':

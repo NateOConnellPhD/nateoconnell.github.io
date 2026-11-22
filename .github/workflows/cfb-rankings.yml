@@ -126,7 +126,7 @@ jobs:
         run: python3 -B scripts/cfb/weekly_publication.py failed
       - name: Commit saved data and ranking snapshots
         id: commit
-        if: always() && steps.prepare.outcome == 'success'
+        if: always() && !cancelled() && (steps.prepare.outcome == 'success' || steps.prepare.outputs.status_saved == 'true')
         run: |
           git add -- _cfb_data/seasons assets/data/cfb
           if git diff --cached --quiet; then

@@ -131,9 +131,9 @@
     el('archive').hidden = !el('season').value;
     el('archive-title').textContent = awaitingData ? `${season} season · awaiting saved game data`
       : `${season} season · ${weeks.filter(w => w.row).length} of ${weeks.length} weeks available`;
-    el('archive-status').textContent = index.backfill?.status === 'failed'
-      ? 'Historical fitting stopped on a failed check. Completed weeks remain available; missing weeks are not estimated or filled in.'
-      : index.backfill?.status === 'pending' ? 'Historical reconstruction is in progress. Completed weeks become available as they pass the model checks.'
+    el('archive-status').textContent = ['failed', 'blocked'].includes(index.backfill?.status)
+      ? 'Historical updates are paused after an unsuccessful update. Completed weeks remain available.'
+      : index.backfill?.status === 'pending' ? 'Missing weeks are queued, starting with the latest season and working backward. Each week becomes available after its model checks pass.'
       : 'Select a week to explore the rankings and posterior using games played through that cutoff.';
     grid.className = 'cfb-week-grid';
     for (const {week, row} of weeks) {

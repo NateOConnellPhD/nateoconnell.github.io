@@ -138,10 +138,21 @@ def main():
     parser.add_argument('--history', action='store_true')
     args = parser.parse_args()
     if args.phase == 'prepare':
-        if args.history:
-            prepare_history()
-        else:
-            prepare(args.season, args.refresh_metadata)
+        try:
+            if args.history:
+                prepare_history()
+            else:
+                prepare(args.season, args.refresh_metadata)
+        except (ValueError, KeyError, OSError) as error:
+            # Preparation can fail before a plan exists. Save that failure too,
+            # so the website does not suggest the stopped queue is still running.
+            year = None if args.history else (pipeline.current_season(dt.datetime.now(UTC))
+                                             if args.season == 'current' else int(args.season))
+            pipeline.record_failure(year, historical=args.history, reason=str(error))
+            if os.environ.get('GITHUB_OUTPUT'):
+                with open(os.environ['GITHUB_OUTPUT'], 'a') as handle:
+                    handle.write('status_saved=true\n')
+            raise
     else:
         plan = json.loads(pipeline.PLAN.read_text())
         if args.phase == 'failed':

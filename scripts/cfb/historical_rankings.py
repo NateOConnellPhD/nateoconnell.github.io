@@ -49,13 +49,23 @@ def prepare_history():
                                  read_index, request_key, write_index)
     now = dt.datetime.now(UTC)
     index = read_index()
-    queue, coverage, pending_seasons = [], [], []
+    queue, coverage, pending_seasons, unscanned = [], [], [], []
+    previous_coverage = {row['season']: row for row in index.get('archive', [])}
     fetched_season = None
     for season in range(current_season(now), FIRST_SEASON - 1, -1):
         folder = DATA / str(season)
         # The live workflow refreshes current-season data. Historical sources
         # are fetched just once; explicit data sync can later apply corrections.
         current_saved = all((folder / (name + '.json')).exists() for name in ('teams', 'calendar', 'games', 'games-fcs'))
+        if queue:
+            # Finish the newest season first. Do not let an unrelated older
+            # import fail while a current-season week is ready to be fitted.
+            unscanned.append(season)
+            if not current_saved:
+                pending_seasons.append(season)
+            coverage.append(previous_coverage.get(season, {'season': season, 'weeks': [],
+                            'status': 'awaiting_scan' if current_saved else 'awaiting_data'}))
+            continue
         if not current_saved or not history_available(season, root=DATA):
             # Discover at most one target season and its home-history window per job, then commit its inputs
             # with the checked result. A later bad season must not discard an
@@ -64,9 +74,12 @@ def prepare_history():
                 pending_seasons.append(season)
                 coverage.append({'season': season, 'weeks': [], 'status': 'awaiting_data'})
                 continue
-            if not current_saved:
-                sync(season, os.environ.get('CFBD_API_KEY', ''))
-            ensure_history(season, os.environ.get('CFBD_API_KEY', ''), root=DATA)
+            try:
+                if not current_saved:
+                    sync(season, os.environ.get('CFBD_API_KEY', ''))
+                ensure_history(season, os.environ.get('CFBD_API_KEY', ''), root=DATA)
+            except ValueError as error:
+                raise ValueError(f'Historical season {season}: {error}') from error
             fetched_season = season
         calendar = json.loads((folder / 'calendar.json').read_text())['payload']
         observed = min(instant(json.loads((folder / name).read_text())['retrieved_at'])
@@ -86,11 +99,12 @@ def prepare_history():
                 queue.append({'season': season, 'through_week': week, 'key': key, 'needs_fit': True, 'depth': depth})
         coverage.append({'season': season, 'weeks': sorted(slots, key=lambda s: s['week'])})
     index['archive'] = coverage
-    pending = bool(queue or pending_seasons)
+    pending = bool(queue or pending_seasons or unscanned)
     index['backfill'] = {'status': 'pending' if pending else 'complete', 'remaining': len(queue),
-                         'pending_seasons': pending_seasons, 'first_season': FIRST_SEASON, 'at': now.isoformat()}
-    # Make every season browsable early, then work backward across seasons.
-    queue.sort(key=lambda p: (p['depth'], -p['season']))
+                         'pending_seasons': pending_seasons, 'unscanned_seasons': unscanned,
+                         'first_season': FIRST_SEASON, 'at': now.isoformat()}
+    # Latest season first, working backward by week before importing older years.
+    queue.sort(key=lambda p: (-p['season'], p['depth']))
     plan = {k: v for k, v in queue[0].items() if k != 'depth'} if queue else {
         'season': current_season(now), 'needs_fit': False,
         'history_done': not pending, 'history_scan_only': pending}
