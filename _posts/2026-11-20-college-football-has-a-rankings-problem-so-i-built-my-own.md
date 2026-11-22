@@ -11,7 +11,7 @@ tags:
 comments: true
 title: College Football Has a Rankings Problem. So I Built My Own.
 cover: /assets/images/editor-77c20c5f-6ae6-4a9b-ab76-1eb6da83e862.jpg
-description: The CFP committee has no transparency when it comes to college football rankings. From my perspective, they're basically determining playoff off vibes. So I sought out to see if I could do better. Introducing "Margin of Merit", a transparent Bayesian ranking system that evaluates what teams have actually earned through wins, losses, scoring margins, and strength of schedule. No preseason bias, no arbitrary committee decisions—just results, statistical inference, and an honest accounting of uncertainty.
+description: The CFP committee has no transparency when it comes to college football rankings. So I sought out to see if I could do better. Introducing "Margin of Merit", a transparent Bayesian ranking system that evaluates what teams have actually earned through wins, losses, scoring margins, and strength of schedule. No preseason bias, no arbitrary committee decisions—just results, statistical inference, and an honest accounting of uncertainty.
 ---
 *Introducing the CFB Margin of Merit Rankings: a transparent, Bayesian approach to evaluating what teams have actually earned on the field.*
 
