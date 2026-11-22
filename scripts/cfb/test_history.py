@@ -59,6 +59,36 @@ class HistoryTests(PublicationTests):
         load.assert_called_once_with(2026, through_week=4)
         self.assertEqual(calls, [(2026, {'through_week': 4, 'exact_loo': True})])
 
+    def test_sunday_cutoff_and_completion_evidence_survive_publication(self):
+        from pathlib import Path
+        import types
+        at = '2026-11-22T13:17:00+00:00'
+        self.inputs.update(through_week=12, cutoff=at)
+        self.inputs['source'] = {name: {'payload_sha256': name, 'retrieved_at': at}
+                                for name in ('teams', 'calendar', 'games', 'games-fcs')}
+        self.result['data_cutoff'] = at
+        proof = {'basis': 'all_scheduled_games_final', 'checked_at': at,
+                 'calendar_end': '2026-11-23T07:59:00+00:00', 'game_ids': [1],
+                 'source_sha256': {name: name for name in self.inputs['source']}}
+        plan = Path(self.temp.name) / 'plan.json'
+        plan.write_text(json.dumps({'season': 2026, 'key': live.request_key(self.inputs),
+                                   'through_week': 12, 'as_of': at, 'week_completion': proof}))
+        calls = []
+        runner = types.SimpleNamespace(run=lambda season, **kw: calls.append((season, kw)) or self.result)
+        with patch.object(live, 'PLAN', plan), patch.object(live, 'load_inputs', return_value=self.inputs) as load, \
+             patch.dict('sys.modules', {'fit_saved_season': runner}), patch('posterior_summary.attach'):
+            row = live.complete(self.public)
+            load.assert_called_once_with(2026, through_week=12, as_of=at)
+            self.assertEqual(calls, [(2026, {'through_week': 12, 'exact_loo': True, 'as_of': at})])
+            self.assertEqual(row['week_completion'], proof)
+            self.assertEqual(json.loads((self.public / row['json']).read_text())['week_completion'], proof)
+            # A changed pending-game feed must invalidate the completion proof,
+            # even when the eligible final-game set and request key are unchanged.
+            self.inputs['source']['games-fcs']['payload_sha256'] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'completed-week evidence changed'):
+                live.complete(self.public)
+            self.assertEqual(len(calls), 1)
+
 
 if __name__ == '__main__':
     names = [n for n in HistoryTests.__dict__ if n.startswith('test_')]

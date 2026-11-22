@@ -223,6 +223,8 @@ def publish(result, inputs, key, now, destination=PUBLIC):
            'published_at': snapshot['published_at'], 'data_observed_at': snapshot['data_observed_at'],
            'data_cutoff': snapshot['data_cutoff'], 'request_key': key, 'sha256': checksum,
            'json': relative.with_suffix('.json').as_posix(), 'csv': relative.with_suffix('.csv').as_posix()}
+    if result.get('week_completion'):
+        row['week_completion'] = result['week_completion']
     index['snapshots'] = [r for r in index['snapshots'] if r['id'] != ident] + [row]
     index['snapshots'].sort(key=lambda r: (r['season'], instant(r['data_cutoff']), instant(r['published_at'])), reverse=True)
     index['latest'] = index['snapshots'][0]['id']
@@ -260,11 +262,20 @@ def prepare(season, refresh_metadata=False):
 def complete(destination=PUBLIC):
     plan = json.loads(PLAN.read_text())
     week = plan.get('through_week')
-    inputs = load_inputs(plan['season'], through_week=week)
+    cutoff = {'as_of': plan['as_of']} if plan.get('as_of') else {}
+    inputs = load_inputs(plan['season'], through_week=week, **cutoff)
     if request_key(inputs) != plan['key']:
         raise ValueError('Inputs or implementation changed after preparing the update')
+    proof = plan.get('week_completion')
+    if proof:
+        sources = {name: source['payload_sha256'] for name, source in inputs['source'].items()}
+        if (sources != proof['source_sha256'] or proof['checked_at'] != inputs['cutoff']
+                or proof['game_ids'] != sorted(g['id'] for g in inputs['games'] if g['week'] == week)):
+            raise ValueError('The completed-week evidence changed after preparing the update')
     index = read_index(destination)
     previous = matching_snapshot(index, plan['key'], destination, historical=week is not None)
+    if previous and (previous.get('week_complete') is False or (proof and not previous.get('week_completion'))):
+        previous = None
     if previous:
         index['last_attempt'] = {'season': plan['season'], 'at': dt.datetime.now(UTC).isoformat(), 'status': 'unchanged'}
         write_index(index, destination)
@@ -272,8 +283,10 @@ def complete(destination=PUBLIC):
         return previous
     from fit_saved_season import run
     from posterior_summary import attach
-    result = run(plan['season'], through_week=week, exact_loo=True)
+    result = run(plan['season'], through_week=week, exact_loo=True, **cutoff)
     attach(result, inputs, TASK)
+    if proof:
+        result['week_completion'] = proof
     row = publish(result, inputs, plan['key'], dt.datetime.now(UTC), destination)
     print(json.dumps({'published': row['id'], 'season': row['season'], 'games': row['games']}))
     return row

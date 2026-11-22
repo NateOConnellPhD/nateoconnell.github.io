@@ -8,11 +8,12 @@ import datetime as dt
 import json
 import os
 import sys
+from zoneinfo import ZoneInfo
 
 import update_rankings as pipeline
 from historical_rankings import closed_weeks, prepare_history
 from season_inputs import load_fit_inputs as load_inputs
-from sync_data import DATA, UTC, encoded, instant, read_saved, sync
+from sync_data import DATA, UTC, encoded, instant, read_saved, sync, normalize, merge_games
 from home_history_inputs import ensure_history
 
 
@@ -23,6 +24,15 @@ def calendar_for(season, root=DATA):
     return saved['payload']
 
 
+def sunday_open(end):
+    """Open Sunday morning, while CFBD's normal week ends early Monday."""
+    local = end.astimezone(ZoneInfo('America/New_York'))
+    sunday = (local - dt.timedelta(days=(local.weekday() + 1) % 7)).replace(
+        hour=8, minute=0, second=0, microsecond=0).astimezone(UTC)
+    # Unusual calendar boundaries keep their original end date.
+    return sunday if dt.timedelta(0) < end - sunday <= dt.timedelta(days=2) else end
+
+
 def current_plan(season, now, root=DATA, destination=pipeline.PUBLIC):
     saved = read_saved(root / str(season) / 'games.json', season, '/games',
                        {'year': season, 'seasonType': 'both', 'classification': 'fbs'})
@@ -31,18 +41,48 @@ def current_plan(season, now, root=DATA, destination=pipeline.PUBLIC):
     fcs = read_saved(root / str(season) / 'games-fcs.json', season, '/games',
                      {'year': season, 'seasonType': 'both', 'classification': 'fcs'})
     if fcs is None: raise ValueError(f'Missing saved FCS games for {season}; sync the season first')
-    weeks = closed_weeks(calendar_for(season, root), min(now, instant(saved['retrieved_at']), instant(fcs['retrieved_at'])))
+    observed = min(now, instant(saved['retrieved_at']), instant(fcs['retrieved_at']))
+    calendar = read_saved(root / str(season) / 'calendar.json', season, '/calendar', {'year': season})
+    if calendar is None: raise ValueError(f'Missing saved calendar for {season}')
+    weeks = closed_weeks(calendar['payload'], observed)
+    early = {}
+    candidates = [w for w in calendar['payload'] if w['seasonType'] == 'regular' and w['week'] >= 0
+                  and sunday_open(instant(w['endDate'])) <= observed < instant(w['endDate'])]
+    if candidates:
+        teams = read_saved(root / str(season) / 'teams.json', season, '/teams/fbs', {'year': season})
+        if teams is None: raise ValueError(f'Missing saved teams for {season}')
+        normalized = normalize(season, teams['payload'], calendar['payload'],
+                               merge_games(saved['payload'], fcs['payload']), observed, include_fcs=True)
+        for window in candidates:
+            # Include pending Division I games, but exclude cancelled games,
+            # FCS playoffs, and opponents outside the statistical scope.
+            games = [g for g in normalized['games'] if g['week'] == window['week']
+                     and g['season_type'] == 'regular'
+                     and set(g['exclusions']) <= {'not_completed', 'future_game'}]
+            if games and all(g['eligible'] for g in games):
+                early[window['week']] = {
+                    'basis': 'all_scheduled_games_final', 'checked_at': observed.isoformat(),
+                    'calendar_end': instant(window['endDate']).isoformat(),
+                    'game_ids': sorted(g['id'] for g in games),
+                    'source_sha256': {name: source['payload_sha256'] for name, source in
+                        (('teams', teams), ('calendar', calendar), ('games', saved), ('games-fcs', fcs))}}
+    weeks = sorted(set(weeks) | set(early), reverse=True)
     for week in weeks:
+        cutoff = {'as_of': observed.isoformat()} if week in early else {}
         try:
-            inputs = load_inputs(season, through_week=week, root=root)
+            inputs = load_inputs(season, through_week=week, root=root, **cutoff)
         except ValueError as error:
             if str(error) == 'No eligible completed games at the selected cutoff':
                 continue
             raise
         key = pipeline.request_key(inputs)
         reusable = pipeline.matching_snapshot(pipeline.read_index(destination), key, destination, historical=True)
+        if reusable and (reusable.get('week_complete') is False
+                         or (week in early and not reusable.get('week_completion'))):
+            reusable = None
         return {'mode': 'current', 'season': season, 'through_week': week,
-                'key': key, 'needs_fit': reusable is None}
+                'key': key, 'needs_fit': reusable is None, **cutoff,
+                **({'week_completion': early[week]} if week in early else {})}
     return {'mode': 'current', 'season': season, 'key': 'no-completed-week',
             'needs_fit': False, 'no_completed_week': True}
 
@@ -55,7 +95,13 @@ def mark_completed(index, root=DATA):
         end = ends[row['season']].get(row['week'])
         # Compare with the snapshot's own cutoff, never today's clock. An old
         # partial-week snapshot does not become complete just by getting older.
-        row['week_complete'] = bool(end is not None and instant(row['data_cutoff']) >= end)
+        cutoff = instant(row['data_cutoff'])
+        proof = row.get('week_completion') or {}
+        sunday_final = (end is not None and proof.get('basis') == 'all_scheduled_games_final'
+                        and proof.get('checked_at') == row['data_cutoff']
+                        and proof.get('calendar_end') == end.isoformat()
+                        and bool(proof.get('game_ids')) and sunday_open(end) <= cutoff < end)
+        row['week_complete'] = bool(end is not None and (cutoff >= end or sunday_final))
     complete = [r for r in index['snapshots'] if r['week_complete']]
     latest = max(complete, key=lambda r: (r['season'], r['week'], instant(r['data_cutoff']),
                                         instant(r['published_at'])), default=None)

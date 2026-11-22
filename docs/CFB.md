@@ -6,7 +6,7 @@
 
 The production entry point is now `.github/workflows/cfb-rankings.yml`, named
 **Update and publish CFB rankings**. Pushing changes to that workflow or
-`scripts/cfb/` starts a current-season update automatically. It also runs Mondays
+`scripts/cfb/` starts a current-season update automatically. It also runs Sundays
 at 8:17 a.m. America/New_York, August–December, and supports **Run workflow**
 with season `current` (or a specified year from 2002). January–July selects the
 previous season for manual updates. The older data-only workflow is for
@@ -30,14 +30,18 @@ See CFB-V6.md for the current model and validation limits.
 
 Every successful snapshot is immutable. The index retains earlier weeks and
 revisions, but only completed weeks appear in the public rankings and history.
-`weekly_publication.py` selects the last regular-season calendar week whose end
-is no later than both the current time and the saved game response. It passes
-that week through the existing historical cutoff/fitting path. Midweek games
-from the next week cannot move the current pointer forward. The Monday schedule
-runs after the provider's calendar week ends (typically early Monday morning).
+`weekly_publication.py` selects the latest completed regular-season week. Starting
+Sunday at 8 a.m. Eastern, it can publish before CFBD's early-Monday boundary when
+both saved feeds show every in-scope game for that week as final. Unfinished FBS
+or FCS games hold the week back; explicit cancellations and no-contests do not.
+The Sunday plan carries its observed cutoff, game IDs and source hashes through
+fitting and publication. Midweek games cannot advance the current pointer.
 
-Index rows record `week_complete` by comparing their own saved cutoff with the
-calendar end, not today's date. Earlier partial-week snapshots and prior-methodology rankings are excluded from selection, current rankings and trajectories. The v6 migration invalidates every prior-methodology fit and ranking. All seasons and weeks enter the refit queue.
+Index rows record `week_complete` from their own saved cutoff and calendar end,
+or the checked Sunday completion evidence, never today's date. Earlier partial-week
+snapshots and prior-methodology rankings are excluded from selection, current
+rankings and trajectories. The model migration invalidates every prior-methodology
+fit and ranking. All seasons and weeks enter the refit queue.
 An unchanged input/implementation identity reuses the published
 snapshot without installing packages or fitting, even if numerical caches
 have expired. A separate Actions cache can reuse posterior/LOO arrays after
@@ -232,7 +236,7 @@ are explicit maintenance operations with labeled result revisions.
 
 Proposed update sequence:
 
-1. Once each Monday morning after the calendar week closes, make two bulk current-season
+1. Once each Sunday morning after Saturday's games, make two bulk current-season
    games requests (FBS and FCS) and retain the response and query provenance. The documented
    `/games` endpoint accepts a year with no week filter and returns a game array:
    https://api.collegefootballdata.com/api/games
@@ -260,17 +264,17 @@ Proposed update sequence:
    A correction creates an explicit revision; it must not silently rewrite what
    an earlier post displayed. Candidate and failed runs are not official ranks.
 
-The schedule uses one weekly refresh, now Monday to enforce completed weeks,
+The schedule uses one Sunday morning refresh with a completed-game check,
 instead of hourly/daily polling.
 With season metadata already stored, the normal in-season schedule uses two
 games requests per week (roughly eight to ten per month), plus the separately cached polls feed. If eligible data have
 not changed, keep the prior result and skip inference. No routine off-season
-polling or historical refresh is needed. Games assigned to an open calendar
-week wait until that week closes. Provider-late results or corrections enter the
+polling or historical refresh is needed. An open calendar week can publish on
+Sunday only with the final-game evidence described above. Provider-late results or corrections enter the
 next scheduled update unless an explicit extra refresh is requested. The cutoff
 uses observed final status and kickoff time; the provider does not expose an
 exact historical finalization timestamp. Allow an owner-triggered refresh for
-those exceptions/corrections. The Monday hour specifies its time zone. Scheduled
+those exceptions/corrections. The Sunday hour specifies its time zone. Scheduled
 Actions can be delayed or dropped, so preserve the last valid result and its
 timestamp if no successful update is available:
 https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
@@ -279,7 +283,7 @@ GitHub-token commits do not trigger a Pages build automatically. The eventual
 publication workflow must explicitly request a build, as the existing
 publications workflow does. Concurrent publication jobs must handle repository
 changes without force pushing or losing unrelated edits. The data-sync workflow
-is manual only; the separate rankings workflow defines the Monday schedule. Model computation
+is manual only; the separate rankings workflow defines the Sunday schedule. Model computation
 requires no OpenAI API calls.
 
 ## Historical and live data
