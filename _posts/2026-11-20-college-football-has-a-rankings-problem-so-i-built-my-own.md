@@ -11,9 +11,19 @@ tags:
 comments: true
 title: College Football Has a Rankings Problem. So I Built My Own.
 cover: /assets/images/editor-77c20c5f-6ae6-4a9b-ab76-1eb6da83e862.jpg
-description: The CFP committee has no transparency when it comes to college football rankings. They're basically selecting them off vibes. Introducing "Margin of Merit", a transparent Bayesian ranking system that evaluates what teams have actually earned through wins, losses, scoring margins, and strength of schedule. No preseason bias, no arbitrary committee decisions—just results, statistical inference, and an honest accounting of uncertainty.
+description: The CFP committee has no transparency when it comes to college football rankings. From my perspective, they're basically determining playoff off vibes. So I sought out to see if I could do better. Introducing "Margin of Merit", a transparent Bayesian ranking system that evaluates what teams have actually earned through wins, losses, scoring margins, and strength of schedule. No preseason bias, no arbitrary committee decisions—just results, statistical inference, and an honest accounting of uncertainty.
 ---
 *Introducing the CFB Margin of Merit Rankings: a transparent, Bayesian approach to evaluating what teams have actually earned on the field.*
+
+You can find these rankings [here](https://nateoconnell.com/blog/cfb/) and explore them for each week dating back to 2002. 
+
+**TL;DR:** College football rankings require two different things: statistical inference and competitive adjudication. I use scoring margins and Bayesian inference to evaluate what teams have earned across an enormous, incomplete network of FBS and FCS games. That allows me to account for opponent quality, strength of schedule, and uncertainty when comparing teams that may never have played each other.
+
+But statistical inference is not the same as deciding how to honor results on the field. When two teams have the same record and are sufficiently close in the merit rankings, or the statistical evidence doesn't clearly separate them, their actual head-to-head result should take priority. Common-opponent records provide a secondary comparison when teams haven't played each other.
+
+**The model uses scores to understand the larger network of games. The ranking rules use actual wins and losses to resolve qualifying direct comparisons.** The objective isn't to predict who would win tomorrow. It's to determine what teams have earned through the games they actually played.
+
+**The Long Version:**
 
 I'm a big sports fan, and one of my favorite sports is College Football. Not football in general, but specifically College Football. The tradition, the pageantry, the unpredictability, the chaos. Every fall, college football fans end up in the same argument. Which teams deserve to be ranked the highest at the end of the season? This argument has evolved over the years. Before the BCS it was simply who deserved to be crowned the national champion. Then it was who deserves to play in the National Championship. Then it became who deserves to play in the 4-team College Football Playoff. Now it's the 12-team playoff, and there is already discussion of expanding it further. And there's been plenty of controversy over the years -- 2023 FSU, 2004 Auburn, 2003 USC, 2011 Oklahoma State -- just to name a few. Just last year we had 10–2 Notre Dame left out of the 12-team CFP. And I don't see this going away; the controversy just shifts. If the playoff eventually expands to 24 teams, the debate becomes who gets that 24th spot, while the arguments at the top turn to first-round byes and home-field advantage. 
 
@@ -336,6 +346,31 @@ This produces a strength-of-schedule measure between 0 and 1. An SOS of 0.45 mea
 
 And we can quantify the uncertainty. For example, we can estimate the probability that Georgia's schedule was genuinely more difficult than Oregon's, rather than pretending their estimated SOS ranks are exact. The entire measure comes from current-season game results. We don't assume the SEC or Big Ten is stronger because of reputation. If one conference is genuinely stronger, that should emerge from its results against the rest of the network.
 
+### Does the choice of reference team matter?
+
+One reasonable question is why I chose the 25th-best team as the reference. Why not the 10th, 12th, or 50th?
+
+There's no statistical criterion that determines the correct reference. It isn't a parameter to estimate or optimize. The underlying Bayesian model, estimated team strengths, and game predictions are identical regardless of which reference I choose. **The reference defines what we're measuring merit against.**
+
+My first choice was 25, motivated by the question: *How would a ranked-caliber team have performed against this opponent?* But if the purpose is to evaluate teams for a 12-team playoff, the 12th-strongest team is arguably the more appropriate benchmark. We're then asking how much each team accomplished relative to what a *playoff-caliber team* would have been expected to accomplish. If the playoff expands to 24 teams, the reference can move to 24.
+
+But how sensitive are the rankings to this choice?
+
+I recalculated merit and the final rankings using reference teams ranging from 5th to 65th in latent strength, using the same posterior draws from the November 19, 2026 release. No model refitting was necessary.
+
+| Reference | Top 12 retained | Top 25 retained | Rank correlation |
+|---|---:|---:|---:|
+| 5th | 12/12 | 23/25 | 0.994 |
+| 12th | 12/12 | 25/25 | 0.998 |
+| 25th (original) | 12/12 | 25/25 | 1.000 |
+| 50th | 11/12 | 25/25 | 0.997 |
+
+The rankings are stable. Moving from the 25th to the 12th reference preserves every team in both the Top 12 and Top 25, with a Spearman rank correlation of 0.998 across all 138 FBS teams. Georgia and Utah exchange the top two positions, as do Miami and UCLA at fourth and fifth, but the largest movement within the Top 25 is only three positions.
+
+The reference does affect how wins and losses are valued. A stronger reference makes nearly every loss costly, so merit tracks win percentage more closely. A weaker reference makes losses against strong opponents less costly, allowing strength of schedule to play a larger role. That's a meaningful philosophical distinction, but the sensitivity analysis suggests it has relatively little influence on the overall rankings.
+
+**For the current 12-team playoff, I'm adopting the 12th-strongest team as the reference.** Not because it produces better-looking rankings, but because it represents the standard of performance most relevant to the decision the rankings are intended to inform. I've also added a selector for this in the program rankings, to see how evaluations shift by using 2, 4, or 24 as well for the BCS era, 4 team playoff and eventual 24 team playoff rankings. 
+
 ## But actual results should still matter most
 
 I don't want to create another computer ranking that ignores the obvious evidence of what happened on the field. Suppose two teams both finish 10–2, and one defeated the other. I think that head-to-head result should matter. But that doesn't mean it should **automatically** put the winner ahead regardless of everything else either. A single game is part of a season, not the entire season. And I certainly don't want a head-to-head result between teams ranked 12th and 24th to make the algorithm simply swap those teams, dragging unrelated teams along with them.
@@ -382,7 +417,7 @@ Indiana shows how the fill-in works. Its merit (5.18) is below Alabama's (5.52) 
 
 *Figure 5. The existing illustration depicts the previous V4 ranking hierarchy and needs replacement with the current hierarchy: eligible direct results first, eligible common-opponent results second, conditional merit protection third, everyone else filled in by merit, with eligibility determined by posterior thresholds **or** proximity within two positions in the current ordering. The underlying merit model does not change when these controls move.*
 
-There is also one separate, explicit fairness rule: an undefeated Power Four team with at least eight completed FBS games and no losses to FBS or FCS opponents stays ahead of teams with two or more total losses. That is a stated protection for an undefeated résumé, not something I claim the likelihood mathematically proves, and readers will be able to turn it on or off. **Merit establishes the baseline; actual head-to-head and common-opponent results determine qualifying comparisons under the published rules.** Where the rules conflict, the conflict is visible rather than concealed inside a set of arbitrary weights.
+**Merit establishes the baseline; actual head-to-head and common-opponent results determine qualifying comparisons under the published rules.** Where the rules conflict, the conflict is visible rather than concealed inside a set of arbitrary weights.
 
 ## Rankings should have margins of error
 
@@ -390,7 +425,7 @@ Maybe the most important thing I think people overlook is uncertainty. Tradition
 
 In the Bayesian framework, every team has a posterior distribution of merit. We can calculate $$P(\mathcal M_A>\mathcal M_B\mid D)$$, the probability that Team A has earned more merit than Team B, based on the observed season and the model. We can also report each team's probability of landing in the top 10 or top 25 **by merit**, along with a credible range of plausible merit ranks. A team might be ranked seventh but have a plausible rank range from fourth to fifteenth. Another might be eighth with a much narrower range. Those are very different situations, and a ranking should communicate that difference.
 
-Because the official ordering can also reflect these explicit head-to-head, common-opponent, and undefeated-team rules, I distinguish **posterior merit probabilities** from the final, policy-adjusted integer ranking. The current implementation approximates the joint dependence of the leave-one-game-out merit calculations, so those probabilities should not be mistaken for exact facts. Still, the principle is simple: **we should distinguish what the evidence suggests from how confidently it supports that conclusion.**
+Because the official ordering can also reflect these explicit head-to-head and common-opponent, I distinguish **posterior merit probabilities** from the final, policy-adjusted integer ranking. The current implementation approximates the joint dependence of the leave-one-game-out merit calculations, so those probabilities should not be mistaken for exact facts. Still, the principle is simple: **we should distinguish what the evidence suggests from how confidently it supports that conclusion.**
 
 The probabilities come straight from the saved posterior merit draws. If I have $$S$$ joint merit-draw approximations, I estimate a team's probability of having more merit than another by counting the draws in which its merit is higher:
 
