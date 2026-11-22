@@ -11,7 +11,7 @@ SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
            'ranking_policy_v5.py', 'exact_order.py', 'sync_data.py', 'season_inputs.py',
            'home_history_inputs.py', 'historical_home.py', 'fit_saved_season.py',
            'requirements.txt', 'update_rankings.py', 'posterior_summary.py',
-           'historical_rankings.py', 'sampling_retry.py', 'full_fit_retry.py', 'reference_config.py', 'conference_summary.py', 'cache_identity.py')
+           'historical_rankings.py', 'sampling_retry.py', 'full_fit_retry.py', 'reference_config.py', 'conference_summary.py', 'game_contributions.py', 'cache_identity.py')
 
 
 def source_identities():

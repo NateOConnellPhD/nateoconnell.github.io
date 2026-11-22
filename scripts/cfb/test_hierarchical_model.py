@@ -13,6 +13,8 @@ class HierarchicalModelTests(unittest.TestCase):
         from pathlib import Path
         import tempfile
         from posterior_summary import attach, validate
+        from unittest.mock import patch
+        from game_contributions import SCHEMA
         from sync_data import ROOT
         from test_publication import fixture
         result, inputs = fixture()
@@ -39,7 +41,14 @@ class HierarchicalModelTests(unittest.TestCase):
             merit_hash = save(task/'scores'/'score', 'merit.npz', dict(merit=merit,sos=sos),
                               dict(fit_key='fit',posterior_sha256=fit_hash,reference_rank=12))
             result['identity'].update(score_key='score',merit_sha256=merit_hash)
-            attach(result, inputs, task)
+            # This fixture isolates hierarchy export, with prescribed merit
+            # draws. Real game-credit reconstruction is checked separately.
+            credits = dict(schema=SCHEMA, reference_rank=12, games=[dict(inputs['games'][0], neutral_site=False,
+                           home_credit=dict(mean=1., median=1., q05=1., q95=1.),
+                           away_credit=dict(mean=0., median=0., q05=0., q95=0.))])
+            with patch('game_contributions.build', return_value=credits):
+                attach(result, inputs, task)
+            self.assertEqual(result['game_contributions'], credits)
         self.assertEqual(result['posterior']['parameters']['tau_fcs']['mean'],12.)
         self.assertEqual(result['posterior']['teams']['1']['conference_effect']['mean'],2.)
         self.assertEqual(result['posterior']['teams']['2']['conference_effect']['mean'],2.)

@@ -46,12 +46,12 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const root = new Element(); root.dataset.index = '/assets/data/cfb/index.json';
   root.querySelector = selector => get(selector.match(/data-cfb-([^\]]+)/)[1]);
   const location = {href: `https://example.test/blog/cfb/${query}`, search: query};
-  const requests = [], shown = [], shownReferences = [], tabs = [];
+  const requests = [], shown = [], shownReferences = [], tabs = [], contributions = [];
   const context = {URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
     cancelAnimationFrame() {}, requestAnimationFrame(callback) { callback(); return 0; }, location,
     history: {replaceState(_, __, address) { location.href = String(address); location.search = new URL(address).search; }},
     document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element()},
-    window: {CFBReference: reference, CFBExplorer: () => ({show: snapshot => {shown.push(snapshot.id); shownReferences.push(snapshot.reference_rank);}, tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun, cancel() {}}},
+    window: {CFBReference: reference, CFBContributions: {render: (_, snapshot, a, b) => contributions.push([snapshot.reference_rank, a, b])}, CFBExplorer: () => ({show: snapshot => {shown.push(snapshot.id); shownReferences.push(snapshot.reference_rank);}, tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun, cancel() {}}},
     fetch: async address => {
       requests.push(String(address));
       const name = String(address).split('/').pop();
@@ -67,7 +67,7 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
     }};
   vm.runInNewContext(source, context);
   await settle();
-  return {get, root, location, requests, shown, shownReferences, tabs, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
+  return {get, root, location, requests, shown, shownReferences, tabs, contributions, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
 }
 
 (async () => {
@@ -226,6 +226,12 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   focused.get('rows').children[0].children[0].children[1].children.at(-1).handlers.click();
   assert.equal(focused.tabs.at(-1), 'rules', 'Explain rank opens the separate Rules tab');
   assert.equal(focused.get('team-b').value, '2');
+
+  focused.get('stat-team').value = '20'; focused.get('stat-other').value = '25';
+  const beforeBreakdown = focused.requests.length;
+  focused.get('compare-games').handlers.click();
+  assert.deepEqual(focused.contributions.at(-1), [12, 20, 25], 'Posterior comparison opens the same selected pair’s game breakdown');
+  assert.equal(focused.requests.length, beforeBreakdown, 'Opening a breakdown never fetches data or calls an API');
 
   const pollArchive = {schema: 'margin-of-merit-polls-v1', season: 2026, retrieved_at: '2026-11-20T00:00:00Z', editions: [
     {id: 'ap-regular-12', poll: 'ap', season_type: 'regular', week: 12, ranks: [{id: 1, rank: 3}, {id: 2, rank: 1}, {id: 6, rank: 25}]},

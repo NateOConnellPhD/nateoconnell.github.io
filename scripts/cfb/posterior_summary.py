@@ -101,6 +101,8 @@ def attach(result, inputs, task):
         'representation': 'Empirical mass or 40 equal-width bins spanning every saved draw; not a fitted density.'}
     from conference_summary import build
     result['posterior']['conferences'] = build(flat, inputs)
+    from game_contributions import build as build_games, exact_reader
+    result['game_contributions'] = build_games(flat, inputs, score_report, exact_reader(task, score_report, fit_report))
     validate(result)
     return result
 
@@ -138,6 +140,9 @@ def validate(result):
     if 'conferences' in posterior:
         from conference_summary import validate as validate_conferences
         validate_conferences(posterior['conferences'], result['teams'])
+    if 'game_contributions' in result:
+        from game_contributions import validate as validate_games
+        validate_games(result)
 
 
 def validate_summaries(summaries):

@@ -225,7 +225,7 @@
     el('mode').textContent = 'Calculating your selected rules… Saved rankings for this reference are shown while this runs.';
     previousRanks = new Map((previous?.teams || []).map(t => [t.id, t.rank]));
     customComparisonUnavailable = '';
-    policyResult=null; viewTeams=current.teams; customPolicy=false; comparisonLabel(); render(); el('decisions').replaceChildren(); el('pair-summary').replaceChildren();
+    policyResult=null; viewTeams=current.teams; customPolicy=false; comparisonLabel(); render(); el('decisions').replaceChildren(); el('pair-summary').replaceChildren(); el('game-contributions').replaceChildren();
     el('audit-download').disabled=true; el('policy-error').hidden=true;
     try {
       const isOfficial = Object.keys(selected).every(key => selected[key] === current.specification[key]);
@@ -329,19 +329,25 @@
       const ids = current.policy_inputs.teams.map(t => t.id);
       paragraph(summary, `Probability that ${teamName(a)} has higher earned merit than ${teamName(b)}: ${percent(current.policy_inputs.probabilities[ids.indexOf(a)][ids.indexOf(b)])}. This is not the probability of winning a future game.`);
       const direct = current.policy_inputs.games.filter(g => (g.home_id === a && g.away_id === b) || (g.home_id === b && g.away_id === a));
-      if (direct.length) paragraph(summary, `${direct.length} direct game${direct.length === 1 ? '' : 's'} played. Common-opponent evidence is excluded, even for a split series or a blocked direct rule.`);
+      if (direct.length) paragraph(summary, `${direct.length} direct game${direct.length === 1 ? '' : 's'} played. The common-opponent ordering rule is excluded, even for a split series or a blocked direct rule. Games against shared opponents still contribute to merit.`);
       const ta = current.teams.find(t => t.id === a), tb = current.teams.find(t => t.id === b);
       if (policyResult.specification.equal_records_only && (wins(ta) !== wins(tb) || losses(ta) !== losses(tb))) {
-        paragraph(summary, 'Different counted records: the selected equal-record rule excludes secondary comparisons for this pair. Merit and P4 protection still apply.');
+        paragraph(summary, 'Different counted records: the selected equal-record rule excludes head-to-head and common-opponent ordering rules for this pair. Earned merit and merit protection still apply.');
       }
+      window.CFBContributions.render(el('game-contributions'), current, a, b, viewTeams);
+    } else {
+      el('game-contributions').replaceChildren();
     }
     el('decisions').replaceChildren(...relevant.map(decisionNode));
     if (!relevant.length) paragraph(el('decisions'), b == null || a === b ? 'Choose a second team to inspect one matchup.'
       : 'Not directly constrained: no rule establishes an ordering for this pair. The global order also accounts for requirements involving other teams and retains the raw merit order where the objectives allow.');
     el('audit-download').disabled = Boolean(policyError);
   }
-  function explainTeam(id) {
-    el('team-a').value = String(id); chooseOpponent(); explorer.tab('rules', true);
+  function explainTeam(id, opponent = null) {
+    if (!current?.teams.some(t => t.id === id && t.rank != null)) return;
+    el('team-a').value = String(id); chooseOpponent();
+    if (opponent !== id && current.teams.some(t => t.id === opponent && t.rank != null)) el('team-b').value = String(opponent);
+    explorer.tab('rules', true);
     el('explanations').open = true; renderAudit();
     el('explanations').scrollIntoView({behavior: 'smooth', block: 'start'});
     el('team-a').focus({preventScroll: true});
@@ -513,6 +519,8 @@
   el('team-a').addEventListener('change', () => { chooseOpponent(); renderAudit(); });
   el('team-b').addEventListener('change', renderAudit);
   el('open-rules').addEventListener('click', () => explorer.tab('rules', true));
+  el('open-comparison').addEventListener('click', () => explainTeam(Number(el('team-a').value), Number(el('team-b').value)));
+  el('compare-games').addEventListener('click', () => explainTeam(Number(el('stat-team').value), Number(el('stat-other').value)));
   el('open-rankings').addEventListener('click', () => explorer.tab('rankings', true));
   el('explanations').addEventListener('toggle', renderAudit);
   el('audit-download').addEventListener('click', () => {

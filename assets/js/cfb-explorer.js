@@ -69,6 +69,7 @@ window.CFBExplorer = (root, api) => {
     if (!current || activeTab !== 'posterior') return;
     const key = el('metric').value, global = ['home_adv','sigma','nu','mu_fcs','tau_fbs','tau_fcs','tau_conf'].includes(key);
     const ids = [el('stat-team').value, el('stat-other').value].filter((v,i,a)=>v && a.indexOf(v)===i);
+    el('compare-games').hidden = global || ids.length !== 2 || ids.some(id => !current.teams.some(t => String(t.id) === id && t.rank != null));
     el('stat-team').disabled = global; el('stat-other').disabled = global;
     el('stat-context').textContent = metrics[key][1] + (['merit','raw_rank','sos'].includes(key)
       ? ` These calculations use the ${window.CFBReference.label(current.reference_rank)}-strongest FBS team in each posterior draw as the reference.` : '');

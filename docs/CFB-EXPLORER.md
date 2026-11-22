@@ -6,6 +6,38 @@ The CFB page has five views: Rankings, Conferences, Rules, Posterior explorer, a
 
 ## Statistical output
 
+### Game-by-game merit comparison
+
+“Compare teams and games” in Rankings and “Compare these teams game by game”
+in the posterior explorer open the focused comparison in Rules. The latter
+preserves the selected pair. The comparison separates head-to-head games,
+common opponents (including repeat meetings and FCS opponents), and remaining
+schedule. Each game belongs to exactly one group for each team. Group means
+sum to each team's merit; group differences sum to the overall gap. Each game
+shows week/date, opponent, venue, result, mean credit, median and a 90% interval.
+The shared-opponent credit group is descriptive, not the separate FBS-only
+common-opponent ordering rule. There is no additional head-to-head bonus.
+
+`game_contributions.py` reconstructs transported marginal summaries from the
+integrity-checked full-fit and exact-LOO caches and the recorded PSIS efficiency.
+It verifies the reconstructed weighted means against the scoring audit and
+the transported means against the published team totals (absolute tolerance
+1e-9). The original scoring audit's weighted means are not substituted for
+transported credit. Medians and interval endpoints are not additive; the UI
+does not invent a group interval by adding marginal intervals. No model,
+score, or exact-LOO cache identity changes, and no additional sampling is
+introduced by this export. Summary generation performs numerical postprocessing
+once during publication, not when someone selects teams.
+
+Each reference snapshot saves its own `game_contributions` block. Previously
+published snapshots lacking this block show an explicit unavailable message
+until regenerated; aggregate merit cannot recover individual game credit.
+The publication source identity marks those summaries for regeneration while
+retaining compatible numerical caches. Missing numerical caches still require
+the existing fitting process. Reader ordering controls do not change credits.
+
+### Distributions
+
 `posterior_summary.py` reads integrity-checked merit, schedule, and full-fit arrays after the existing runner finishes. It does not change the model, LOO scoring, ranking policy, or the runner's numerical cache identity. Published snapshots now include:
 
 - Merit, raw-rank, team-strength and schedule-strength distributions by team.

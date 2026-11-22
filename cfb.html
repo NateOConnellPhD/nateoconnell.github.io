@@ -90,6 +90,7 @@ description: "My college football rankings: what teams have earned from the game
       <p class="small-note" data-cfb-comparison></p>
       <p class="small-note"><a data-cfb-permalink>Link to this reference and week</a> · <a data-cfb-json>Download saved results</a></p>
       <button type="button" class="button button-outline" data-cfb-open-rules>Explore the ranking rules</button>
+      <button type="button" class="button button-outline" data-cfb-open-comparison>Compare teams and games</button>
       </div>
       <section id="cfb-panel-rules" role="tabpanel" aria-labelledby="cfb-tab-rules" data-cfb-panel="rules" hidden>
         <p class="small-note" data-cfb-rules-unavailable hidden>This week is awaiting a refit under the current model and rules.</p>
@@ -118,13 +119,14 @@ description: "My college football rankings: what teams have earned from the game
         <p class="cfb-notice" data-cfb-policy-error role="alert" hidden></p>
       </section>
       <details id="cfb-explanations" class="cfb-explanations" data-cfb-explanations hidden>
-        <summary>Why is a team ranked here?</summary>
-        <p class="small-note">Start with the team directly above this one, or choose another opponent. This shows only that matchup: the merit comparison, the relevant game results, and any rule that affects their order.</p>
+        <summary>Compare teams: merit, games, and ranking decisions</summary>
+        <p class="small-note">Start with the team directly above this one, or choose another opponent. See how each game contributes to merit, compare shared opponents and head-to-head results, then inspect the rules that affect their order.</p>
         <div class="cfb-pair-controls">
           <label for="cfb-team-a">Team<select id="cfb-team-a" data-cfb-team-a></select></label>
           <label for="cfb-team-b">Compare with<select id="cfb-team-b" data-cfb-team-b></select></label>
         </div>
         <div class="cfb-pair-summary" data-cfb-pair-summary></div>
+        <div class="cfb-game-contributions" data-cfb-game-contributions></div>
         <div class="cfb-decisions" data-cfb-decisions></div>
         <button type="button" class="button button-outline" data-cfb-audit-download>Download rules and decision audit</button>
       </details>
@@ -178,6 +180,7 @@ description: "My college football rankings: what teams have earned from the game
           <table class="cfb-summary-table"><caption>Posterior summaries</caption><thead><tr><th scope="col">Quantity / team</th><th scope="col">Mean</th><th scope="col">Median</th><th scope="col">SD</th><th scope="col">50% interval</th><th scope="col">90% interval</th><th scope="col">Draws</th></tr></thead><tbody data-cfb-stat-summary></tbody></table>
         </div>
         <div data-cfb-probabilities class="cfb-probabilities"></div>
+        <button type="button" class="button button-outline" data-cfb-compare-games>Compare these teams game by game</button>
         <p class="small-note" data-cfb-stat-note></p>
         <details class="cfb-diagnostics"><summary>Fit and leave-one-out diagnostics</summary><p>These check the numerical calculations, not how well a team will play. <a href="#cfb-reading-checks">What do these checks mean?</a></p><div data-cfb-diagnostics></div></details>
       </section>
