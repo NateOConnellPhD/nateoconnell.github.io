@@ -5,6 +5,7 @@ import { liveRequest } from './live-request.js';
 import { renderDiff } from './diff.js';
 import { createWritingChat, mergeWritingResult } from './writing-chat.js';
 import { librarySections, libraryTitle, sectionItems } from './library.js';
+import { createBlogPosts } from './blog-posts.js';
 
 const $ = id => document.getElementById(id);
 const state = { auth: null, draft: null, revision: null, dirty: false, busy: false, list: 'content', drafts: [], files: [], projectFiles: [], pendingFiles: [], review: null, images: new Map() };
@@ -42,7 +43,7 @@ function updateSaveState() {
 function dirty() { state.dirty = true; state.review = null; updateSaveState(); writingChat.controls(); }
 async function refreshLists() {
   const [drafts, files, project] = await Promise.all([api('drafts'), api('library'), api('workspace/tree')]);
-  state.drafts = drafts.drafts; state.files = files.files; state.projectFiles = project.files; renderList();
+  state.drafts = drafts.drafts; state.files = files.files; state.projectFiles = project.files; renderList(); renderPosts();
 }
 function sectionKey(section) { return JSON.stringify(sectionItems(state.files, section).map(item => [item.path, item.sha])); }
 async function loadSection(section, key) {
@@ -51,8 +52,33 @@ async function loadSection(section, key) {
     const result = await api(`library?section=${section}`);
     if (sectionKey(section) === key) library.cache.set(section, { key, files: result.files });
   } catch (error) { if (sectionKey(section) === key) library.errors.set(section, error.message); }
-  finally { library.loading.delete(section); if (state.list === 'content' && library.section === section) renderList(); }
+  finally { library.loading.delete(section); if (state.list === 'content' && library.section === section) renderList(); if (section === 'posts') renderPosts(); }
 }
+function renderPosts() {
+  if ($('blog-posts').hidden) return;
+  const key = sectionKey('posts'), cached = library.cache.get('posts'), error = library.errors.get('posts');
+  const needsMetadata = sectionItems(state.files, 'posts').length > 0 && cached?.key !== key;
+  blogPosts.render({ files: cached?.key === key ? cached.files : [], drafts: state.drafts,
+    pending: state.pendingFiles, loading: needsMetadata && !error, error: needsMetadata ? error : null });
+  if (needsMetadata && !error && !library.loading.has('posts')) loadSection('posts', key);
+}
+async function openPosts() {
+  if (!siteChat.leaveFile() || !(await leaveDraft())) return;
+  siteChat.hide(); $('document').hidden = true; $('blog-posts').hidden = false;
+  $('blog-posts-nav').setAttribute('aria-pressed', 'true');
+  $('app').classList.remove('conversations-open'); $('chat-menu').setAttribute('aria-expanded', 'false');
+  renderPosts(); $('workspace').scrollTop = 0; $('blog-post-heading').focus();
+}
+const blogPosts = createBlogPosts({
+  create: () => newDialog('post'),
+  retry: () => { library.errors.delete('posts'); renderPosts(); },
+  open: (row, version, id) => run(async () => {
+    if (version === 'source') { await siteChat.openFile(row.path); return; }
+    if (!siteChat.leaveFile() || !(await leaveDraft())) return;
+    showDraft(version === 'draft' ? await api(`draft?id=${encodeURIComponent(id || row.drafts[0].id)}`) : await api('open', { path: row.path }));
+    await refreshLists();
+  }, 'Opening blog post…')
+});
 function renderList() {
   const container = $('file-list'); container.replaceChildren();
   const descriptions = {
@@ -144,6 +170,9 @@ async function leaveDraft() {
 }
 function showDraft(result) {
   siteChat.hide();
+  $('blog-posts').hidden = true;
+  $('blog-posts-nav').setAttribute('aria-pressed', String(result.draft.document.kind === 'post'));
+  $('back-to-posts').hidden = result.draft.document.kind !== 'post';
   $('app').classList.remove('conversations-open'); $('chat-menu').setAttribute('aria-expanded', 'false');
   state.draft = result.draft; state.revision = result.revision; state.dirty = false; state.review = null; state.images.clear();
   $('document').hidden = false;
@@ -312,7 +341,12 @@ const writingChat = createWritingChat({ api, stream: (route, data, onEvent, sign
   }
 });
 
-const siteChat = createSiteChat({ api, apiStream: (route, data, onEvent, signal) => liveRequest(route, data, state.auth?.csrf || '', onEvent, signal), run, notice, leaveDraft, aiAvailable: () => Boolean(state.auth?.ai), onPublished: refreshLists, onWorkingFiles: changes => { state.pendingFiles = changes; renderList(); } });
+const siteChat = createSiteChat({ api, apiStream: (route, data, onEvent, signal) => liveRequest(route, data, state.auth?.csrf || '', onEvent, signal), run, notice, leaveDraft, aiAvailable: () => Boolean(state.auth?.ai), onPublished: refreshLists,
+  onWorkingFiles: changes => { state.pendingFiles = changes; renderList(); renderPosts(); },
+  onNavigate: (view, path = '') => { $('blog-posts').hidden = true; $('blog-posts-nav').setAttribute('aria-pressed', String(view === 'source' && path.startsWith('_posts/'))); }
+});
+$('blog-posts-nav').addEventListener('click', () => run(openPosts));
+$('back-to-posts').addEventListener('click', () => run(openPosts));
 $('body').addEventListener('input', () => { state.draft.document.body = $('body').value; dirty(); });
 $('save').addEventListener('click', () => run(save, 'Saving privately…'));
 $('review').addEventListener('click', () => run(review, 'Preparing review…'));
@@ -324,7 +358,13 @@ $('content-section').addEventListener('change', () => { library.section = $('con
 for (const id of ['project-open', 'chat-project-open', 'chat-changes-open', 'file-browse']) $(id).addEventListener('click', renderList);
 for (const tab of ['drafts','content','files']) $(tab + '-tab').addEventListener('click', () => { state.list = tab; $('filter').value = ''; for (const name of ['drafts','content','files']) $(name + '-tab').setAttribute('aria-pressed', String(tab === name)); renderList(); });
 function newDestination() { $('new-destination').textContent = 'Website destination: ' + contentPath($('new-kind').value, $('new-slug').value || 'your-title', $('new-date').value || 'YYYY-MM-DD'); }
-function newDialog() { $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; newDestination(); $('new-dialog').showModal(); }
+function newDialog(kind) {
+  const post = kind === 'post';
+  $('new-dialog').querySelector('h2').textContent = post ? 'New blog post' : 'Add content';
+  $('new-kind').hidden = post; document.querySelector('label[for="new-kind"]').hidden = post;
+  if (post) $('new-kind').value = 'post';
+  $('new-date').value = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); $('new-title').value = ''; $('new-slug').value = ''; newDestination(); $('new-dialog').showModal();
+}
 $('new').addEventListener('click', () => { if (state.list === 'content' && librarySections[library.section].create) $('new-kind').value = librarySections[library.section].create; newDialog(); });
 $('create-post').addEventListener('click', newDialog);
 for (const id of ['new-kind', 'new-date', 'new-slug']) $(id).addEventListener('input', newDestination);

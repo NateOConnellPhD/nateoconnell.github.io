@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Website editor · Nate O’Connell</title><link rel="stylesheet" href="/editor.css"><link rel="stylesheet" href="/chat.css"><link rel="stylesheet" href="/diff.css"><link rel="stylesheet" href="/manual-editor.css"><link rel="stylesheet" href="/writing-chat.css"><script type="module" src="/editor.js"></script></head>
 <body>
   <a class="skip" href="#workspace">Skip to editor</a>
-  <header class="masthead"><button id="chat-menu" class="icon-button mobile-only" aria-label="Show conversations" aria-controls="conversation-sidebar" aria-expanded="false">☰</button><a class="brand" href="/"><img src="https://nateoconnell.com/assets/images/normal-helix-logo.svg" width="68" height="46" alt=""><span>Nate O’Connell<span class="brand-sub">Website editor</span></span></a><div class="header-links"><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a><button id="logout" class="quiet" hidden>Sign out</button></div></header>
+  <header class="masthead"><button id="chat-menu" class="icon-button mobile-only" aria-label="Open navigation" aria-controls="conversation-sidebar" aria-expanded="false">☰</button><a class="brand" href="/"><img src="https://nateoconnell.com/assets/images/normal-helix-logo.svg" width="68" height="46" alt=""><span>Nate O’Connell<span class="brand-sub">Website editor</span></span></a><div class="header-links"><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a><button id="logout" class="quiet" hidden>Sign out</button></div></header>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <main id="startup" class="login-shell"><p id="startup-status" role="status">Opening your editor…</p><button id="startup-retry" class="button" hidden>Try again</button></main>
   <noscript><p class="notice">JavaScript is required to sign in and use the editor.</p></noscript>
@@ -13,6 +13,7 @@
       <div class="sidebar-heading"><span>Workspace</span><button id="chat-sidebar-close" class="icon-button mobile-only" aria-label="Close navigation">×</button></div>
       <nav aria-label="Editor navigation">
         <button id="site-chat-nav" class="nav-button" aria-pressed="true">Chat</button>
+        <button id="blog-posts-nav" class="nav-button" aria-pressed="false" aria-controls="blog-posts">Blog posts</button>
         <button id="project-open" class="nav-button" aria-controls="project-panel" aria-expanded="false">Edit website</button>
         <button id="create-post" class="nav-button">＋ Add content</button>
         <a href="/traffic.html" class="nav-button">Traffic</a>
@@ -22,6 +23,12 @@
       <div class="conversation-footer"><a href="https://nateoconnell.com" target="_blank" rel="noopener noreferrer">View website ↗</a></div>
     </aside>
     <main id="workspace" class="workspace" tabindex="-1">
+      <section id="blog-posts" class="blog-posts" aria-labelledby="blog-post-heading" hidden>
+        <header class="blog-post-header"><div><h1 id="blog-post-heading" tabindex="-1">Blog posts</h1><p>Edit a published post or pick up a saved draft.</p></div><button id="blog-post-new" class="button primary">＋ New post</button></header>
+        <div class="blog-post-toolbar"><div class="list-tabs" aria-label="Filter blog posts"><button data-blog-filter="all" aria-pressed="true">All posts</button><button data-blog-filter="published" aria-pressed="false">Published</button><button data-blog-filter="drafts" aria-pressed="false">Saved drafts</button></div><label class="sr-only" for="blog-post-search">Search blog posts</label><input id="blog-post-search" type="search" placeholder="Search blog posts…"></div>
+        <p id="blog-post-status" class="small" role="status"></p><button id="blog-post-retry" class="button" hidden>Try again</button>
+        <div id="blog-post-list" class="blog-post-list"></div>
+      </section>
       <section id="site-chat" class="site-chat" hidden>
         <header class="chat-top"><h1 id="chat-title">Website chat</h1><button id="chat-project-open" class="quiet" aria-controls="project-panel" aria-expanded="false">Edit website</button></header>
         <div id="chat-scroll" class="chat-scroll" tabindex="0" aria-label="Conversation">
@@ -43,6 +50,7 @@
         </div>
       </section>
       <section id="document" hidden>
+        <button id="back-to-posts" class="quiet back-to-posts" hidden>← Blog posts</button>
         <div class="document-top"><div><p id="document-kind" class="eyebrow"></p><h1 id="document-title">Untitled</h1><p id="document-destination" class="destination-note"></p><p id="save-state" class="small" role="status"></p></div><div class="document-actions"><button id="save" class="button">Save draft</button><button id="review" class="button primary">Review & publish</button></div></div>
         <div class="editor-columns"><div class="writing-column">
           <div class="view-tabs"><button id="write-tab" aria-pressed="true">Write</button><button id="preview-tab" aria-pressed="false">Preview</button><button id="restore" class="quiet" hidden>Restore previous version</button></div>

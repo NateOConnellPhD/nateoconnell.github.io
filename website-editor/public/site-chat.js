@@ -9,7 +9,7 @@ const $ = id => document.getElementById(id);
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 const base64 = file => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Could not read the file.')); reader.readAsDataURL(file); });
 
-export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvailable, onPublished, onWorkingFiles }) {
+export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvailable, onPublished, onWorkingFiles, onNavigate = () => {} }) {
   const view = createChatView();
   let current = null, review = null, active = false, inFlight = false, timer = null, filePath = null, fileOriginal = '', fileBinary = false, binaryContent = null;
   let output = new ChatOutput(), outputKey = null, streamAbort = null, streamTimer = null, polling = false, sending = null, savedMessages = '';
@@ -190,6 +190,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
   async function activate() {
     if (!leaveFile() || !(await leaveDraft())) return false;
     resetFile();
+    onNavigate('chat');
     active = true; $('site-chat').hidden = false; $('document').hidden = true;
     $('app').classList.add('chat-mode'); view.conversations(false);
     $('site-chat-nav').setAttribute('aria-pressed', 'true');
@@ -313,6 +314,7 @@ export function createSiteChat({ api, apiStream, run, notice, leaveDraft, aiAvai
     const file = await api('workspace/file', { id: current?.chat.id, path });
     if (options.create && file.exists) throw new Error('This file already exists. Choose a new path, or open the existing file from Source & media.');
     hide(); $('document').hidden = true;
+    onNavigate('source', path);
     filePath = path; fileBinary = Boolean(file.binary); binaryContent = file.base64 || null; fileOriginal = fileBinary ? '' : file.content || '';
     fileOriginalSha = file.sha ?? null;
     $('workspace-file-panel').hidden = false; $('file-path').value = path; $('file-source').value = fileOriginal;
