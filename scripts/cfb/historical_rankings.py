@@ -37,7 +37,19 @@ def write_series(index, season, destination):
                   'raw_rank_lo90', 'raw_rank_hi90', 'wins_fbs', 'losses_fbs', 'wins', 'losses')
         weeks[row['week']] = {k: row[k] for k in ('id', 'week', 'data_cutoff', 'json')}
         weeks[row['week']].update(policy_sha256=saved['policy_sha256'], kind=saved.get('kind', 'observed'),
+                                 reference_rank=saved['reference_rank'],
                                  teams=[{k: t.get(k) for k in fields} for t in saved['teams']])
+        references = {}
+        for rank, descriptor in row['references'].items():
+            target = destination / descriptor['json']
+            if not target.resolve().is_relative_to(destination.resolve()):
+                raise ValueError('Invalid reference history path')
+            value = json.loads(target.read_text())
+            if digest(value) != descriptor['sha256'] or value['reference_rank'] != int(rank):
+                raise ValueError('Reference history integrity check failed')
+            references[rank] = {'reference_rank': int(rank), 'policy_sha256': value['policy_sha256'],
+                                'teams': [{k: t.get(k) for k in fields} for t in value['teams']]}
+        weeks[row['week']]['references'] = references
     target = destination / 'seasons' / str(season) / 'history.json'
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(encoded({'schema': 'margin-of-merit-history-v1', 'season': season,

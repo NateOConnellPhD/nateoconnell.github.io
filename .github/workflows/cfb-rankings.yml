@@ -74,6 +74,7 @@ jobs:
           python3 -B scripts/cfb/test_archive_range.py
           python3 -B scripts/cfb/test_sampling_retry.py
           python3 -B scripts/cfb/test_archive_failures.py
+          node scripts/cfb/check_navigation.cjs
       - name: Fetch the season once and check for changed inputs
         id: prepare
         env:
@@ -124,6 +125,7 @@ jobs:
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_publication.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_historical_home.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_hierarchical_model.py
+          CFB_TEST_TMP="$TMPDIR" .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_reference_scoring.py
       - name: Fit if needed and save checked rankings
         id: complete
         run: |

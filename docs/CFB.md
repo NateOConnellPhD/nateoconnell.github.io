@@ -47,6 +47,19 @@ snapshot without installing packages or fitting, even if numerical caches
 have expired. A separate Actions cache can reuse posterior/LOO arrays after
 policy changes. Numerical caches are expendable; website history lives in Git.
 
+The official reference is the 12th-strongest FBS team in each posterior draw.
+The reader can also choose 2nd, 4th or 24th. These are strength benchmarks,
+not named schools or automatic playoff-selection rules. A weekly update saves
+all four sets of merit/SOS summaries, pairwise probabilities, rankings,
+posterior distributions and CSVs before advancing the public index. The fitted
+strength posterior is shared; each necessary exact-LOO fit supplies all four
+reference quantities once. Selecting another reference downloads static files,
+with no football API request or model run. The reference is part of score
+identities, download metadata and share links, but not the full-fit identity.
+Previous-week movement and historical trajectories use the same reference on
+both sides. Old 25th-reference snapshots are not relabeled; the archive rebuilds
+their scores from compatible cached fits where available.
+
 Unreliable PSIS games now get sequential omitted-game NUTS refits, each checked
 against the same sampling requirements. The exact marginal replaces the PSIS
 marginal while retaining the disclosed approximate joint quantile coupling.

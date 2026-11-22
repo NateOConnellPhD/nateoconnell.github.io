@@ -37,7 +37,7 @@ class HierarchicalModelTests(unittest.TestCase):
                 return checksum
             fit_hash = save(task/'fits'/'fit', 'posterior.npz', samples, {'home_prior':result['home_prior']})
             merit_hash = save(task/'scores'/'score', 'merit.npz', dict(merit=merit,sos=sos),
-                              dict(fit_key='fit',posterior_sha256=fit_hash))
+                              dict(fit_key='fit',posterior_sha256=fit_hash,reference_rank=12))
             result['identity'].update(score_key='score',merit_sha256=merit_hash)
             attach(result, inputs, task)
         self.assertEqual(result['posterior']['parameters']['tau_fcs']['mean'],12.)

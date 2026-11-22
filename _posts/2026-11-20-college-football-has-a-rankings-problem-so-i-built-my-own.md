@@ -231,6 +231,8 @@ But there's another important distinction: **these underlying strength estimates
 
 ## How much is a particular victory worth?
 
+**Reference update (November 22):** The [live rankings](/blog/cfb/) now use the 12th-strongest FBS team in each posterior draw as the default benchmark, with options for 2nd, 4th, and 24th. This lets you explore different playoff-boundary reference strengths. Changing the reference changes merit and schedule-strength calculations, then the rankings and comparisons built from them. The numerical examples and reported rankings in this post used the original 25th-team reference described below.
+
 Here's where the model gets interesting. Suppose Ohio State beats Alabama by 17 points. How impressive is that? One way to answer is to imagine a fixed reference-quality team—say, a team with approximately top-25 FBS strength—facing Alabama at the same venue. Based on the fitted model, what scoring margin would we expect that reference team to achieve? We can calculate an entire probability distribution of possible margins, then ask where Ohio State's actual 17-point victory falls within it.
 
 The reference team isn't a particular school. In each posterior draw, I use the **25th-highest latent strength among FBS teams** as the benchmark. This means the reference itself is allowed to be uncertain, rather than pretending we know exactly how good the 25th-best team is. For a result by team $$i$$ against opponent $$j$$, let $$m_{ig}$$ be the actual margin from team $$i$$'s perspective, and let $$v_{ig}$$ be $$+1$$ at home, $$0$$ on a neutral field, and $$-1$$ away, with $$h_g$$ the home-field advantage at that game's stadium. The reference team's scoring-margin distribution has cumulative distribution function

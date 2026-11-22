@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const reference = require('../../assets/js/cfb-reference.js');
 const source = fs.readFileSync(require.resolve('../../assets/js/cfb.js'), 'utf8');
 
 class Element {
@@ -24,7 +25,9 @@ class Element {
 
 function row(season, week, version = 'new') {
   const id = `${season}-${week}-${version}`;
-  return {season, week, id, games: week, methodology: 'margin-of-merit-2026-11-21-no-p4', json: `${id}.json`, csv: `${id}.csv`,
+  return {season, week, id, games: week, reference_rank: 12, methodology: reference.methodology, json: `${id}.json`, csv: `${id}.csv`,
+    references: Object.fromEntries(reference.ranks.map(rank => [rank, {reference_rank: rank,
+      json: `${id}${rank===12?'':`-ref${rank}`}.json`, csv: `${id}${rank===12?'':`-ref${rank}`}.csv`}])),
     data_cutoff: `${season}-09-${String(week + 1).padStart(2, '0')}T00:00:00Z`, published_at: `${season}-11-21T00:00:00Z`};
 }
 const rows = [row(2026, 12), row(2026, 12, 'old'), row(2026, 10), row(2026, 0), row(2024, 16), row(2024, 2)];
@@ -34,21 +37,21 @@ const index = {schema: 'margin-of-merit-index-v1', latest: rows[0].id, snapshots
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const nodes = new Map(), get = key => {
-    if (!nodes.has(key)) nodes.set(key, new Element(['season', 'week', 'update', 'conference', 'limit', 'poll', 'poll-edition'].includes(key)));
+    if (!nodes.has(key)) nodes.set(key, new Element(['season', 'week', 'update', 'reference', 'conference', 'limit', 'poll', 'poll-edition'].includes(key)));
     return nodes.get(key);
   };
-  for (const [key, values] of [['poll', ['', 'ap', 'cfp']], ['limit', ['25', 'all']]]) {
+  for (const [key, values] of [['reference', ['2', '4', '12', '24']], ['poll', ['', 'ap', 'cfp']], ['limit', ['25', 'all']]]) {
     get(key).replaceChildren(...values.map(value => { const option = new Element(); option.value = value; return option; }));
   }
   const root = new Element(); root.dataset.index = '/assets/data/cfb/index.json';
   root.querySelector = selector => get(selector.match(/data-cfb-([^\]]+)/)[1]);
   const location = {href: `https://example.test/blog/cfb/${query}`, search: query};
-  const requests = [], shown = [], tabs = [];
+  const requests = [], shown = [], shownReferences = [], tabs = [];
   const context = {URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
     cancelAnimationFrame() {}, requestAnimationFrame(callback) { callback(); return 0; }, location,
     history: {replaceState(_, __, address) { location.href = String(address); location.search = new URL(address).search; }},
     document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element()},
-    window: {CFBExplorer: () => ({show: snapshot => shown.push(snapshot.id), tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun, cancel() {}}},
+    window: {CFBReference: reference, CFBExplorer: () => ({show: snapshot => {shown.push(snapshot.id); shownReferences.push(snapshot.reference_rank);}, tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun, cancel() {}}},
     fetch: async address => {
       requests.push(String(address));
       const name = String(address).split('/').pop();
@@ -56,14 +59,15 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
         const season = String(address).split('/').at(-2), value = fixtures[`polls-${season}`];
         return {ok: Boolean(value), status: value ? 200 : 404, json: async () => value};
       }
-      const saved = data.snapshots.find(r => `${r.id}.json` === name);
+      const saved = data.snapshots.find(r => Object.values(r.references).some(ref => ref.json === name));
+      const rank = saved && Object.values(saved.references).find(ref => ref.json === name).reference_rank;
       return {ok: true, json: async () => name === 'index.json' ? data : {...saved, publication_ready: true,
         schema: 'margin-of-merit-snapshot-v1', teams: [], policy_sha256: 'same', data_observed_at: saved.data_cutoff,
-        ...fixtures[saved.id]}};
+        reference_rank: rank, ...fixtures[saved.id], ...fixtures[`${saved.id}:${rank}`]}};
     }};
   vm.runInNewContext(source, context);
   await settle();
-  return {get, root, location, requests, shown, tabs, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
+  return {get, root, location, requests, shown, shownReferences, tabs, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
 }
 
 (async () => {
@@ -138,6 +142,27 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.equal(table[0].children[2].textContent, '5–2', 'Movement is last, after every statistic');
   assert.equal(table[3].children.at(-1).children[0].textContent, 'Unchanged');
 
+  const references = await page('?reference=2', weeklyIndex, {...fixtures,
+    '2026-11-new:2': {teams: teams([2, 1, 3, 4])}, '2026-10-new:2': {teams: teams([1, 2, 3, 4])}});
+  assert.equal(references.shownReferences.at(-1), 2);
+  assert.match(references.get('csv').href.toString(), /-ref2.csv$/);
+  assert.match(references.get('json').href.toString(), /-ref2.json$/);
+  assert.match(references.get('permalink').href, /reference=2/);
+  assert.match(references.get('comparison').textContent, /2nd reference in both weeks/);
+  assert.equal(references.get('rows').children[0].children[0].children.at(-1).textContent, '↑ 1');
+  await references.change('reference', '12');
+  assert.equal(references.shownReferences.at(-1), 12);
+  assert.equal(references.get('rows').children[0].children[0].children.at(-1).textContent, '↑ 2');
+  const fetches = references.requests.length;
+  await references.change('reference', '2');
+  assert.equal(references.requests.length, fetches, 'Switching back reuses both reference-specific snapshots');
+  await references.change('update', '2026-11-old');
+  await references.change('reference', '24');
+  assert.equal(references.shown.at(-1), '2026-11-old', 'Reference switches preserve the chosen revision');
+  assert.equal(references.shownReferences.at(-1), 24);
+  const mislabeled = await page('?reference=4', weeklyIndex, {...fixtures, '2026-11-new:4': {reference_rank:25}});
+  assert.equal(mislabeled.get('results').hidden, true, 'Never relabel another reference as the selected one');
+
   const incomplete = {...row(2026, 12), week_complete: false};
   const gatedIndex = {...weeklyIndex, latest: incomplete.id, snapshots: [incomplete, ...weeklyRows],
     archive: [{season: 2026, weeks: [{week: 10}, {week: 11}]}]};
@@ -164,13 +189,22 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const custom = await page('', weeklyIndex, policyFixtures, input => {
     calls.push(input.id); return {order: input.id.includes('-10-') ? [4, 1, 2, 3] : [4, 3, 2, 1]};
   });
-  assert.equal(custom.get('reset').textContent, 'Official defaults');
+  assert.equal(custom.get('reset').textContent, 'Reset ordering rules');
   assert.equal(custom.get('p4').handlers.input, undefined, 'The removed control has no handler');
   custom.get('protect').value = '85'; custom.get('protect').handlers.input();
   await new Promise(resolve => setTimeout(resolve, 200)); await settle();
   assert.deepEqual(calls, ['2026-11-new', '2026-10-new'], 'Apply custom rules to both weeks');
   assert.match(custom.get('comparison').textContent, /Both weeks use your selected rules/);
   assert.deepEqual(custom.get('rows').children[0].children.map(tr => tr.children.at(-1).textContent), ['0', '↑ 2', '0', '↓ 2']);
+  await custom.change('reference', '4');
+  assert.equal(custom.get('protect').value, '85', 'Reference switches preserve reader ordering controls');
+  assert.match(custom.get('comparison').textContent, /4th reference in both weeks/);
+  assert.match(custom.get('comparison').textContent, /Both weeks use your selected rules/);
+  assert.equal(custom.shownReferences.at(-1), 4);
+  custom.get('protect').value = '88'; custom.get('protect').handlers.input();
+  await custom.change('reference', '24');
+  assert.equal(custom.get('protect').value, '88', 'A pending slider edit survives switching references before its calculation');
+  assert.match(custom.get('comparison').textContent, /24th reference in both weeks/);
 
   const roster = teams(Array.from({length: 138}, (_, i) => i + 1));
   const auditFixture = {...policyFixtures['2026-11-new'], teams: roster, order: roster.map(t => t.id),
@@ -243,14 +277,16 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   const panels = tabNames.map(name => { const n = new Element(); n.dataset.cfbPanel = name; return n; });
   const explorerRoot = {querySelector: s => get(s.match(/data-cfb-([^\]]+)/)[1]),
     querySelectorAll: s => s === '[data-cfb-tab]' ? buttons : panels};
-  const explorerContext = {window: {}, document: {createElement: () => new Element(), createElementNS: () => new Element()},
+  const explorerContext = {window: {CFBReference: reference}, document: {createElement: () => new Element(), createElementNS: () => new Element()},
     ResizeObserver: class { observe() {} }};
   vm.runInNewContext(fs.readFileSync(require.resolve('../../assets/js/cfb-explorer.js'), 'utf8'), explorerContext);
   const history = {schema: 'margin-of-merit-history-v1', season: 2026,
-    weeks: [10, 11, 12].map(week => ({week, id: `2026-${week}-new`, policy_sha256: 'same', teams: teams([1, 2])}))};
+    weeks: [10, 11, 12].map(week => ({week, id: `2026-${week}-new`, policy_sha256: 'same', teams: teams([1, 2]),
+      references: {12: {reference_rank:12, policy_sha256:'same', teams:teams([1,2])},
+        2: {reference_rank:2, policy_sha256:'same', teams:teams(week===10?[2,1]:[1,2])}}}))};
   const explorer = explorerContext.window.CFBExplorer(explorerRoot, {fetchJSON: async () => history, url: path => path});
   get('history-metric').value = 'rank';
-  explorer.show({season: 2026, teams: teams([1, 2]), order: [1, 2]},
+  explorer.show({season: 2026, reference_rank:12, teams: teams([1, 2]), order: [1, 2]},
     {snapshots: weeklyRows, archive: [{season: 2026, weeks: [{week: 10}, {week: 11}]}]});
   explorer.tab('rules');
   assert.deepEqual(panels.map(n => n.hidden), [true, false, true, true]);
@@ -259,5 +295,10 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   assert.match(get('history-status').textContent, /2 saved weeks/);
   assert.deepEqual(get('history-rows').children.map(tr => tr.children[0].children[0].textContent), ['Week 10', 'Week 11']);
   assert.equal(get('history-rows').children.at(-1).children.at(-1).textContent, '0 (unchanged)');
-  console.log('Offline controller checks passed: separate tabs, focused explanations, completed weeks, history, last-column movement, polls and cache reuse.');
+  explorer.show({season:2026, reference_rank:2, teams:teams([1,2]), order:[1,2]},
+    {snapshots:weeklyRows, archive:[{season:2026,weeks:[{week:10},{week:11}]}]});
+  await settle();
+  assert.match(get('history-status').textContent, /2nd reference/);
+  assert.equal(get('history-rows').children.at(-1).children.at(-1).textContent, '↑ 1', 'History movement uses the selected reference for both weeks');
+  console.log('Offline controller checks passed: references, preserved ordering controls, downloads, history, movement, polls and cache reuse.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

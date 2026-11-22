@@ -16,6 +16,7 @@ import sys
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, UTC, digest, encoded, instant, sync
 from cache_identity import SOURCES, publication_sources, PUBLICATION_GENERATION
+from reference_config import DEFAULT_REFERENCE, REFERENCE_RANKS, check_reference
 
 PUBLIC = ROOT / 'assets' / 'data' / 'cfb'
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
@@ -92,11 +93,24 @@ def matching_snapshot(index, key, destination=PUBLIC, *, historical=False):
         result = json.loads(path.read_text())
         if digest(result) != row['sha256'] or not result['publication_ready']:
             raise ValueError('Saved published snapshot failed its integrity check')
+        if set(row.get('references', {})) != {str(rank) for rank in REFERENCE_RANKS}:
+            raise ValueError('Saved snapshot is missing reference-team results')
+        for rank, reference in row['references'].items():
+            target = destination / reference['json']
+            if not target.resolve().is_relative_to(destination.resolve()):
+                raise ValueError('Invalid reference snapshot path')
+            saved = json.loads(target.read_text())
+            if (digest(saved) != reference['sha256'] or not saved['publication_ready']
+                    or saved.get('reference_rank') != int(rank) or saved['request_key'] != key):
+                raise ValueError('Saved reference snapshot failed its integrity check')
         return row
     return None
 
 
 def validate_candidate(result, inputs):
+    reference = check_reference(result.get('reference_rank'))
+    if result['identity'].get('reference_rank') != reference:
+        raise ValueError('Candidate reference rank does not match its scoring identity')
     if (result['season'] != inputs['season'] or result['games'] != len(inputs['games'])
             or result['identity']['inputs']['fit_input_sha256'] != inputs['fit_input_sha256']):
         raise ValueError('Candidate does not match the saved season inputs')
@@ -186,8 +200,8 @@ def validate_candidate(result, inputs):
     encoded(result)
 
 
-def publish(result, inputs, key, now, destination=PUBLIC):
-    validate_candidate(result, inputs)
+def write_snapshot(result, inputs, key, now, destination):
+    """Write one already-validated reference result; expose the index only after all four."""
     week = inputs.get('through_week')
     kind = 'reconstruction' if week is not None else 'observed'
     if week is None:
@@ -208,7 +222,7 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     body = encoded(snapshot)
     if json_path.exists() and json_path.read_bytes() != body:
         raise ValueError('Refusing to replace an immutable historical snapshot')
-    columns = ('rank', 'name', 'conference', 'wins', 'losses', 'wins_fbs', 'losses_fbs', 'wins_fcs', 'losses_fcs', 'merit_mean', 'merit_median', 'merit_sd', 'merit_lo90',
+    columns = ('reference_rank', 'rank', 'name', 'conference', 'wins', 'losses', 'wins_fbs', 'losses_fbs', 'wins_fcs', 'losses_fcs', 'merit_mean', 'merit_median', 'merit_sd', 'merit_lo90',
                'merit_hi90', 'raw_merit_rank', 'raw_rank_lo90', 'raw_rank_hi90', 'p_raw_merit_top8',
                'p_raw_merit_top10', 'p_raw_merit_top25', 'raw_rank_mean', 'raw_rank_median', 'raw_rank_sd',
                'sos_median', 'sos_sd', 'sos_lo90', 'sos_hi90', 'sos_mean')
@@ -217,22 +231,43 @@ def publish(result, inputs, key, now, destination=PUBLIC):
     output = io.StringIO(newline='')
     writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore', lineterminator='\n')
     writer.writeheader()
-    writer.writerows(snapshot['teams'])
-    index = read_index(destination)
+    writer.writerows({**team, 'reference_rank': result['reference_rank']} for team in snapshot['teams'])
     row = {'id': ident, 'methodology': PUBLICATION_GENERATION, 'season': inputs['season'], 'week': week, 'games': len(inputs['games']), 'kind': kind,
            'published_at': snapshot['published_at'], 'data_observed_at': snapshot['data_observed_at'],
            'data_cutoff': snapshot['data_cutoff'], 'request_key': key, 'sha256': checksum,
            'json': relative.with_suffix('.json').as_posix(), 'csv': relative.with_suffix('.csv').as_posix()}
+    row['reference_rank'] = result['reference_rank']
     if result.get('week_completion'):
         row['week_completion'] = result['week_completion']
-    index['snapshots'] = [r for r in index['snapshots'] if r['id'] != ident] + [row]
-    index['snapshots'].sort(key=lambda r: (r['season'], instant(r['data_cutoff']), instant(r['published_at'])), reverse=True)
-    index['latest'] = index['snapshots'][0]['id']
-    if kind == 'observed':
-        index['last_attempt'] = {'season': inputs['season'], 'at': now.isoformat(), 'status': 'updated'}
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_bytes(body)
     (destination / relative.with_suffix('.csv')).write_text(output.getvalue())
+    return row
+
+
+def publish(result, inputs, key, now, destination=PUBLIC, *, reference_results=None):
+    validate_candidate(result, inputs)
+    if (result['reference_rank'] != DEFAULT_REFERENCE or reference_results is None
+            or set(reference_results) != set(REFERENCE_RANKS) or reference_results[DEFAULT_REFERENCE] != result):
+        raise ValueError('Publication requires the default 12th reference and all four reference results')
+    for rank, variant in reference_results.items():
+        validate_candidate(variant, inputs)
+        if (variant['reference_rank'] != rank or variant['data_cutoff'] != result['data_cutoff']
+                or not variant['identity'].get('fit_key')
+                or variant['identity'].get('fit_key') != result['identity'].get('fit_key')
+                or variant['home_prior'] != result['home_prior']
+                or variant.get('week_completion') != result.get('week_completion')):
+            raise ValueError('Reference results must use the same fit and cutoff')
+    rows = {rank: write_snapshot(value, inputs, key, now, destination) for rank, value in reference_results.items()}
+    row = rows[DEFAULT_REFERENCE]
+    row['references'] = {str(rank): {k: variant[k] for k in ('json', 'csv', 'sha256', 'reference_rank')}
+                         for rank, variant in rows.items()}
+    index = read_index(destination)
+    index['snapshots'] = [r for r in index['snapshots'] if r['id'] != row['id']] + [row]
+    index['snapshots'].sort(key=lambda r: (r['season'], instant(r['data_cutoff']), instant(r['published_at'])), reverse=True)
+    index['latest'] = index['snapshots'][0]['id']
+    if row['kind'] == 'observed':
+        index['last_attempt'] = {'season': inputs['season'], 'at': now.isoformat(), 'status': 'updated'}
     from historical_rankings import write_series
     write_series(index, inputs['season'], destination)
     write_index(index, destination)
@@ -283,11 +318,15 @@ def complete(destination=PUBLIC):
         return previous
     from fit_saved_season import run
     from posterior_summary import attach
-    result = run(plan['season'], through_week=week, exact_loo=True, **cutoff)
-    attach(result, inputs, TASK)
-    if proof:
-        result['week_completion'] = proof
-    row = publish(result, inputs, plan['key'], dt.datetime.now(UTC), destination)
+    reference_results = {}
+    for rank in (DEFAULT_REFERENCE, *(r for r in REFERENCE_RANKS if r != DEFAULT_REFERENCE)):
+        result = run(plan['season'], through_week=week, exact_loo=True, reference_rank=rank, **cutoff)
+        attach(result, inputs, TASK)
+        if proof:
+            result['week_completion'] = proof
+        reference_results[rank] = result
+    row = publish(reference_results[DEFAULT_REFERENCE], inputs, plan['key'], dt.datetime.now(UTC),
+                  destination, reference_results=reference_results)
     print(json.dumps({'published': row['id'], 'season': row['season'], 'games': row['games']}))
     return row
 

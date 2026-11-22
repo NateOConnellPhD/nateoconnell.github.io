@@ -3,6 +3,9 @@
   const root = document.querySelector('[data-cfb]');
   if (!root) return;
   const el = key => root.querySelector(`[data-cfb-${key}]`);
+  const reference = window.CFBReference;
+  el('reference').value = String(reference.choice(new URLSearchParams(location.search).get('reference')));
+  const savedLabel = () => current?.reference_rank === reference.defaultRank ? 'Official rankings' : `${reference.label(current?.reference_rank)}-reference rankings`;
   const base = new URL('./', new URL(root.dataset.index, location.href));
   const snapshots = new Map();
   const pollSeasons = new Map();
@@ -32,16 +35,16 @@
       return await response.json();
     } finally { clearTimeout(timeout); }
   }
-  async function read(row) {
-    if (!snapshots.has(row.id)) {
-      const value = await fetchJSON(url(row.json));
-      if (value.methodology !== 'margin-of-merit-2026-11-21-no-p4' || !value.publication_ready || value.schema !== 'margin-of-merit-snapshot-v1' || !Array.isArray(value.teams) ||
-          value.season !== row.season || value.week !== row.week) {
+  async function read(row, rank) {
+    const descriptor = reference.descriptor(row, rank), key = `${row.id}:${rank}`;
+    if (!snapshots.has(key)) {
+      const value = await fetchJSON(url(descriptor.json));
+      if (!reference.valid(value, row, rank)) {
         throw new Error('Unpublished or invalid ranking');
       }
-      snapshots.set(row.id, value);
+      snapshots.set(key, value);
     }
-    return snapshots.get(row.id);
+    return snapshots.get(key);
   }
   function option(value, label) {
     const node = document.createElement('option');
@@ -178,10 +181,10 @@
     el('boundary-rule').textContent = 'Merit protection includes equality at its threshold; probability eligibility uses strictly below. Proximity is a separate OR condition. Conflicts are resolved globally: direct results, common opponents, merit, then the fewest changes to the raw order.';
   }
   function comparisonLabel() {
-    el('rank-label').textContent = customPolicy ? 'Your rules' : 'Official';
+    el('rank-label').textContent = customPolicy ? 'Your rules' : current.reference_rank === reference.defaultRank ? 'Official' : 'Selected reference';
     el('change-label').textContent = current.week > 0 ? `Week ${current.week - 1} → ${current.week}` : 'First week';
     el('comparison').textContent = customComparisonUnavailable || comparisonUnavailable ||
-      `Weekly change compares week ${previous.week} with week ${current.week}. ↑ means a higher rank; ↓ means a lower rank; 0 means unchanged. ${customPolicy ? 'Both weeks use your selected rules.' : 'Both weeks use the official rules.'}`;
+      `Weekly change compares week ${previous.week} with week ${current.week}, using the ${reference.label(current.reference_rank)} reference in both weeks. ↑ means a higher rank; ↓ means a lower rank; 0 means unchanged. ${customPolicy ? 'Both weeks use your selected rules.' : 'Both weeks use the default ordering rules.'}`;
   }
   function setOfficialPolicy() {
     clearTimeout(policyFrame);
@@ -201,13 +204,13 @@
       el('equal').checked = current.specification.equal_records_only;
       el('proximity-control').hidden = false;
       el('proximity').value = current.specification.proximity ?? 2;
-      el('reset').textContent = 'Official defaults';
+      el('reset').textContent = 'Reset ordering rules';
       policyResult = current;
       const active = current.teams.filter(t => t.rank != null).sort((a,b) => a.name.localeCompare(b.name));
       el('team-a').replaceChildren(...active.map(t => option(t.id, t.name)));
       if (current.order.length) el('team-a').value = String(current.order[0]);
       chooseOpponent();
-      el('mode').textContent = 'Official rankings';
+      el('mode').textContent = savedLabel();
       ruleSentences(); renderAudit();
     } else {
       el('mode').textContent = 'This week is awaiting a refit under the current model and rules.';
@@ -219,7 +222,7 @@
     ruleSentences();
     const selected = settings(), snapshot=current, generation=++policyGeneration;
     window.CFBPolicy.cancel();
-    el('mode').textContent = 'Calculating your selected rules… Official rankings are shown while this runs.';
+    el('mode').textContent = 'Calculating your selected rules… Saved rankings for this reference are shown while this runs.';
     previousRanks = new Map((previous?.teams || []).map(t => [t.id, t.rank]));
     customComparisonUnavailable = '';
     policyResult=null; viewTeams=current.teams; customPolicy=false; comparisonLabel(); render(); el('decisions').replaceChildren(); el('pair-summary').replaceChildren();
@@ -233,16 +236,16 @@
       policyResult = result; customPolicy = !isOfficial; policyError = null;
       el('policy-error').hidden = true;
       const changed = current.teams.filter(t => t.rank !== rank.get(t.id) && t.rank != null).length;
-      el('mode').textContent = isOfficial ? 'Official rankings'
-        : `Your rules · ${changed} team${changed === 1 ? '' : 's'} changed position from the official ranking. Saved estimates are unchanged.`;
+      el('mode').textContent = isOfficial ? savedLabel()
+        : `Your rules · ${reference.label(current.reference_rank)} reference · ${changed} team${changed === 1 ? '' : 's'} changed position from the saved ranking. Saved estimates are unchanged.`;
     } catch (error) {
       if (error.name === 'AbortError' || generation !== policyGeneration || snapshot !== current) return;
       // Failed or unproven optimization must not display a custom ranking.
       policyError = error; customPolicy = false; viewTeams = current.teams;
       policyResult = {specification: selected, audit: error.audit || []};
       el('policy-error').hidden = false;
-      el('policy-error').textContent = `${error.message} No ranking was created for these settings. The table shows the official rankings; adjust a control or use Official defaults.`;
-      el('mode').textContent = 'Calculation unavailable — official rankings shown';
+      el('policy-error').textContent = `${error.message} No ranking was created for these settings. The table shows the saved rankings for this reference; adjust a control or use Reset ordering rules.`;
+      el('mode').textContent = 'Calculation unavailable — saved rankings shown';
     }
     previousRanks = new Map((previous?.teams || []).map(t => [t.id, t.rank]));
     customComparisonUnavailable = '';
@@ -315,10 +318,10 @@
     const a = Number(el('team-a').value), b = el('team-b').value ? Number(el('team-b').value) : null;
     const summary = el('pair-summary'); summary.replaceChildren();
     const audit = policyResult.audit || [];
-    if (policyError) paragraph(summary, 'These settings did not produce a verified order. The table shows the official rankings.');
+    if (policyError) paragraph(summary, 'These settings did not produce a verified order. The table shows the saved rankings for this reference.');
     for (const id of [a, b].filter((id, k, list) => id != null && list.indexOf(id) === k)) {
       const original = current.teams.find(t => t.id === id), shown = viewTeams.find(t => t.id === id);
-      if (original) paragraph(summary, `${original.name}: ${wins(original)}–${losses(original)} overall record. Official #${original.rank}; shown #${shown.rank}; raw merit #${original.raw_merit_rank}.`);
+      if (original) paragraph(summary, `${original.name}: ${wins(original)}–${losses(original)} overall record. Saved #${original.rank}; shown #${shown.rank}; raw merit #${original.raw_merit_rank}. Reference: ${reference.label(current.reference_rank)}.`);
     }
     const relevant = audit.filter(r => b != null && a !== b &&
       ((r.winner_id === a && r.loser_id === b) || (r.winner_id === b && r.loser_id === a)));
@@ -369,7 +372,7 @@
         if (secondary != null) { const small = document.createElement('small'); small.textContent = secondary; td.append(small); }
         tr.append(td); return td;
       }
-      cell(r.rank ?? '—', customPolicy && r.rank != null ? `Official ${officialRanks.get(r.id)}` : null);
+      cell(r.rank ?? '—', customPolicy && r.rank != null ? `Saved ${officialRanks.get(r.id)}` : null);
       const teamCell = cell(r.name, r.conference || 'Independent', true);
       const explore = document.createElement('button'); explore.type='button';explore.className='cfb-explain';explore.textContent='Explore posterior';
       explore.setAttribute('aria-label',`Explore ${r.name} posterior`);explore.addEventListener('click',()=>explorer.team(r.id));teamCell.append(explore);
@@ -410,10 +413,12 @@
     el('rows').replaceChildren(fragment);
     el('count').textContent = `${rows.length} of ${current.teams.length} teams shown.${query || conference ? ' Search and conference filters include all ranks.' : activePoll && el('limit').value !== 'all' ? ' Includes teams in either Top 25.' : ''}`;
   }
-  async function select(id, writeURL = true) {
+  async function select(id, writeURL = true, preserveRules = false) {
     const row = index.snapshots.find(r => r.id === id);
     if (!row) return;
     const sequence = ++loadNumber;
+    const rank = reference.choice(el('reference').value);
+    const readerSettings = preserveRules && isV5() && !el('policy').hidden ? settings() : null;
     policyGeneration++; clearTimeout(policyFrame); window.CFBPolicy?.cancel();
     pollLoadNumber++; activePoll = null;
     el('status').hidden = false; el('status').textContent = 'Loading saved update…';
@@ -421,10 +426,10 @@
     root.setAttribute('aria-busy', 'true');
     populateUpdates(row.season, id);
     try {
-      const result = await read(row);
+      const result = await read(row, rank);
       const older = index.snapshots.find(r => r.season === row.season && r.week === row.week - 1 && r.data_cutoff < row.data_cutoff);
       let prior = null;
-      if (older) { try { prior = await read(older); } catch (_) { /* Rankings remain usable without movement. */ } }
+      if (older) { try { prior = await read(older, rank); } catch (_) { /* Rankings remain usable without movement. */ } }
       if (sequence !== loadNumber) return;
       current = result;
       previous = prior?.policy_sha256 === current.policy_sha256 ? prior : null;
@@ -436,23 +441,31 @@
       el('label').textContent = `${row.season} season / ${id === index.latest ? 'Latest update' : 'Saved update'}`;
       document.getElementById('cfb-title').textContent = `Week ${row.week} rankings`;
       el('timing').textContent = `${current.scored_games} FBS games counted; ${current.games} Division I games in the model through ${date(current.data_cutoff)}. ${current.kind==='reconstruction'?'Reconstructed using only results through this week.':'Unplayed games are not included.'}`;
-      el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, through ${date(current.data_cutoff)}`;
+      el('caption').textContent = `${row.season} Margin of Merit, week ${row.week}, ${reference.label(rank)} reference, through ${date(current.data_cutoff)}`;
       const chosenConference = el('conference').value;
       el('conference').replaceChildren(option('', 'All conferences'), ...[...new Set(current.teams.map(r => r.conference).filter(Boolean))].sort().map(c => option(c, c)));
       if ([...el('conference').options].some(o => o.value === chosenConference)) el('conference').value = chosenConference;
       const address = new URL(location.href);
       address.searchParams.set('snapshot', id);
+      address.searchParams.set('reference', rank);
       address.searchParams.set('season', row.season); address.searchParams.set('week', row.week); address.hash = '';
       el('permalink').href = address.href;
-      el('csv').href = url(row.csv); el('csv').hidden = false;
-      el('json').href = url(row.json);
+      const descriptor = reference.descriptor(row, rank);
+      el('csv').href = url(descriptor.csv); el('csv').hidden = false;
+      el('csv').textContent = `${rank === reference.defaultRank ? 'Official' : reference.label(rank) + '-reference'} CSV ↓`;
+      el('json').href = url(descriptor.json);
       if (writeURL) history.replaceState(null, '', address);
       notice(); render(); el('results').hidden = false; explorer.show(current,index); renderArchive();
       loadPolls();
+      if (readerSettings) {
+        for (const [key, field] of Object.entries(thresholdControls)) el(key).value = readerSettings[field] * 100;
+        el('proximity').value = readerSettings.proximity; el('equal').checked = readerSettings.equal_records_only;
+        applyPolicy();
+      }
       el('status').textContent = `Loaded ${row.season} week ${row.week}.`;
       el('status').hidden = true;
     } catch (_) {
-      if (sequence === loadNumber) el('status').textContent = 'This week’s rankings could not be loaded. Choose another week or reload the page.';
+      if (sequence === loadNumber) el('status').textContent = `This week’s ${reference.label(rank)}-reference results could not be loaded. Choose another week or reload the page.`;
     } finally { if (sequence === loadNumber) root.removeAttribute('aria-busy'); }
   }
   async function browseSeason(season, week = null, writeURL = true) {
@@ -478,6 +491,8 @@
   }
   el('season').addEventListener('change', () => browseSeason(el('season').value));
   el('week').addEventListener('change', () => browseSeason(el('season').value, Number(el('week').value)));
+  el('reference').addEventListener('change', () => el('update').value
+    ? select(el('update').value, true, true) : browseSeason(el('season').value, Number(el('week').value)));
   el('poll').addEventListener('change', loadPolls);
   el('poll-edition').addEventListener('change', renderPollEdition);
   el('update').addEventListener('change', () => select(el('update').value));
@@ -502,12 +517,13 @@
   el('explanations').addEventListener('toggle', renderAudit);
   el('audit-download').addEventListener('click', () => {
     if (!policyResult || policyError) return;
-    const blob = new Blob([JSON.stringify({snapshot: el('update').value, official: !customPolicy,
+    const blob = new Blob([JSON.stringify({snapshot: el('update').value, official: !customPolicy && current.reference_rank === reference.defaultRank,
+      reference_rank: current.reference_rank,
       specification: policyResult.specification, order: policyResult.order, optimization: policyResult.optimization,
       teams: current.teams.map(t => ({id: t.id, name: t.name, wins: wins(t), losses: losses(t), wins_fbs: t.wins_fbs, losses_fbs: t.losses_fbs,
-        official_rank: t.rank, raw_merit_rank: t.raw_merit_rank})), audit: policyResult.audit}, null, 2) + '\n'], {type: 'application/json'});
+        saved_rank: t.rank, raw_merit_rank: t.raw_merit_rank})), audit: policyResult.audit}, null, 2) + '\n'], {type: 'application/json'});
     const address = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = address; link.download = `margin-of-merit-${el('update').value}-${customPolicy ? 'reader' : 'official'}-audit.json`;
+    link.href = address; link.download = `margin-of-merit-${el('update').value}-reference-${current.reference_rank}-${customPolicy ? 'reader' : 'saved'}-audit.json`;
     document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(address), 1000);
   });
   for (const key of ['search', 'conference', 'limit']) el(key).addEventListener(key === 'search' ? 'input' : 'change', render);
@@ -533,7 +549,7 @@
     try {
       index = await fetchJSON(root.dataset.index, 'no-store');
       if (index.schema !== 'margin-of-merit-index-v1' || !Array.isArray(index.snapshots)) throw new Error('Invalid archive');
-      index.snapshots = index.snapshots.filter(r => r.week_complete !== false && r.methodology === 'margin-of-merit-2026-11-21-no-p4');
+      index.snapshots = index.snapshots.filter(r => r.week_complete !== false && r.methodology === reference.methodology);
       if (!index.snapshots.some(r => r.id === index.latest)) index.latest = index.snapshots[0]?.id || null;
       const seasons = [...new Set([...index.snapshots.map(r => r.season), ...(index.archive || []).map(s => s.season)])].sort((a,b) => b-a);
       if (!seasons.length) {

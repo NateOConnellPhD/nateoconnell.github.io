@@ -7,6 +7,7 @@ import arviz as az
 import numpy as np
 from scipy.special import stdtr
 from scipy.stats import t as student
+from reference_config import DEFAULT_REFERENCE, REFERENCE_RANKS
 
 
 def flatten(samples):
@@ -32,7 +33,7 @@ def venue_effect(samples, data):
     return advantage * np.asarray(data['venue'])
 
 
-def reference_strength(samples, reference_rank=25, reference_indices=None):
+def reference_strength(samples, reference_rank=DEFAULT_REFERENCE, reference_indices=None):
     theta = samples['theta'] if reference_indices is None else samples['theta'][:, reference_indices]
     n = theta.shape[1]
     if not 1 <= reference_rank <= n:
@@ -40,7 +41,7 @@ def reference_strength(samples, reference_rank=25, reference_indices=None):
     return np.partition(theta, n-reference_rank, axis=1)[:, n-reference_rank]
 
 
-def game_values(samples, data, game, reference_rank=25, reference=None, *, reference_indices=None):
+def game_values(samples, data, game, reference_rank=DEFAULT_REFERENCE, reference=None, *, reference_indices=None):
     n = samples['theta'].shape[1] if reference_indices is None else len(reference_indices)
     if not 1 <= reference_rank <= n:
         raise ValueError('Reference rank outside the season roster')
@@ -83,7 +84,14 @@ def log_likelihood(flat, data):
     return student.logpdf(np.asarray(data['margin'])[None, :], flat['nu'][:, None], loc=mu, scale=flat['sigma'][:, None])
 
 
-def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None,
+def game_values_by_reference(samples, data, game, *, reference_indices=None):
+    """Use one checked omitted-game posterior for every saved reference choice."""
+    return {f'r{rank}_{name}': values for rank in REFERENCE_RANKS
+            for name, values in game_values(samples, data, game, rank,
+                                           reference_indices=reference_indices).items()}
+
+
+def score(samples, data, *, reference_rank=DEFAULT_REFERENCE, reff=None, exact_refitter=None,
           reference_indices=None, scored_indices=None):
     flat = flatten(samples)
     draws, n = flat['theta'].shape
@@ -127,7 +135,7 @@ def score(samples, data, *, reference_rank=25, reff=None, exact_refitter=None,
     return result
 
 
-def aggregate_credits(flat, data, weights, reference_rank=25, *, exact=None,
+def aggregate_credits(flat, data, weights, reference_rank=DEFAULT_REFERENCE, *, exact=None,
                       reference_indices=None, scored_indices=None):
     """Accumulate validated per-game marginals; weights determine the target.
 

@@ -18,6 +18,7 @@ from policy_fixtures import probability
 from sync_data import ROOT, UTC
 from historical_home import CANONICAL as HOME
 from model import strength_structure
+from reference_config import DEFAULT_REFERENCE, REFERENCE_RANKS
 
 
 def fixture(season=2026):
@@ -39,8 +40,8 @@ def fixture(season=2026):
                      'raw_rank_mean': i, 'raw_rank_lo90': i, 'raw_rank_hi90': i,
                      'sos_mean': .5, 'sos_lo90': .4, 'sos_hi90': .6,
                      'p_raw_merit_top8': 1., 'p_raw_merit_top10': 1., 'p_raw_merit_top25': 1.})
-    result = {'season': season, 'games': 1, 'teams': rows, 'order': [1, 2], 'data_cutoff': at,
-              'identity': {'inputs': {'fit_input_sha256': 'fixture', 'home_history_sha256': 'history-fixture', 'strength_structure': inputs['strength_structure']}},
+    result = {'season': season, 'reference_rank': DEFAULT_REFERENCE, 'games': 1, 'teams': rows, 'order': [1, 2], 'data_cutoff': at,
+              'identity': {'reference_rank': DEFAULT_REFERENCE, 'fit_key': 'fixture-fit', 'inputs': {'fit_input_sha256': 'fixture', 'home_history_sha256': 'history-fixture', 'strength_structure': inputs['strength_structure']}},
               'home_prior': {'years': list(range(season-3, season)), 'history_input_sha256': 'history-fixture',
                              'prior_sha256': 'a'*64, 'specification': asdict(HOME), 'diagnostics': {'converged': True}},
               'sampling_diagnostics': {'sampling_checks_passed': True, 'parameters_checked': ['mu_fcs','tau_division','tau_conf','theta_z','conference_z','conference_effect'], 'max_rank_normalized_rhat': 1.,
@@ -50,6 +51,13 @@ def fixture(season=2026):
                                   'exact_refits': 0, 'max_transport_mean_error': .0001}}
     result.update(order_policy(prepare_policy(inputs['teams'][:2], inputs['games'], [1., 0.], probability(2), season=season, opponents=inputs['teams'][2:])))
     return result, inputs
+
+
+def references(result):
+    variants = {rank: copy.deepcopy(result) for rank in REFERENCE_RANKS}
+    for rank, value in variants.items():
+        value['reference_rank'] = value['identity']['reference_rank'] = rank
+    return variants
 
 
 class PublicationTests(unittest.TestCase):
@@ -72,7 +80,7 @@ class PublicationTests(unittest.TestCase):
         self.result, self.inputs = fixture()
 
     def publish(self, key='one'):
-        return live.publish(self.result, self.inputs, key, self.now, self.public)
+        return live.publish(self.result, self.inputs, key, self.now, self.public, reference_results=references(self.result))
 
     def test_prior_methodology_is_pending_instead_of_a_usable_ranking(self):
         row = self.publish()
@@ -213,7 +221,7 @@ class PublicationTests(unittest.TestCase):
     def test_backfill_does_not_replace_current_season(self):
         current = self.publish()
         old, inputs = fixture(2024)
-        live.publish(old, inputs, 'old', self.now + dt.timedelta(hours=1), self.public)
+        live.publish(old, inputs, 'old', self.now + dt.timedelta(hours=1), self.public, reference_results=references(old))
         self.assertEqual(live.read_index(self.public)['latest'], current['id'])
 
     def test_unchanged_update_skips_numerical_runner_even_without_cache(self):
@@ -251,6 +259,43 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(index['latest'], row['id'])
         self.assertEqual(index['last_attempt']['status'], 'failed')
         self.assertEqual(content, (self.public / row['json']).read_bytes())
+
+    def test_reference_variants_have_separate_downloads_and_matching_history(self):
+        row = self.publish()
+        self.assertEqual(row['reference_rank'], 12)
+        self.assertEqual(set(row['references']), {'2', '4', '12', '24'})
+        self.assertEqual(len({v['json'] for v in row['references'].values()}), 4)
+        history = json.loads((self.public / 'seasons/2026/history.json').read_text())['weeks'][0]
+        for rank in REFERENCE_RANKS:
+            variant = row['references'][str(rank)]
+            saved = json.loads((self.public / variant['json']).read_text())
+            self.assertEqual(saved['reference_rank'], rank)
+            self.assertEqual(saved['identity']['reference_rank'], rank)
+            records = list(csv.DictReader(io.StringIO((self.public / variant['csv']).read_text())))
+            self.assertEqual({r['reference_rank'] for r in records}, {str(rank)})
+            self.assertEqual(history['references'][str(rank)]['teams'][0]['rank'], saved['teams'][0]['rank'])
+        self.assertEqual(row['json'], row['references']['12']['json'])
+
+    def test_partial_or_inconsistent_reference_bundle_cannot_publish(self):
+        self.publish()
+        original = {p: p.read_bytes() for p in self.public.rglob('*') if p.is_file()}
+        for mutation in ('missing', 'wrong-rank', 'different-fit', 'failed-check'):
+            variants = references(self.result)
+            if mutation == 'missing': del variants[24]
+            elif mutation == 'wrong-rank': variants[2]['reference_rank'] = 4
+            elif mutation == 'different-fit': variants[2]['identity']['fit_key'] = 'other-fit'
+            else: variants[2]['loo_diagnostics']['unreliable_games'] = 1
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                live.publish(self.result, self.inputs, 'bad', self.now, self.public, reference_results=variants)
+            self.assertEqual(original, {p:p.read_bytes() for p in self.public.rglob('*') if p.is_file()})
+
+    def test_tampered_alternative_is_not_reused(self):
+        row = self.publish()
+        path = self.public / row['references']['2']['json']
+        changed = json.loads(path.read_text()); changed['reference_rank'] = 24
+        path.write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ValueError, 'reference snapshot'):
+            live.matching_snapshot(live.read_index(self.public), 'one', self.public)
 
     def test_season_rollover_keeps_last_season_until_august(self):
         for month, expected in ((1, 2026), (7, 2026), (8, 2027), (11, 2027)):

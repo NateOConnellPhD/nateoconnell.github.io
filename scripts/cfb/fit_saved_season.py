@@ -19,6 +19,7 @@ from ranking_policy import CANONICAL as POLICY
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, digest
 from sampling_retry import checked_exact_refit
+from reference_config import DEFAULT_REFERENCE, REFERENCE_RANKS, check_reference, exact_quantities_for
 
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
 
@@ -45,7 +46,8 @@ def checked_cache(folder, filename):
     return report
 
 
-def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False):
+def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False, reference_rank=DEFAULT_REFERENCE):
+    check_reference(reference_rank)
     if type(season) is not int or season < 2002:
         raise ValueError('Use a season from 2002 onward')
     inputs = load_inputs(season, through_week=through_week, as_of=as_of)
@@ -59,7 +61,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
                        ('OPENBLAS_NUM_THREADS', '1'), ('OMP_NUM_THREADS', '1')):
         os.environ[key] = value
     import numpy as np
-    from loo_scoring import score, flatten, game_values
+    from loo_scoring import score, flatten, game_values_by_reference
     from ranking_policy import rank_merit
     from refit_2024 import describe, predictive_summary
     from historical_home import load_or_estimate
@@ -100,7 +102,8 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
     print(json.dumps({'fit_reused': reused_fit, 'diagnostics': report['diagnostics']}), flush=True)
 
     score_identity = {'fit_key': fit_key, 'posterior_sha256': report['array_sha256'],
-                      'scorer_source': source_hash('loo_scoring.py'), 'reference_rank': 25,
+                      'scorer_source': source_hash('loo_scoring.py'), 'reference_rank': reference_rank,
+                      'reference_source': source_hash('reference_config.py'),
                       'exact_loo': exact_loo, 'exact_runner_source': source_hash('fit_saved_season.py') if exact_loo else None,
                       'exact_sampling_source': source_hash('sampling_retry.py') if exact_loo else None,
                       'game_ids': [g['id'] for g in inputs['games']],
@@ -120,6 +123,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
             ident = {'fit_key': fit_key, 'game_id': inputs['games'][game]['id'],
                      'runner_source': source_hash('fit_saved_season.py'),
                      'sampling_source': source_hash('sampling_retry.py'),
+                     'reference_source': source_hash('reference_config.py'), 'reference_ranks': list(REFERENCE_RANKS),
                      'scorer_source': source_hash('loo_scoring.py'), 'seed': seed + game + 100}
             folder = TASK / 'exact' / digest(ident)
             if folder.exists():
@@ -127,22 +131,23 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
                 if saved_report['identity'] != ident or not saved_report['diagnostics']['sampling_checks_passed']:
                     raise ValueError('Exact LOO cache validation failed')
                 with np.load(folder / 'quantities.npz', allow_pickle=False) as saved:
-                    return dict(saved)
+                    return exact_quantities_for(dict(saved), reference_rank)
             omitted = {key: values[:game] + values[game+1:] for key, values in inputs['data'].items()}
             def fit_attempt(**settings):
                 return fit(len(inputs['teams']), **omitted, specification=MODEL,
                            home_prior=prior, structure=inputs['strength_structure'], **settings)
             exact_samples, diagnostics, attempts = checked_exact_refit(
                 ident['game_id'], ident['seed'], fit_attempt, describe)
-            quantities = game_values(flatten(exact_samples), inputs['data'], game, reference_indices=inputs['fbs_indices'])
+            quantities = game_values_by_reference(flatten(exact_samples), inputs['data'], game,
+                                                  reference_indices=inputs['fbs_indices'])
             folder.mkdir(parents=True)
             np.savez_compressed(folder / 'quantities.npz', **quantities)
             write_json(folder / 'report.json', {'identity': ident, 'diagnostics': diagnostics, 'attempts': attempts,
                        'array_sha256': file_hash(folder / 'quantities.npz')})
-            return quantities
+            return exact_quantities_for(quantities, reference_rank)
 
         scored = score(samples, inputs['data'], exact_refitter=refit_game if exact_loo else None,
-                       reference_indices=inputs['fbs_indices'], scored_indices=inputs['scored_game_indices'])
+                       reference_rank=reference_rank, reference_indices=inputs['fbs_indices'], scored_indices=inputs['scored_game_indices'])
         merit, sos = scored['merit'], scored['sos']
         scored_folder.mkdir(parents=True)
         np.savez_compressed(scored_folder / 'merit.npz', merit=merit, sos=sos)
@@ -158,13 +163,14 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
         row['sos_lo90'] = float(np.quantile(values, .05)) if row['status'] == 'ranked' else None
         row['sos_hi90'] = float(np.quantile(values, .95)) if row['status'] == 'ranked' else None
     ranking_identity = {'score_key': score_key, 'merit_sha256': score_report['array_sha256'],
+                        'fit_key': fit_key, 'reference_rank': reference_rank,
                         'policy': asdict(POLICY), 'policy_source': source_hash('ranking_policy_v5.py'),
                         'optimizer_source': source_hash('exact_order.py'),
                         'input_preparation_source': source_hash('season_inputs.py'),
                         'runner_source': source_hash('fit_saved_season.py'),
                         'inputs': {k: v for k, v in inputs.items() if k not in ('data', 'games', 'teams', 'home_history')}}
     ranking_identity['inputs']['home_history_sha256'] = inputs['home_history']['input_sha256']
-    result.update(identity=ranking_identity, season=season, status='candidate_for_review',
+    result.update(identity=ranking_identity, season=season, reference_rank=reference_rank, status='candidate_for_review',
                   home_prior=home_identity,
                   sampling_diagnostics=report['diagnostics'], loo_diagnostics=score_report['diagnostics'],
                   data_cutoff=inputs['cutoff'], games=len(inputs['games']))
@@ -184,6 +190,7 @@ def main():
     parser.add_argument('--as-of', help='ISO8601 timestamp with timezone; at or before saved data observation')
     parser.add_argument('--seed', type=int, default=20261120)
     parser.add_argument('--exact-loo', action='store_true', help='Refit and diagnose games with unreliable PSIS')
+    parser.add_argument('--reference-rank', type=int, choices=REFERENCE_RANKS, default=DEFAULT_REFERENCE)
     run(**vars(parser.parse_args()))
 
 

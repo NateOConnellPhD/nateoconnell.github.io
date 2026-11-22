@@ -53,6 +53,8 @@ def attach(result, inputs, task):
         return report, arrays
 
     score_report, scores = read(task / 'scores' / result['identity']['score_key'], 'merit.npz')
+    if score_report['identity'].get('reference_rank') != result.get('reference_rank'):
+        raise ValueError('Posterior summaries use a different reference team')
     if score_report['array_sha256'] != result['identity']['merit_sha256']:
         raise ValueError('Posterior summaries do not belong to these rankings')
     fit_report, samples = read(task / 'fits' / score_report['identity']['fit_key'], 'posterior.npz')
@@ -92,7 +94,7 @@ def attach(result, inputs, task):
     if 'mu_fcs' in flat:
         parameters.update(mu_fcs=summarize(flat['mu_fcs']), tau_conf=summarize(flat['tau_conf']),
                           tau_fbs=summarize(flat['tau_division'][:, 0]), tau_fcs=summarize(flat['tau_division'][:, 1]))
-    result['posterior'] = {'schema': SCHEMA, 'teams': output, 'parameters': parameters,
+    result['posterior'] = {'schema': SCHEMA, 'reference_rank': result['reference_rank'], 'teams': output, 'parameters': parameters,
         'interpretation': 'Merit, raw rank and schedule strength use the saved marginal-quantile LOO approximation. '
                           'Team strength and model parameters use the full-data posterior. '
                           'Raw rank uses midranks for exact ties. Ordering rules are not applied to draws.',
@@ -103,6 +105,8 @@ def attach(result, inputs, task):
 
 def validate(result):
     posterior = result['posterior']
+    if posterior.get('reference_rank') != result.get('reference_rank'):
+        raise ValueError('Posterior reference rank disagrees with rankings')
     if posterior['schema'] != SCHEMA or set(posterior['teams']) != {str(t['id']) for t in result['teams']}:
         raise ValueError('Invalid posterior roster or schema')
     required_parameters = {'home_adv', 'sigma', 'nu'}

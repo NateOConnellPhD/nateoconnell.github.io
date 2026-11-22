@@ -3,15 +3,15 @@ import hashlib
 from pathlib import Path
 
 REFIT_GENERATION = 'margin-of-merit-2026-11-21'
-# An ordering-only revision rebuilds every published week while retaining
-# compatible current-model posterior and LOO caches.
-PUBLICATION_GENERATION = REFIT_GENERATION + '-no-p4'
+# Scoring/ordering revisions rebuild published weeks while retaining compatible
+# current-model fits. Scoring and exact-LOO quantities have their own identities.
+PUBLICATION_GENERATION = REFIT_GENERATION + '-no-p4-reference-12'
 
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
            'ranking_policy_v5.py', 'exact_order.py', 'sync_data.py', 'season_inputs.py',
            'home_history_inputs.py', 'historical_home.py', 'fit_saved_season.py',
            'requirements.txt', 'update_rankings.py', 'posterior_summary.py',
-           'historical_rankings.py', 'sampling_retry.py', 'cache_identity.py')
+           'historical_rankings.py', 'sampling_retry.py', 'reference_config.py', 'cache_identity.py')
 
 
 def source_identities():
