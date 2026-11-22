@@ -15,6 +15,16 @@ description: The CFP committee has no transparency when it comes to college foot
 ---
 *Introducing the CFB Margin of Merit Rankings: a transparent, Bayesian approach to evaluating what teams have actually earned on the field.*
 
+You can find these rankings [here](https://nateoconnell.com/blog/cfb/) and explore them for each week dating back to 2002. 
+
+**TL;DR:** College football rankings require two different things: statistical inference and competitive adjudication. I use scoring margins and Bayesian inference to evaluate what teams have earned across an enormous, incomplete network of FBS and FCS games. That allows me to account for opponent quality, strength of schedule, and uncertainty when comparing teams that may never have played each other.
+
+But statistical inference is not the same as deciding how to honor results on the field. When two teams have the same record and are sufficiently close in the merit rankings, or the statistical evidence doesn't clearly separate them, their actual head-to-head result should take priority. Common-opponent records provide a secondary comparison when teams haven't played each other.
+
+**The model uses scores to understand the larger network of games. The ranking rules use actual wins and losses to resolve qualifying direct comparisons.** The objective isn't to predict who would win tomorrow. It's to determine what teams have earned through the games they actually played.
+
+**The Long Version:**
+
 I'm a big sports fan, and one of my favorite sports is College Football. Not football in general, but specifically College Football. The tradition, the pageantry, the unpredictability, the chaos. Every fall, college football fans end up in the same argument. Which teams deserve to be ranked the highest at the end of the season? This argument has evolved over the years. Before the BCS it was simply who deserved to be crowned the national champion. Then it was who deserves to play in the National Championship. Then it became who deserves to play in the 4-team College Football Playoff. Now it's the 12-team playoff, and there is already discussion of expanding it further. And there's been plenty of controversy over the years -- 2023 FSU, 2004 Auburn, 2003 USC, 2011 Oklahoma State -- just to name a few. Just last year we had 10–2 Notre Dame left out of the 12-team CFP. And I don't see this going away; the controversy just shifts. If the playoff eventually expands to 24 teams, the debate becomes who gets that 24th spot, while the arguments at the top turn to first-round byes and home-field advantage. 
 
 We debate which conference is stronger, how much a loss should matter, and whether an undefeated team with a weak schedule is more deserving than a two-loss team that played several of the best teams in the country.
@@ -382,7 +392,7 @@ Indiana shows how the fill-in works. Its merit (5.18) is below Alabama's (5.52) 
 
 *Figure 5. The existing illustration depicts the previous V4 ranking hierarchy and needs replacement with the current hierarchy: eligible direct results first, eligible common-opponent results second, conditional merit protection third, everyone else filled in by merit, with eligibility determined by posterior thresholds **or** proximity within two positions in the current ordering. The underlying merit model does not change when these controls move.*
 
-There is also one separate, explicit fairness rule: an undefeated Power Four team with at least eight completed FBS games and no losses to FBS or FCS opponents stays ahead of teams with two or more total losses. That is a stated protection for an undefeated résumé, not something I claim the likelihood mathematically proves, and readers will be able to turn it on or off. **Merit establishes the baseline; actual head-to-head and common-opponent results determine qualifying comparisons under the published rules.** Where the rules conflict, the conflict is visible rather than concealed inside a set of arbitrary weights.
+**Merit establishes the baseline; actual head-to-head and common-opponent results determine qualifying comparisons under the published rules.** Where the rules conflict, the conflict is visible rather than concealed inside a set of arbitrary weights.
 
 ## Rankings should have margins of error
 
@@ -390,7 +400,7 @@ Maybe the most important thing I think people overlook is uncertainty. Tradition
 
 In the Bayesian framework, every team has a posterior distribution of merit. We can calculate $$P(\mathcal M_A>\mathcal M_B\mid D)$$, the probability that Team A has earned more merit than Team B, based on the observed season and the model. We can also report each team's probability of landing in the top 10 or top 25 **by merit**, along with a credible range of plausible merit ranks. A team might be ranked seventh but have a plausible rank range from fourth to fifteenth. Another might be eighth with a much narrower range. Those are very different situations, and a ranking should communicate that difference.
 
-Because the official ordering can also reflect these explicit head-to-head, common-opponent, and undefeated-team rules, I distinguish **posterior merit probabilities** from the final, policy-adjusted integer ranking. The current implementation approximates the joint dependence of the leave-one-game-out merit calculations, so those probabilities should not be mistaken for exact facts. Still, the principle is simple: **we should distinguish what the evidence suggests from how confidently it supports that conclusion.**
+Because the official ordering can also reflect these explicit head-to-head and common-opponent, I distinguish **posterior merit probabilities** from the final, policy-adjusted integer ranking. The current implementation approximates the joint dependence of the leave-one-game-out merit calculations, so those probabilities should not be mistaken for exact facts. Still, the principle is simple: **we should distinguish what the evidence suggests from how confidently it supports that conclusion.**
 
 The probabilities come straight from the saved posterior merit draws. If I have $$S$$ joint merit-draw approximations, I estimate a team's probability of having more merit than another by counting the draws in which its merit is higher:
 
