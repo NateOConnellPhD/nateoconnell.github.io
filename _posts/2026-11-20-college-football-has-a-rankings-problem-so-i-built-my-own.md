@@ -11,7 +11,7 @@ tags:
 comments: true
 title: College Football Has a Rankings Problem. So I Built My Own.
 cover: /assets/images/editor-77c20c5f-6ae6-4a9b-ab76-1eb6da83e862.jpg
-description: The CFP committee has no transparency when it comes to college football rankings. They're basically selecting them off vibes. Introducing "Margin of Merit", a transparent Bayesian ranking system that evaluates what teams have actually earned through wins, losses, scoring margins, and strength of schedule. No preseason bias, no arbitrary committee decisions—just results, statistical inference, and an honest accounting of uncertainty.
+description: The CFP committee has no transparency when it comes to college football rankings. From my perspective, they're basically determining playoff off vibes. So I sought out to see if I could do better. Introducing "Margin of Merit", a transparent Bayesian ranking system that evaluates what teams have actually earned through wins, losses, scoring margins, and strength of schedule. No preseason bias, no arbitrary committee decisions—just results, statistical inference, and an honest accounting of uncertainty.
 ---
 *Introducing the CFB Margin of Merit Rankings: a transparent, Bayesian approach to evaluating what teams have actually earned on the field.*
 
@@ -345,6 +345,31 @@ $$
 This produces a strength-of-schedule measure between 0 and 1. An SOS of 0.45 means our reference team would be expected to lose approximately 45% of those games. That's considerably more interpretable than saying someone has the 37th-hardest schedule according to a formula nobody can inspect. 
 
 And we can quantify the uncertainty. For example, we can estimate the probability that Georgia's schedule was genuinely more difficult than Oregon's, rather than pretending their estimated SOS ranks are exact. The entire measure comes from current-season game results. We don't assume the SEC or Big Ten is stronger because of reputation. If one conference is genuinely stronger, that should emerge from its results against the rest of the network.
+
+### Does the choice of reference team matter?
+
+One reasonable question is why I chose the 25th-best team as the reference. Why not the 10th, 12th, or 50th?
+
+There's no statistical criterion that determines the correct reference. It isn't a parameter to estimate or optimize. The underlying Bayesian model, estimated team strengths, and game predictions are identical regardless of which reference I choose. **The reference defines what we're measuring merit against.**
+
+My first choice was 25, motivated by the question: *How would a ranked-caliber team have performed against this opponent?* But if the purpose is to evaluate teams for a 12-team playoff, the 12th-strongest team is arguably the more appropriate benchmark. We're then asking how much each team accomplished relative to what a *playoff-caliber team* would have been expected to accomplish. If the playoff expands to 24 teams, the reference can move to 24.
+
+But how sensitive are the rankings to this choice?
+
+I recalculated merit and the final rankings using reference teams ranging from 5th to 65th in latent strength, using the same posterior draws from the November 19, 2026 release. No model refitting was necessary.
+
+| Reference | Top 12 retained | Top 25 retained | Rank correlation |
+|---|---:|---:|---:|
+| 5th | 12/12 | 23/25 | 0.994 |
+| 12th | 12/12 | 25/25 | 0.998 |
+| 25th (original) | 12/12 | 25/25 | 1.000 |
+| 50th | 11/12 | 25/25 | 0.997 |
+
+The rankings are stable. Moving from the 25th to the 12th reference preserves every team in both the Top 12 and Top 25, with a Spearman rank correlation of 0.998 across all 138 FBS teams. Georgia and Utah exchange the top two positions, as do Miami and UCLA at fourth and fifth, but the largest movement within the Top 25 is only three positions.
+
+The reference does affect how wins and losses are valued. A stronger reference makes nearly every loss costly, so merit tracks win percentage more closely. A weaker reference makes losses against strong opponents less costly, allowing strength of schedule to play a larger role. That's a meaningful philosophical distinction, but the sensitivity analysis suggests it has relatively little influence on the overall rankings.
+
+**For the current 12-team playoff, I'm adopting the 12th-strongest team as the reference.** Not because it produces better-looking rankings, but because it represents the standard of performance most relevant to the decision the rankings are intended to inform. I've also added a selector for this in the program rankings, to see how evaluations shift by using 2, 4, or 24 as well for the BCS era, 4 team playoff and eventual 24 team playoff rankings. 
 
 ## But actual results should still matter most
 
