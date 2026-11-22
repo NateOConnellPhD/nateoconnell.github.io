@@ -3,6 +3,7 @@ import copy
 import datetime as dt
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -32,7 +33,7 @@ def fixture():
 
 class DataTests(unittest.TestCase):
     def setUp(self):
-        self.parent = ROOT / '.codex-tmp' / 'cfb-data-review'
+        self.parent = Path(os.environ.get('CFB_TEST_TMP', ROOT / '.codex-tmp' / 'cfb-data-review'))
         created = not self.parent.exists()
         self.parent.mkdir(parents=True, exist_ok=True)
         if created: self.addCleanup(self.parent.rmdir)
@@ -219,6 +220,34 @@ class DataTests(unittest.TestCase):
                 self.raw['/games'][0].update(change)
                 with self.assertRaises(ValueError):
                     self.normalized()
+
+    def test_unexplained_zero_and_nonzero_ties_identify_game_and_preserve_saved_data(self):
+        self.run_sync()
+        before = self.saved()
+        for score in (0, 21):
+            self.raw['/games-fcs'][0].update(homePoints=score, awayPoints=score)
+            with self.assertRaisesRegex(ValueError, f"season 2026, week 1, game 201, 'FCS B' {score} at 'FCS A' {score}"):
+                self.run_sync()
+            self.assertEqual(before, self.saved())
+
+    def test_explicit_non_games_are_retained_for_audit_and_excluded_from_fit(self):
+        before = self.run_sync()
+        for evidence in ({'notes': 'Canceled due to weather'}, {'status': 'STATUS_CANCELED'},
+                         {'notes': 'Game cancelled'}, {'notes': 'No contest'}):
+            with self.subTest(evidence=evidence):
+                self.raw['/games-fcs'] = [self.raw['/games-fcs'][0],
+                    dict(self.raw['/games-fcs'][0], id=202, homePoints=0, awayPoints=0, **evidence),
+                    dict(self.raw['/games-fcs'][0], id=203, homePoints=None, awayPoints=None, **evidence)]
+                after = self.run_sync()
+                self.assertEqual(before['model_input_sha256'], after['model_input_sha256'])
+                saved = json.loads((self.destination / '2026/normalized.json').read_text())
+                excluded = [g for g in saved['games'] if g['id'] in (202, 203)]
+                self.assertEqual(len(excluded), 2)
+                self.assertTrue(all(not g['eligible'] and g['non_played_evidence'] == evidence for g in excluded))
+
+    def test_notes_about_another_cancelled_game_do_not_exclude_a_result(self):
+        self.raw['/games'][0]['notes'] = 'Rescheduled after a cancelled game last week'
+        self.assertTrue(self.normalized()['games'][0]['eligible'])
 
     def test_duplicate_game_and_missing_calendar_week_rejected(self):
         self.raw['/games'] *= 2

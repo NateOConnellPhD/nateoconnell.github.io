@@ -132,6 +132,17 @@ def fcs_playoff(row, roster):
                 or re.search(r'\bFCS\s+Championship\b', str(row.get('notes') or ''), re.I))
 
 
+def non_played_reason(row):
+    """Exclude only explicit cancellation/no-contest evidence, never a score guess."""
+    status = str(row.get('status') or '').lower().removeprefix('status_').replace('_', ' ')
+    notes = str(row.get('notes') or '').strip()
+    if status in ('canceled', 'cancelled') or re.match(r'^(?:game\s+)?cancell?ed\b', notes, re.I):
+        return 'cancelled'
+    if status in ('no contest', 'no-contest') or re.match(r'^(?:game\s+)?no[ -]contest\b', notes, re.I):
+        return 'no_contest'
+    return None
+
+
 def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False, require_calendar=True):
     """Keep future/non-final games for audit, but never in eligible model inputs.
 
@@ -218,12 +229,15 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
             if include_fcs and team_id in roster and classification != roster[team_id]['classification']:
                 raise ValueError('Game classification disagrees with season membership: ' + game_team_context(row, side))
         hp, ap = row.get('homePoints'), row.get('awayPoints')
-        if final:
+        non_played = non_played_reason(row)
+        if final and not non_played:
             integer(hp, 'homePoints')
             integer(ap, 'awayPoints')
             if start > observed_at:
                 raise ValueError('A future game is marked completed')
         reasons = []
+        if non_played:
+            reasons.append(non_played)
         if fcs_playoff(row, roster):
             reasons.append('fcs_playoff')
         if kind != 'regular':
@@ -237,7 +251,11 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
         if start > observed_at:
             reasons.append('future_game')
         if not reasons and hp == ap:
-            raise ValueError('Tied Division I final requires an explicit tie policy')
+            raise ValueError(
+                f"Unresolved tied Division I final: season {season}, week {week}, game {ident}, "
+                f"{row.get('awayTeam')!r} {ap} at {row.get('homeTeam')!r} {hp}, "
+                f"kickoff {row.get('startDate')}, status={row.get('status')!r}, notes={row.get('notes')!r}. "
+                'Verify the source result or explicit cancellation/no-contest status before fitting.')
         excluded.update(reasons)
         game = {'id': ident, 'season': season, 'week': week, 'season_type': kind,
             'start_date': start.isoformat(), 'neutral_site': neutral, 'completed': final,
@@ -253,6 +271,8 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
             game['unclassified_sides'] = unclassified
         if inferred:
             game['inferred_classifications'] = inferred
+        if non_played:
+            game['non_played_evidence'] = {key: row[key] for key in ('status', 'notes') if row.get(key)}
         if 'fcs_playoff' in reasons:
             game['playoff_evidence'] = {key: row[key] for key in
                 ('notes', 'playoff', 'playoff_competition', 'playoffCompetition') if row.get(key)}
