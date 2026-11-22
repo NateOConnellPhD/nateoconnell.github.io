@@ -23,6 +23,7 @@ API = 'https://api.collegefootballdata.com'
 MAX_RESPONSE = 8 * 1024 * 1024
 SCHEMA = 'cfbd-season-v1'
 UTC = dt.timezone.utc
+STATUS_CORRECTIONS = Path(__file__).with_name('game_status_corrections.json')
 
 
 def encoded(value):
@@ -143,6 +144,37 @@ def non_played_reason(row):
     return None
 
 
+def reviewed_game_statuses():
+    """Versioned, sourced exceptions for missing upstream status metadata."""
+    value = json.loads(STATUS_CORRECTIONS.read_text())
+    if value.get('schema') != 'reviewed-game-status-v1':
+        raise ValueError('Invalid reviewed game-status schema')
+    result = {}
+    required = {'season', 'week', 'seasonType', 'startDate', 'homeId', 'awayId', 'homeTeam', 'awayTeam'}
+    for correction in value['games']:
+        ident = integer(correction['game_id'], 'reviewed game ID', 1)
+        if (ident in result or correction['status'] not in ('cancelled', 'no_contest')
+                or set(correction['expected']) != required or not correction['reason']
+                or not correction['sources'] or not correction['reviewed_on']):
+            raise ValueError('Invalid or duplicate reviewed game status')
+        result[ident] = correction
+    return result
+
+
+def checked_game_status(row, correction):
+    if correction is None:
+        return non_played_reason(row)
+    for key, expected in correction['expected'].items():
+        matches = instant(row.get(key)) == instant(expected) if key == 'startDate' else row.get(key) == expected
+        if not matches:
+            raise ValueError(f"Review stale game-status correction for game {row['id']}: {key}")
+    # A provider correction to null scores / incomplete / explicit cancellation
+    # is compatible. A nonzero result needs a new review, never silent removal.
+    if any(row.get(key) not in (None, 0) for key in ('homePoints', 'awayPoints')):
+        raise ValueError(f"Review stale game-status correction for game {row['id']}: nonzero score")
+    return correction['status']
+
+
 def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False, require_calendar=True):
     """Keep future/non-final games for audit, but never in eligible model inputs.
 
@@ -150,6 +182,7 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
     exact historical completion times; historical weekly reconstruction needs
     explicit dated cutoffs and must retain that qualification.
     """
+    corrections = reviewed_game_statuses()
     roster = {}
     if not teams:
         raise ValueError('Empty season FBS roster')
@@ -229,7 +262,8 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
             if include_fcs and team_id in roster and classification != roster[team_id]['classification']:
                 raise ValueError('Game classification disagrees with season membership: ' + game_team_context(row, side))
         hp, ap = row.get('homePoints'), row.get('awayPoints')
-        non_played = non_played_reason(row)
+        correction = corrections.get(ident)
+        non_played = checked_game_status(row, correction)
         if final and not non_played:
             integer(hp, 'homePoints')
             integer(ap, 'awayPoints')
@@ -273,6 +307,8 @@ def normalize(season, teams, calendar, games, observed_at, *, include_fcs=False,
             game['inferred_classifications'] = inferred
         if non_played:
             game['non_played_evidence'] = {key: row[key] for key in ('status', 'notes') if row.get(key)}
+            if correction:
+                game['non_played_evidence']['reviewed_correction'] = correction
         if 'fcs_playoff' in reasons:
             game['playoff_evidence'] = {key: row[key] for key in
                 ('notes', 'playoff', 'playoff_competition', 'playoffCompetition') if row.get(key)}
@@ -340,10 +376,12 @@ def sync(season, key, *, destination=DATA, refresh_metadata=False, fetcher=fetch
     if old:
         prior_ids = {r['id'] for r in old['games'] if r['eligible']}
         current_ids = {r['id'] for r in result['games'] if r['eligible']}
-        # A methodology change may remove explicitly identified playoff games.
+        # Scope changes and reviewed non-games may remove previously eligible rows.
         # Missing finals or other upstream changes still stop publication.
         newly_excluded_playoffs = {r['id'] for r in result['games'] if 'fcs_playoff' in r['exclusions']}
-        if not prior_ids <= current_ids | newly_excluded_playoffs:
+        reviewed_non_games = {r['id'] for r in result['games']
+                              if r.get('non_played_evidence', {}).get('reviewed_correction')}
+        if not prior_ids <= current_ids | newly_excluded_playoffs | reviewed_non_games:
             raise ValueError('Previously eligible final games disappeared; review upstream changes before replacing data')
     proposed['normalized.json'] = result
     changed = [name for name, value in proposed.items()

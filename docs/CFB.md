@@ -92,7 +92,21 @@ publication validation preserve the last successful ranking. The public index
 records unsuccessful preparation and numerical updates, preserving published
 rankings. Preparation errors include the affected game/season where available.
 An unexplained tied final still requires source verification; a 0–0 score alone
-is not evidence of cancellation. Publication also checks roster/record parity, unique
+is not evidence of cancellation. `scripts/cfb/game_status_corrections.json`
+records reviewed cancellations that the provider has not labeled. Each entry
+matches an exact game ID, season, week, kickoff and both teams, cites its sources,
+and is retained in the normalized exclusion audit without editing raw responses.
+Conflicting identity fields or nonzero scores stop for review; other unexplained
+ties still stop. These corrections apply to both fresh imports and saved-input
+reconstruction and participate in the publication source identity.
+
+The September 14, 2024 South Dakota–Portland State game (401637161) was canceled,
+as confirmed by [South Dakota's announcement](https://goyotes.com/news/2024/9/14/football-contest-with-portland-state-called-off-due-to-illness-within-viking-program.aspx)
+and [Portland State's final schedule](https://goviks.com/sports/football/schedule/2024).
+Its unlabeled completed 0–0 feed record is excluded from the fit and all records
+and merit calculations. No tie-scoring rule is introduced.
+
+Publication also checks roster/record parity, unique
 ranks, finite summaries, and top-K probability accounting.
 
 Historical reconstruction fills the latest season backward by week before

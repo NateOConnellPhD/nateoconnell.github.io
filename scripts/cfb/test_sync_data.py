@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 
-from sync_data import ROOT, UTC, fetch, normalize, sync
+from sync_data import ROOT, UTC, fetch, normalize, sync, reviewed_game_statuses
 
 NOW = dt.datetime(2026, 11, 20, 12, tzinfo=UTC)
 
@@ -29,6 +29,78 @@ def fixture():
             'homePoints': 27, 'awayPoints': 21, 'homeClassification': 'fbs',
             'awayClassification': 'fbs', 'homeConference': 'Example', 'awayConference': 'Example'}
     return {'/teams/fbs': teams, '/calendar': calendar, '/games': [game]}
+
+
+class ReviewedStatusTests(unittest.TestCase):
+    def setUp(self):
+        raw = fixture()
+        self.teams = raw['/teams/fbs']
+        self.calendar = [dict(season=2024, seasonType='regular', week=3,
+                              startDate='2024-09-09T00:00:00Z', endDate='2024-09-16T00:00:00Z')]
+        self.played = dict(raw['/games'][0], season=2024, week=3, startDate='2024-09-14T17:00:00Z')
+        self.cancelled = dict(self.played, id=401637161, startDate='2024-09-14T20:00:00.000Z',
+                              homeId=2502, awayId=233, homeTeam='Portland State', awayTeam='South Dakota',
+                              homePoints=0, awayPoints=0, homeClassification='fcs', awayClassification='fcs',
+                              status=None, notes=None)
+
+    def normalized(self, row=None):
+        return normalize(2024, self.teams, self.calendar, [self.played, row or self.cancelled], NOW, include_fcs=True)
+
+    def test_verified_cancellation_is_excluded_with_sources_without_mutating_raw(self):
+        before = copy.deepcopy(self.cancelled)
+        result = self.normalized()
+        game = next(g for g in result['games'] if g['id'] == 401637161)
+        self.assertFalse(game['eligible'])
+        self.assertEqual(game['exclusions'], ['cancelled'])
+        self.assertEqual(game['home_points'], 0, 'Keep the provider value visible in the audit')
+        self.assertTrue(game['completed'], 'Retain the provider flag rather than rewriting the source')
+        self.assertEqual(game['non_played_evidence']['reviewed_correction'], reviewed_game_statuses()[401637161])
+        self.assertEqual(result['summary']['eligible_completed_games'], 1)
+        self.assertEqual(self.cancelled, before)
+
+    def test_unrelated_ties_and_stale_corrections_still_stop(self):
+        for change in ({'id': 401637162}, {'homePoints': 21, 'awayPoints': 21},
+                       {'homePoints': 7}, {'homeId': 2503}, {'awayTeam': 'Different team'},
+                       {'startDate': '2024-09-15T20:00:00Z'}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.normalized(dict(self.cancelled, **change))
+
+    def test_provider_cancellation_updates_and_equivalent_timestamp_remain_compatible(self):
+        for change in ({'status': 'STATUS_CANCELED'}, {'completed': False},
+                       {'homePoints': None, 'awayPoints': None}, {'startDate': '2024-09-14T20:00:00+00:00'}):
+            with self.subTest(change=change):
+                game = next(g for g in self.normalized(dict(self.cancelled, **change))['games'] if g['id'] == 401637161)
+                self.assertFalse(game['eligible'])
+                self.assertIn('cancelled', game['exclusions'])
+
+    def test_historical_sync_then_saved_model_inputs_exclude_cancelled_game(self):
+        from season_inputs import load_inputs
+        parent = Path(os.environ.get('CFB_TEST_TMP', ROOT / '.codex-tmp' / 'cfb-data-review'))
+        created = not parent.exists()
+        parent.mkdir(parents=True, exist_ok=True)
+        if created: self.addCleanup(parent.rmdir)
+        with tempfile.TemporaryDirectory(dir=parent) as temporary:
+            root = Path(temporary)
+            def request(endpoint, parameters, key):
+                self.assertEqual(parameters['year'], 2024)
+                return copy.deepcopy(self.teams if endpoint == '/teams/fbs' else self.calendar if endpoint == '/calendar'
+                                     else [self.cancelled] if parameters['classification'] == 'fcs' else [self.played])
+            result = sync(2024, 'fixture-key', destination=root, fetcher=request, now=NOW)
+            self.assertEqual(result['requests'], 4)
+            self.assertEqual(result['eligible_completed_games'], 1)
+            source = root/'2024/games-fcs.json'
+            before = source.read_bytes()
+            self.assertEqual(json.loads(before)['payload'], [self.cancelled])
+            fit = load_inputs(2024, through_week=3, root=root)
+            self.assertEqual([g['id'] for g in fit['games']], [self.played['id']])
+            self.assertEqual(fit['data']['margin'], [6])
+            self.assertEqual(source.read_bytes(), before)
+            # A legacy normalized file may have admitted this placeholder.
+            path = root/'2024/normalized.json'
+            old = json.loads(path.read_text())
+            next(g for g in old['games'] if g['id'] == 401637161)['eligible'] = True
+            path.write_text(json.dumps(old))
+            self.assertEqual(sync(2024, 'fixture-key', destination=root, fetcher=request, now=NOW)['eligible_completed_games'], 1)
 
 
 class DataTests(unittest.TestCase):

@@ -10,7 +10,7 @@ PUBLICATION_GENERATION = REFIT_GENERATION + '-no-p4-reference-12'
 SOURCES = ('model.py', 'refit_2024.py', 'loo_scoring.py', 'ranking_policy.py',
            'ranking_policy_v5.py', 'exact_order.py', 'sync_data.py', 'season_inputs.py',
            'home_history_inputs.py', 'historical_home.py', 'fit_saved_season.py',
-           'requirements.txt', 'update_rankings.py', 'posterior_summary.py',
+           'requirements.txt', 'update_rankings.py', 'posterior_summary.py', 'game_status_corrections.json',
            'historical_rankings.py', 'sampling_retry.py', 'full_fit_retry.py', 'reference_config.py', 'conference_summary.py', 'game_contributions.py', 'cache_identity.py')
 
 

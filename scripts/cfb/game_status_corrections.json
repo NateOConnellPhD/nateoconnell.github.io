@@ -1,0 +1,25 @@
+{
+  "schema": "reviewed-game-status-v1",
+  "games": [
+    {
+      "game_id": 401637161,
+      "status": "cancelled",
+      "expected": {
+        "season": 2024,
+        "week": 3,
+        "seasonType": "regular",
+        "startDate": "2024-09-14T20:00:00.000Z",
+        "homeId": 2502,
+        "awayId": 233,
+        "homeTeam": "Portland State",
+        "awayTeam": "South Dakota"
+      },
+      "reason": "The game was canceled before kickoff due to illness within Portland State's program. The provider's completed 0–0 record lacks cancellation metadata; it is not an observed tied result.",
+      "sources": [
+        "https://goyotes.com/news/2024/9/14/football-contest-with-portland-state-called-off-due-to-illness-within-viking-program.aspx",
+        "https://goviks.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-22"
+    }
+  ]
+}
