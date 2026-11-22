@@ -74,6 +74,7 @@ jobs:
           python3 -B scripts/cfb/test_archive_range.py
           python3 -B scripts/cfb/test_sampling_retry.py
           python3 -B scripts/cfb/test_archive_failures.py
+          python3 -B scripts/cfb/test_task_storage.py
           node scripts/cfb/check_navigation.cjs
           node scripts/cfb/check_conferences.cjs
       - name: Fetch the season once and check for changed inputs
@@ -114,6 +115,9 @@ jobs:
           restore-keys: |
             cfb-20261121-hierarchy-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}-
             cfb-20261121-hierarchy-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
+      - name: Retain only this cutoff's reusable numerical cache
+        if: steps.prepare.outputs.needs_fit == 'true'
+        run: python3 -B scripts/cfb/prune_task_cache.py
       - name: Install pinned numerical packages into the disposable environment
         if: steps.prepare.outputs.needs_fit == 'true'
         run: |

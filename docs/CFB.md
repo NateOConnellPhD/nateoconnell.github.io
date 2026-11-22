@@ -97,10 +97,31 @@ earlier passing exact refits. Each run saves a new cache key, so restored caches
 can be extended instead of silently discarding new work. Failed exact draws
 are never cached. Array hashes, identities and diagnostics are checked on reuse.
 
+Before installing numerical packages, `prune_task_cache.py` trims the restored
+cache to the requested cutoff's compatible full fit, its score caches for all
+four reference choices, its passing exact-LOO results, and the matching shared
+three-season home prior. The previous season-wide restore/save cycle kept
+accumulating earlier weeks' arrays alongside the new environment. Those
+unneeded local cache entries are now removed before installation. Published
+weekly snapshots and saved game data are outside this cleanup; existing
+remote cache archives are not deleted. Numerical identities and sampling
+requirements are unchanged.
+
 The job has a 45-minute timeout and bounds its numerical steps to 35 minutes
 and 1.5 GB under `.codex-tmp/cfb-refit`. It uses one sequential sampling process
 and cleans the disposable environment after saving numerical caches. It never
 force-pushes; concurrent repository changes are merged before saving results.
+The guard logs total bytes and a directory breakdown before and after each
+bounded command and on a storage stop. It also checks before launching a child
+and after short commands that finish between polls. Its existing 100 MB margin
+below the ceiling remains in place.
+
+Eight focused offline storage tests passed: current-cutoff and four-reference
+cache preservation, stale/incomplete cache removal, home-prior reuse, untouched
+files, symlink boundaries, byte accounting, preflight refusal, final checks and
+child termination. Fixtures totaled less than 1 MB and were removed. These
+checks did not install Linux dependencies, run HMC, or rerun GitHub Actions;
+the peak disk use of the next hosted run remains unmeasured.
 
 The last reported GitHub run completed ranking generation but failed the Git
 whitespace check on generated CSV rows. Commit `989518d` changed the exporter
