@@ -272,12 +272,12 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
     if (!elements.has(key)) elements.set(key, new Element());
     return elements.get(key);
   };
-  const tabNames = ['rankings', 'rules', 'posterior', 'history'];
+  const tabNames = ['rankings', 'conferences', 'rules', 'posterior', 'history'];
   const buttons = tabNames.map(name => { const n = new Element(); n.dataset.cfbTab = name; return n; });
   const panels = tabNames.map(name => { const n = new Element(); n.dataset.cfbPanel = name; return n; });
   const explorerRoot = {querySelector: s => get(s.match(/data-cfb-([^\]]+)/)[1]),
     querySelectorAll: s => s === '[data-cfb-tab]' ? buttons : panels};
-  const explorerContext = {window: {CFBReference: reference}, document: {createElement: () => new Element(), createElementNS: () => new Element()},
+  const explorerContext = {window: {CFBReference: reference, CFBConferences: () => ({show(){},tab(){},resize(){}})}, document: {createElement: () => new Element(), createElementNS: () => new Element()},
     ResizeObserver: class { observe() {} }};
   vm.runInNewContext(fs.readFileSync(require.resolve('../../assets/js/cfb-explorer.js'), 'utf8'), explorerContext);
   const history = {schema: 'margin-of-merit-history-v1', season: 2026,
@@ -289,8 +289,8 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   explorer.show({season: 2026, reference_rank:12, teams: teams([1, 2]), order: [1, 2]},
     {snapshots: weeklyRows, archive: [{season: 2026, weeks: [{week: 10}, {week: 11}]}]});
   explorer.tab('rules');
-  assert.deepEqual(panels.map(n => n.hidden), [true, false, true, true]);
-  assert.deepEqual(buttons.map(n => n.attributes['aria-selected']), [false, true, false, false]);
+  assert.deepEqual(panels.map(n => n.hidden), [true, true, false, true, true]);
+  assert.deepEqual(buttons.map(n => n.attributes['aria-selected']), [false, false, true, false, false]);
   explorer.tab('history'); await settle();
   assert.match(get('history-status').textContent, /2 saved weeks/);
   assert.deepEqual(get('history-rows').children.map(tr => tr.children[0].children[0].textContent), ['Week 10', 'Week 11']);

@@ -50,6 +50,7 @@ description: "My college football rankings: what teams have earned from the game
     <div data-cfb-results hidden>
       <div class="cfb-tabs" role="tablist" aria-label="Explore this update">
         <button type="button" role="tab" id="cfb-tab-rankings" aria-controls="cfb-panel-rankings" aria-selected="true" data-cfb-tab="rankings">Rankings</button>
+        <button type="button" role="tab" id="cfb-tab-conferences" aria-controls="cfb-panel-conferences" aria-selected="false" tabindex="-1" data-cfb-tab="conferences">Conferences</button>
         <button type="button" role="tab" id="cfb-tab-rules" aria-controls="cfb-panel-rules" aria-selected="false" tabindex="-1" data-cfb-tab="rules">Rules</button>
         <button type="button" role="tab" id="cfb-tab-posterior" aria-controls="cfb-panel-posterior" aria-selected="false" tabindex="-1" data-cfb-tab="posterior">Posterior explorer</button>
         <button type="button" role="tab" id="cfb-tab-history" aria-controls="cfb-panel-history" aria-selected="false" tabindex="-1" data-cfb-tab="history">Week by week</button>
@@ -128,6 +129,32 @@ description: "My college football rankings: what teams have earned from the game
         <button type="button" class="button button-outline" data-cfb-audit-download>Download rules and decision audit</button>
       </details>
         <button type="button" class="button button-outline" data-cfb-open-rankings>View rankings with these rules</button>
+      </section>
+      <section id="cfb-panel-conferences" role="tabpanel" aria-labelledby="cfb-tab-conferences" data-cfb-panel="conferences" hidden>
+        <h3>Which conference is stronger—and by how much?</h3>
+        <p class="small-note">Compare the conferences themselves using the model’s strength estimates. Every member counts equally. The order is a summary; the intervals and probabilities show how clearly the results separate them. <a href="#cfb-reading-conferences">How to read these comparisons</a>.</p>
+        <p class="small-note" data-cfb-conf-status role="status"></p>
+        <div data-cfb-conf-content hidden>
+          <label for="cfb-conf-metric" class="cfb-conference-measure">Measure<select id="cfb-conf-metric" data-cfb-conf-metric>
+            <option value="roster">Average strength of the actual teams</option>
+            <option value="baseline">Conference baseline from the hierarchical model</option>
+          </select></label>
+          <p class="small-note" data-cfb-conf-context></p>
+          <div class="cfb-table-scroll" tabindex="0" role="region" aria-label="Conference strength rankings">
+            <table class="cfb-table cfb-conference-table"><thead><tr><th scope="col">Rank</th><th scope="col">Conference</th><th scope="col">Played / members</th><th scope="col">Mean</th><th scope="col">Median</th><th scope="col">90% strength interval</th><th scope="col">Mean rank (90% interval)</th><th scope="col">P(strongest)</th></tr></thead><tbody data-cfb-conf-rows></tbody></table>
+          </div>
+          <p class="small-note">Strength is in points relative to the average FBS team. Higher is stronger. Rank is ordered by posterior mean strength; mean rank summarizes the order across draws. P(strongest) compares only the conferences in this table, sharing probability for exact ties.</p>
+          <div class="cfb-pair-controls">
+            <label for="cfb-conf-a">Conference<select id="cfb-conf-a" data-cfb-conf-a></select></label>
+            <label for="cfb-conf-b">Compare with<select id="cfb-conf-b" data-cfb-conf-b></select></label>
+          </div>
+          <div class="cfb-pair-summary" data-cfb-conf-pair aria-live="polite"></div>
+          <div class="cfb-plot" data-cfb-conf-plot></div>
+          <p class="small-note" data-cfb-conf-plot-note></p>
+          <details class="cfb-explanations"><summary>Membership and game coverage</summary>
+            <p data-cfb-conf-coverage></p><div data-cfb-conf-members></div>
+          </details>
+        </div>
       </section>
       <section id="cfb-panel-posterior" role="tabpanel" aria-labelledby="cfb-tab-posterior" data-cfb-panel="posterior" hidden>
         <h3>Look beyond the point estimate</h3>
@@ -213,6 +240,12 @@ description: "My college football rankings: what teams have earned from the game
       <dt>Residual scale (σ)</dt><dd>How much scoring margins tend to vary around what team strengths and venue suggest. Larger values allow more unpredictable results. It is a scale parameter, not literally the standard deviation. The model uses an eight-point minimum throughout the season.</dd>
       <dt>Degrees of freedom (ν)</dt><dd>How readily the model allows unusually extreme margins. Smaller values give more room for surprising blowouts rather than forcing every score to fit a narrow pattern.</dd>
     </dl>
+
+    <h3 id="cfb-reading-conferences">Comparing conferences</h3>
+    <p>The default measure averages the underlying strengths of a conference’s FBS members in each posterior draw. Each team receives equal weight, including members without an eligible game yet; their estimates can be especially uncertain. Conference size alone provides no bonus. Independents are included in the overall FBS benchmark but are not treated as a conference. Membership comes from the selected season.</p>
+    <p>A gap of +4 points for Conference A minus Conference B means A’s average team is estimated four points stronger on a neutral field. This is an average-strength comparison, not a claim that every team in A is better than every team in B. The alternative conference-baseline view shows the shared conference effect in the hierarchical model, before adding individual school deviations.</p>
+    <p>The 90% credible interval contains the middle 90% of the sampled gaps. P(A stronger) is the share of draws with a positive gap, conditional on the games and model. We subtract the conferences within the same draw, preserving their shared uncertainty; overlapping individual intervals alone do not answer the pairwise question. These probabilities describe strength, not a championship entitlement or a single-game win probability.</p>
+    <p>Conference comparisons use the full-data strength posterior through the selected week. Merit reference choices and ordering rules do not change them. Early-season estimates can be uncertain when there are few games connecting conferences; a displayed rank should be read alongside that uncertainty.</p>
 
     <h3 id="cfb-reading-rules">What happens when I change the rules?</h3>
     <p>The controls in the Rules tab change how the final ordering is constructed. They keep the merit estimates, SOS, and uncertainty for the selected reference unchanged. The Reference team selector above the tabs changes those calculations too. A threshold of 90% is a decision rule, not a 90% bonus to a team’s score.</p>

@@ -43,6 +43,10 @@ class HierarchicalModelTests(unittest.TestCase):
         self.assertEqual(result['posterior']['parameters']['tau_fcs']['mean'],12.)
         self.assertEqual(result['posterior']['teams']['1']['conference_effect']['mean'],2.)
         self.assertEqual(result['posterior']['teams']['2']['conference_effect']['mean'],2.)
+        conferences=result['posterior']['conferences']
+        self.assertEqual(conferences['conferences'][0]['name'],'ACC')
+        self.assertEqual(conferences['conferences'][0]['metrics']['roster']['strength']['mean'],0.)
+        self.assertEqual(conferences['conferences'][0]['metrics']['roster']['p_best'],1.)
         del result['posterior']['parameters']['mu_fcs']
         with self.assertRaisesRegex(ValueError,'Missing model posterior'):
             validate(result)

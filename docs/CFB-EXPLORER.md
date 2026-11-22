@@ -1,6 +1,6 @@
 # Posterior exploration and weekly archives
 
-The CFB page has four views: Rankings, Rules, Posterior explorer, and Week by week. Rankings contains the standings and poll comparisons. Rules contains the sliders and focused team explanations, with a button back to the resulting rankings. All reads are static site files. No reader action calls CFBD, runs HMC, or requests an external chart service.
+The CFB page has five views: Rankings, Conferences, Rules, Posterior explorer, and Week by week. Rankings contains the standings and poll comparisons. Conferences compares average team strength and shared conference baselines. Rules contains the sliders and focused team explanations, with a button back to the resulting rankings. All reads are static site files. No reader action calls CFBD, runs HMC, or requests an external chart service.
 
 “Explain rank” opens Rules with one opponent selected: the team immediately above the selected team, or immediately below the number-one team. Changing the team resets that nearby comparison; any other opponent can be selected explicitly. Only the chosen pair's decisions are rendered. There is no all-opponents default or list of every protected pair between their ranks. A long blocking chain shows at most eight requirements, with the complete audit available as a deliberate download.
 
@@ -18,6 +18,47 @@ Summaries use all saved draws, not bins. Continuous CDFs interpolate within hist
 Merit, schedule and raw-rank uncertainty retain the existing marginal-quantile LOO approximation. Strength and model parameters use the full-data posterior. Both distinctions are explicit. Sliders affect ordering only. Legacy snapshots lacking distributions show an unavailable message; no posterior is invented from their intervals.
 
 The explorer exposes top-8/10/25 probabilities, actual paired merit probabilities, sampling diagnostics and exact-LOO counts. Pairwise merit probabilities are not future game-win probabilities. CSV exports include medians, SDs and raw-rank means.
+
+## Conference strength
+
+`conference_summary.py` derives two measures from the same checked full-fit
+draws: the equally weighted average of the actual FBS members' team strengths,
+and the shared conference effect before individual school deviations. Both
+are centered on the mean strength of all FBS teams within each draw. The
+second measure is a hierarchical baseline, not another name for the roster
+average. Conference size provides no bonus.
+
+Membership uses the selected season's roster. Members without eligible games
+remain in the average with their posterior uncertainty; the table reports
+played/member counts. Independents contribute to the FBS benchmark but do not
+form a conference. FCS teams inform the joint fit but are not ranked in this
+table. Neither measure changes team ordering rules or depends on the merit
+reference selector.
+
+Each measure includes mean and median strength, a 90% equal-tailed interval,
+posterior mean rank and rank interval, and probability of being strongest.
+The point ordering uses posterior means. Draw-level ranks use midranks and
+strongest probabilities share exact ties. Pairwise differences are computed
+within joint draws, preserving covariance; they are never reconstructed from
+separate marginal summaries. The page displays the gap distribution and each
+direction's probability, with SEC versus Big Ten initially selected when both
+exist. These are strength probabilities, not single-game win probabilities.
+
+Conference summaries live in each snapshot's `posterior.conferences`. The
+publication source identity requests regenerated summaries, while full-fit
+and exact-LOO cache identities remain unchanged. Compatible numerical caches
+can therefore be reused; missing or expired caches still require the existing
+fitting process. Older snapshots remain readable and explicitly say when
+conference summaries have not yet been saved. No results are fabricated from
+their marginal intervals.
+
+Focused checks passed: 27 Python checks covering synthetic joint gaps, ties,
+membership, reference independence, summary integrity, the array-to-export
+bridge and publication behavior. Offline JavaScript component and navigation
+checks cover both measures, reversed comparisons, season/reference changes,
+single-conference and unavailable-data states. These use minimal DOM fixtures,
+not a rendered browser. No HMC, downloads, API calls or live publication ran
+for this change.
 
 ## Historical fitting
 

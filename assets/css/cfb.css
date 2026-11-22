@@ -77,6 +77,9 @@
 .cfb-week-grid button:disabled{opacity:.6;cursor:default;border-style:dashed}
 .cfb-explorer-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:24px 0}
 .cfb-explorer-controls select{min-width:0}
+.cfb-conference-measure{max-width:540px;margin:22px 0}
+.cfb-conference-table th{white-space:normal;min-width:95px}
+.cfb-conference-table th:nth-child(2){min-width:160px}
 .cfb-plot{width:100%;min-height:100px;background:rgba(255,255,255,.4);border:1px solid var(--line);padding:12px 8px;margin:22px 0 12px}
 .cfb-plot svg{width:100%;height:auto;overflow:visible}
 .cfb-plot svg text{font:11px var(--sans);fill:var(--muted)}

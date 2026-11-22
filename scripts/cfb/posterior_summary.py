@@ -99,6 +99,8 @@ def attach(result, inputs, task):
                           'Team strength and model parameters use the full-data posterior. '
                           'Raw rank uses midranks for exact ties. Ordering rules are not applied to draws.',
         'representation': 'Empirical mass or 40 equal-width bins spanning every saved draw; not a fitted density.'}
+    from conference_summary import build
+    result['posterior']['conferences'] = build(flat, inputs)
     validate(result)
     return result
 
@@ -132,6 +134,13 @@ def validate(result):
                         raise ValueError('Published posterior summary disagrees with team table')
     summaries = [s for metrics in posterior['teams'].values() for s in metrics.values()]
     summaries += list(posterior['parameters'].values())
+    validate_summaries(summaries)
+    if 'conferences' in posterior:
+        from conference_summary import validate as validate_conferences
+        validate_conferences(posterior['conferences'], result['teams'])
+
+
+def validate_summaries(summaries):
     for s in summaries:
         if type(s['n']) is not int or s['n'] < 2 or s['sd'] < 0:
             raise ValueError('Invalid posterior count or dispersion')

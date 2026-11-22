@@ -23,6 +23,7 @@ window.CFBExplorer = (root, api) => {
   };
   const num = x => Number.isFinite(x) ? x.toFixed(2) : '—';
   const interval = (a,b) => `${num(a)} to ${num(b)}`;
+  const conferences = window.CFBConferences(root, {node, svg, chart, num, interval});
   function node(tag, text, attrs = {}) {
     const n = document.createElement(tag); if (text != null) n.textContent = text;
     for (const [k,v] of Object.entries(attrs)) n.setAttribute(k,v); return n;
@@ -199,8 +200,10 @@ window.CFBExplorer = (root, api) => {
   }
   function tab(name, focus=false) {
     activeTab=name;
+    el('mode').hidden = name==='conferences';
     root.querySelectorAll('[data-cfb-tab]').forEach(b=>{const chosen=b.dataset.cfbTab===name;b.setAttribute('aria-selected',chosen);b.tabIndex=chosen?0:-1;if(chosen&&focus)b.focus();});
     root.querySelectorAll('[data-cfb-panel]').forEach(p=>p.hidden=p.dataset.cfbPanel!==name);
+    conferences.tab(name);
     if(name==='posterior') renderPosterior(); if(name==='history') loadHistory();
   }
   root.querySelectorAll('[data-cfb-tab]').forEach((b,i,buttons)=> {
@@ -210,11 +213,12 @@ window.CFBExplorer = (root, api) => {
   for(const key of ['stat-team','stat-other','metric','chart-mode']) el(key).addEventListener('change',renderPosterior);
   for(const key of ['history-team','history-other','history-metric']) el(key).addEventListener('change',renderHistory);
   let resizeFrame;
-  new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{renderPosterior();renderHistory();});}).observe(root);
+  new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{renderPosterior();renderHistory();conferences.resize();});}).observe(root);
   return {
     tab,
     show(value, index) {
       current=value; archive=index; historySequence++;
+      conferences.show(value);
       const teams=[...current.teams].sort((a,b)=>a.name.localeCompare(b.name));
       for(const key of ['stat-team','stat-other','history-team','history-other']) {
         const control=el(key), old=control.value, optional=key.endsWith('other');
