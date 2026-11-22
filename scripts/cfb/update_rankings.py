@@ -331,7 +331,7 @@ def complete(destination=PUBLIC):
     return row
 
 
-def record_failure(season, destination=PUBLIC, *, historical=False, reason=None):
+def record_failure(season, destination=PUBLIC, *, historical=False, reason=None, details=None):
     index = read_index(destination)
     field = 'backfill' if historical else 'last_attempt'
     failure = {**(index.get(field) or {}), 'at': dt.datetime.now(UTC).isoformat(), 'status': 'failed'}
@@ -340,6 +340,9 @@ def record_failure(season, destination=PUBLIC, *, historical=False, reason=None)
     else:
         failure.pop('season', None)
     failure['reason'] = str(reason)[:1200] if reason else 'The update failed after preparation; see the workflow log.'
+    failure.pop('details', None)
+    if details is not None:
+        failure['details'] = details
     index[field] = failure
     if not historical and index.get('backfill', {}).get('status') == 'pending':
         index['backfill'].update(status='blocked', reason='Waiting for the current-season update to succeed.')

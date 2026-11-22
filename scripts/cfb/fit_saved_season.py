@@ -19,6 +19,7 @@ from ranking_policy import CANONICAL as POLICY
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, digest
 from sampling_retry import checked_exact_refit
+from full_fit_retry import checked_full_fit
 from reference_config import DEFAULT_REFERENCE, REFERENCE_RANKS, check_reference, exact_quantities_for
 
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
@@ -78,27 +79,12 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
                     'diagnostic_source': source_hash('refit_2024.py'),
                     'model_data_sha256': digest(model_data), 'packages': packages,
                     'seed': seed, 'warmup': 1000, 'draws': 1000, 'chains': 4}
-    fit_key = digest(fit_identity)
-    fitted = TASK / 'fits' / fit_key
-    reused_fit = fitted.exists()
-    if reused_fit:
-        report = checked_cache(fitted, 'posterior.npz')
-        if report['identity'] != fit_identity or not report['diagnostics']['sampling_checks_passed']:
-            raise ValueError('Cached fit identity or diagnostics failed; review before rerunning')
-        with np.load(fitted / 'posterior.npz', allow_pickle=False) as saved:
-            samples = dict(saved)
-    else:
-        fitted.mkdir(parents=True)
-        sampler = fit(len(inputs['teams']), **inputs['data'], specification=MODEL,
-                      home_prior=prior, structure=inputs['strength_structure'], seed=seed, warmup=1000, draws=1000)
-        samples, diagnostics, parameters = describe(sampler)
-        np.savez_compressed(fitted / 'posterior.npz', **samples)
-        report = {'identity': fit_identity, 'diagnostics': diagnostics, 'parameters': parameters,
-                  'posterior_predictive': predictive_summary(samples, inputs['data'], seed + 1),
-                  'array_sha256': file_hash(fitted / 'posterior.npz')}
-        write_json(fitted / 'report.json', report)
-        if not diagnostics['sampling_checks_passed']:
-            raise ValueError('Sampling diagnostics failed; candidate rankings were not created')
+    def fit_attempt(**settings):
+        return fit(len(inputs['teams']), **inputs['data'], specification=MODEL,
+                   home_prior=prior, structure=inputs['strength_structure'], **settings)
+    samples, report, fit_key, reused_fit = checked_full_fit(
+        fit_identity, TASK / 'fits', {'season': season, 'week': through_week, 'cutoff': inputs['cutoff']},
+        fit_attempt, describe, lambda samples: predictive_summary(samples, inputs['data'], seed + 1))
     print(json.dumps({'fit_reused': reused_fit, 'diagnostics': report['diagnostics']}), flush=True)
 
     score_identity = {'fit_key': fit_key, 'posterior_sha256': report['array_sha256'],

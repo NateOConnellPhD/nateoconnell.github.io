@@ -13,6 +13,7 @@ import historical_rankings as history
 import update_rankings as pipeline
 import weekly_publication as weekly
 from sampling_retry import ExactLOOSamplingError
+from full_fit_retry import FullFitSamplingError
 from sync_data import ROOT
 
 
@@ -130,6 +131,33 @@ class ArchiveFailureTests(unittest.TestCase):
         self.assertEqual(self.index['latest'], 'last-good')
         self.assertIn('401862705', self.index['last_attempt']['reason'])
         self.assertEqual(self.index['fit_failures'], [])
+
+    def test_main_fit_failure_records_attempts_and_advances_historical_queue(self):
+        self.error = FullFitSamplingError({'season': 2026, 'week': 2}, self.error.details['attempts'])
+        self.prepare()
+        with patch.object(pipeline, 'complete', side_effect=self.error), \
+             patch.object(weekly, 'refresh_index'), patch('sys.argv', ['weekly_publication.py', 'complete']):
+            with self.assertRaises(FullFitSamplingError): weekly.main()
+        self.assertEqual(self.index['fit_failures'][0]['details']['phase'], 'full_fit')
+        self.assertEqual(len(self.index['fit_failures'][0]['details']['attempts']), 2)
+        self.assertIn('sampling_failed=true\ncontinue_history=true\n', self.output.read_text())
+        self.assertEqual(self.prepare()['through_week'], 1)
+        self.assertEqual(self.index['latest'], 'last-good')
+
+    def test_current_main_fit_failure_keeps_details_without_publishing_or_dispatch(self):
+        self.error = FullFitSamplingError({'season': 2026, 'week': 2}, self.error.details['attempts'])
+        plan = self.prepare(); plan['mode'] = 'current'
+        self.plan.write_text(json.dumps(plan)); self.output.write_text('')
+        with patch.object(pipeline, 'complete', side_effect=self.error), \
+             patch.object(weekly, 'refresh_index'), patch('sys.argv', ['weekly_publication.py', 'complete']):
+            with self.assertRaises(FullFitSamplingError): weekly.main()
+        self.assertEqual(self.output.read_text(), 'sampling_failed=true\n')
+        self.assertEqual(self.index['latest'], 'last-good')
+        self.assertEqual(self.index['last_attempt']['details'], self.error.details)
+        with patch.object(pipeline, 'record_failure') as generic, \
+             patch.object(weekly, 'refresh_index'), patch('sys.argv', ['weekly_publication.py', 'failed']):
+            weekly.main()
+        generic.assert_not_called()
 
 
 if __name__ == '__main__':

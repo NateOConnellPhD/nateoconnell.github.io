@@ -63,8 +63,9 @@ def record_sampling_failure(plan, error):
     """
     from update_rankings import read_index, write_index
     from sampling_retry import ExactLOOSamplingError
-    if not isinstance(error, ExactLOOSamplingError):
-        raise TypeError('Only a diagnosed exact-LOO failure can defer an archive week')
+    from full_fit_retry import FullFitSamplingError
+    if not isinstance(error, (ExactLOOSamplingError, FullFitSamplingError)):
+        raise TypeError('Only a diagnosed sampling failure can defer an archive week')
     index = read_index()
     failure = {'season': plan['season'], 'week': plan['through_week'], 'key': plan['key'],
                'at': dt.datetime.now(UTC).isoformat(), 'reason': str(error), 'details': error.details}

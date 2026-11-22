@@ -131,6 +131,7 @@ jobs:
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_historical_home.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_hierarchical_model.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_conference_summary.py
+          CFB_TEST_TMP="$TMPDIR" .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_full_fit_retry.py
           CFB_TEST_TMP="$TMPDIR" .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb/test_reference_scoring.py
       - name: Fit if needed and save checked rankings
         id: complete
@@ -168,8 +169,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
       - uses: actions/cache/save@v6
-        # A diagnosed exact-LOO failure occurs after the main fit passed. Keep
-        # that fit and earlier checked omitted-game results for the next run.
+        # Keep any passing fit/LOO work and the home prior after a diagnosed
+        # failure. Failed full-fit and exact-LOO draws are never newly saved.
         if: always() && !cancelled() && steps.prepare.outputs.needs_fit == 'true' && (steps.complete.outcome == 'success' || steps.complete.outputs.sampling_failed == 'true')
         with:
           path: |

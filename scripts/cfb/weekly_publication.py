@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import update_rankings as pipeline
 from historical_rankings import closed_weeks, prepare_history, record_sampling_failure
 from sampling_retry import ExactLOOSamplingError
+from full_fit_retry import FullFitSamplingError
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import DATA, UTC, encoded, instant, read_saved, sync, normalize, merge_games
 from home_history_inputs import ensure_history
@@ -170,12 +171,12 @@ def main():
         else:
             try:
                 row = pipeline.complete()
-            except ExactLOOSamplingError as error:
+            except (ExactLOOSamplingError, FullFitSamplingError) as error:
                 historical = plan.get('mode') != 'current'
                 if historical:
                     record_sampling_failure(plan, error)
                 else:
-                    pipeline.record_failure(plan['season'], reason=str(error))
+                    pipeline.record_failure(plan['season'], reason=str(error), details=error.details)
                 plan['sampling_failure_recorded'] = True
                 pipeline.PLAN.write_bytes(encoded(plan))
                 if os.environ.get('GITHUB_OUTPUT'):

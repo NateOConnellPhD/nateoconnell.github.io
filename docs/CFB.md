@@ -60,6 +60,24 @@ Previous-week movement and historical trajectories use the same reference on
 both sides. Old 25th-reference snapshots are not relabeled; the archive rebuilds
 their scores from compatible cached fits where available.
 
+The main fit starts with four sequential chains, each with 1,000 warmup and
+1,000 retained draws. Failed diagnostics trigger one longer attempt with 2,000
+warmup and 2,000 retained draws per chain, using the same seed, model, sampler
+settings and diagnostic gates. Both attempts log their diagnostic values
+before any publication work. Failed draws are not newly saved, combined with
+the retry, or passed to scoring. An exhausted attempt raises a structured
+full-fit sampling error with season, week, cutoff and both diagnostic reports.
+
+Passing initial-fit cache identities remain compatible. Longer fits have
+their actual warmup/draw counts in a separate identity and are checked for
+reuse before starting either sampler. The runner source change invalidates
+derived scoring/exact-LOO entries under their existing source identity rules;
+it does not force a new compatible full fit. The model and convergence
+thresholds have not changed. Thirty targeted checks passed using synthetic
+arrays and mocked sampling for retry, cache, storage and archive handling.
+No full-season HMC run or hosted workflow was executed for this correction,
+so convergence of the reported failed season remains unverified.
+
 Unreliable PSIS games now get sequential omitted-game NUTS refits, each checked
 against the same sampling requirements. The exact marginal replaces the PSIS
 marginal while retaining the disclosed approximate joint quantile coupling.
@@ -79,11 +97,11 @@ ranks, finite summaries, and top-K probability accounting.
 
 Historical reconstruction fills the latest season backward by week before
 moving to older seasons. Older imports are deferred while a newer-season week
-is ready. Each successful job dispatches the next job. If both exact-LOO attempts
+is ready. Each successful job dispatches the next job. If both main-fit or exact-LOO attempts
 fail diagnostics, that historical week is marked **Sampling checks failed**
 and remains unpublished, while the next job moves to other weeks and seasons.
 The failed run remains red in Actions. `fit_failures` retains the exact request
-key, game ID and both attempts' diagnostics. The queue stops with
+key, fit phase or game ID, and both attempts' diagnostics. The queue stops with
 `needs_attention` after all other weeks are processed; it does not continually
 retry the same failed cutoff. New input/source identities retry automatically.
 For an explicit retry, run the workflow in **history** mode with **retry_failed**
@@ -92,10 +110,12 @@ leave it unchecked. Other errors, timeouts, and failed current updates still
 stop the chain and require investigation. `backfill.remaining` counts runnable weeks in scanned
 seasons; `unscanned_seasons` records years still to be inspected.
 
-After a diagnosed exact-LOO failure, Actions saves the passing full fit and any
-earlier passing exact refits. Each run saves a new cache key, so restored caches
-can be extended instead of silently discarding new work. Failed exact draws
-are never cached. Array hashes, identities and diagnostics are checked on reuse.
+After a diagnosed sampling failure, Actions saves any passing full fit, earlier
+passing exact refits, and the shared home prior. Each run saves a new cache key,
+so restored caches can be extended instead of silently discarding new work.
+Failed draws are never newly cached. Array hashes, identities and diagnostics
+are checked on reuse. Current-season failures retain their structured details
+in `last_attempt.details` without replacing the last successful ranking.
 
 Before installing numerical packages, `prune_task_cache.py` trims the restored
 cache to the requested cutoff's compatible full fit, its score caches for all
