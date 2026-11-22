@@ -50,6 +50,12 @@ policy changes. Numerical caches are expendable; website history lives in Git.
 Unreliable PSIS games now get sequential omitted-game NUTS refits, each checked
 against the same sampling requirements. The exact marginal replaces the PSIS
 marginal while retaining the disclosed approximate joint quantile coupling.
+An exact refit starts with 1,000 warmup and 1,000 saved draws per chain. If its
+diagnostics fail, it gets one retry at 2,000 warmup and 2,000 saved draws, using
+the same seed, four chains, model and convergence thresholds. Both attempts'
+diagnostics are logged with the game ID; only a passing posterior is used.
+The existing numerical time/disk limits still apply. A longer run is not a
+guarantee of convergence, particularly for early-season fits.
 Failed sampling, failed exact refits, unresolved ranking constraints, or failed
 publication validation preserve the last successful ranking. The public index
 records unsuccessful preparation and numerical updates, preserving published
@@ -60,10 +66,23 @@ ranks, finite summaries, and top-K probability accounting.
 
 Historical reconstruction fills the latest season backward by week before
 moving to older seasons. Older imports are deferred while a newer-season week
-is ready. Each successful job dispatches the next job. A failure stops that
-chain and records the paused state; pushing a correction or manually running
-the workflow resumes it. `backfill.remaining` counts missing weeks in scanned
+is ready. Each successful job dispatches the next job. If both exact-LOO attempts
+fail diagnostics, that historical week is marked **Sampling checks failed**
+and remains unpublished, while the next job moves to other weeks and seasons.
+The failed run remains red in Actions. `fit_failures` retains the exact request
+key, game ID and both attempts' diagnostics. The queue stops with
+`needs_attention` after all other weeks are processed; it does not continually
+retry the same failed cutoff. New input/source identities retry automatically.
+For an explicit retry, run the workflow in **history** mode with **retry_failed**
+checked. That option clears the deferred list once; automatic continuations
+leave it unchecked. Other errors, timeouts, and failed current updates still
+stop the chain and require investigation. `backfill.remaining` counts runnable weeks in scanned
 seasons; `unscanned_seasons` records years still to be inspected.
+
+After a diagnosed exact-LOO failure, Actions saves the passing full fit and any
+earlier passing exact refits. Each run saves a new cache key, so restored caches
+can be extended instead of silently discarding new work. Failed exact draws
+are never cached. Array hashes, identities and diagnostics are checked on reuse.
 
 The job has a 45-minute timeout and bounds its numerical steps to 35 minutes
 and 1.5 GB under `.codex-tmp/cfb-refit`. It uses one sequential sampling process

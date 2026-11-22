@@ -11,7 +11,8 @@ import sys
 from zoneinfo import ZoneInfo
 
 import update_rankings as pipeline
-from historical_rankings import closed_weeks, prepare_history
+from historical_rankings import closed_weeks, prepare_history, record_sampling_failure
+from sampling_retry import ExactLOOSamplingError
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import DATA, UTC, encoded, instant, read_saved, sync, normalize, merge_games
 from home_history_inputs import ensure_history
@@ -136,11 +137,12 @@ def main():
     parser.add_argument('--season', default='current')
     parser.add_argument('--refresh-metadata', action='store_true')
     parser.add_argument('--history', action='store_true')
+    parser.add_argument('--retry-failed', action='store_true', help='Explicitly retry deferred archive weeks once')
     args = parser.parse_args()
     if args.phase == 'prepare':
         try:
             if args.history:
-                prepare_history()
+                prepare_history(retry_failed=args.retry_failed)
             else:
                 prepare(args.season, args.refresh_metadata)
         except (ValueError, KeyError, OSError) as error:
@@ -156,15 +158,33 @@ def main():
     else:
         plan = json.loads(pipeline.PLAN.read_text())
         if args.phase == 'failed':
-            pipeline.record_failure(plan['season'], historical=plan.get('mode') != 'current')
+            if not plan.get('sampling_failure_recorded'):
+                pipeline.record_failure(plan['season'], historical=plan.get('mode') != 'current')
         elif plan.get('no_completed_week'):
             print('No completed week with eligible games yet; retaining the last published rankings.')
         elif plan.get('history_done'):
-            print('All eligible historical weeks are saved; nothing to fit.')
+            print(f"Archive pass finished; {plan['failed_weeks']} weeks still need sampling review."
+                  if plan.get('failed_weeks') else 'All eligible historical weeks are saved; nothing to fit.')
         elif plan.get('history_scan_only'):
             print('Saved historical data; continuing to the next season with eligible games.')
         else:
-            row = pipeline.complete()
+            try:
+                row = pipeline.complete()
+            except ExactLOOSamplingError as error:
+                historical = plan.get('mode') != 'current'
+                if historical:
+                    record_sampling_failure(plan, error)
+                else:
+                    pipeline.record_failure(plan['season'], reason=str(error))
+                plan['sampling_failure_recorded'] = True
+                pipeline.PLAN.write_bytes(encoded(plan))
+                if os.environ.get('GITHUB_OUTPUT'):
+                    with open(os.environ['GITHUB_OUTPUT'], 'a') as handle:
+                        handle.write('sampling_failed=true\n')
+                        if historical: handle.write('continue_history=true\n')
+                # Keep this run visibly failed; the workflow may continue other
+                # archive cutoffs only after the failure record is committed.
+                raise
             if plan.get('mode') == 'current':
                 index = pipeline.read_index()
                 index['last_attempt'] = {'season': row['season'], 'at': dt.datetime.now(UTC).isoformat(),

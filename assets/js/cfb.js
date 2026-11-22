@@ -104,15 +104,15 @@
     const rows = index.snapshots.filter(r => r.season === Number(season));
     const expected = (index.archive || []).find(s => s.season === Number(season))?.weeks || [];
     return [...new Set([...rows.map(r => r.week), ...expected.map(w => w.week)])].sort((a, b) => a - b)
-      .map(week => ({week, row: rows.find(r => r.week === week)}));
+      .map(week => ({week, row: rows.find(r => r.week === week), status: expected.find(w => w.week === week)?.status}));
   }
   function populateUpdates(season, selected, requestedWeek = null) {
     el('season').value = String(season);
     const rows = index.snapshots.filter(r => r.season === Number(season));
     const weeks = seasonWeeks(season);
     const week = rows.find(r => r.id === selected)?.week ?? requestedWeek ?? rows[0]?.week ?? weeks[weeks.length - 1]?.week;
-    el('week').replaceChildren(...weeks.map(({week, row}) => {
-      const node = option(week, `Week ${week} · ${row ? date(row.data_cutoff) : 'awaiting fit'}`);
+    el('week').replaceChildren(...weeks.map(({week, row, status}) => {
+      const node = option(week, `Week ${week} · ${row ? date(row.data_cutoff) : status === 'needs_attention' ? 'sampling checks failed' : 'awaiting fit'}`);
       node.disabled = !row; return node;
     }));
     el('week').value = String(week ?? '');
@@ -133,13 +133,14 @@
       : `${season} season · ${weeks.filter(w => w.row).length} of ${weeks.length} weeks available`;
     el('archive-status').textContent = ['failed', 'blocked'].includes(index.backfill?.status)
       ? 'Historical updates are paused after an unsuccessful update. Completed weeks remain available.'
-      : index.backfill?.status === 'pending' ? 'Missing weeks are queued, starting with the latest season and working backward. Each week becomes available after its model checks pass.'
+      : index.backfill?.status === 'needs_attention' ? 'The archive pass has finished. Some weeks failed sampling checks and need review; their rankings have not been published.'
+      : index.backfill?.status === 'pending' ? 'Missing weeks are queued, starting with the latest season and working backward. Weeks that fail sampling checks are marked below while other weeks continue.'
       : 'Select a week to explore the rankings and posterior using games played through that cutoff.';
     grid.className = 'cfb-week-grid';
-    for (const {week, row} of weeks) {
+    for (const {week, row, status} of weeks) {
       const button = document.createElement('button');
       button.type = 'button'; button.textContent = `Week ${week}`; button.disabled = !row;
-      const small = document.createElement('small'); small.textContent = row ? date(row.data_cutoff) : 'Awaiting fit'; button.append(small);
+      const small = document.createElement('small'); small.textContent = row ? date(row.data_cutoff) : status === 'needs_attention' ? 'Sampling checks failed' : 'Awaiting fit'; button.append(small);
       if (row) button.addEventListener('click', () => select(row.id));
       if (el('week').value === String(week)) button.setAttribute('aria-current', 'true');
       grid.append(button);

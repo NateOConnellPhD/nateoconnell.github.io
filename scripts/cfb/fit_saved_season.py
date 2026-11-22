@@ -18,6 +18,7 @@ from cache_identity import REFIT_GENERATION
 from ranking_policy import CANONICAL as POLICY
 from season_inputs import load_fit_inputs as load_inputs
 from sync_data import ROOT, digest
+from sampling_retry import checked_exact_refit
 
 TASK = ROOT / '.codex-tmp' / 'cfb-refit'
 
@@ -101,6 +102,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
     score_identity = {'fit_key': fit_key, 'posterior_sha256': report['array_sha256'],
                       'scorer_source': source_hash('loo_scoring.py'), 'reference_rank': 25,
                       'exact_loo': exact_loo, 'exact_runner_source': source_hash('fit_saved_season.py') if exact_loo else None,
+                      'exact_sampling_source': source_hash('sampling_retry.py') if exact_loo else None,
                       'game_ids': [g['id'] for g in inputs['games']],
                       'reference_team_ids': [inputs['teams'][i]['id'] for i in inputs['fbs_indices']],
                       'scored_game_indices': inputs['scored_game_indices']}
@@ -117,6 +119,7 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
         def refit_game(game):
             ident = {'fit_key': fit_key, 'game_id': inputs['games'][game]['id'],
                      'runner_source': source_hash('fit_saved_season.py'),
+                     'sampling_source': source_hash('sampling_retry.py'),
                      'scorer_source': source_hash('loo_scoring.py'), 'seed': seed + game + 100}
             folder = TASK / 'exact' / digest(ident)
             if folder.exists():
@@ -125,17 +128,16 @@ def run(season, *, through_week=None, as_of=None, seed=20261120, exact_loo=False
                     raise ValueError('Exact LOO cache validation failed')
                 with np.load(folder / 'quantities.npz', allow_pickle=False) as saved:
                     return dict(saved)
-            print(json.dumps({'exact_loo_game': ident['game_id']}), flush=True)
             omitted = {key: values[:game] + values[game+1:] for key, values in inputs['data'].items()}
-            sampler = fit(len(inputs['teams']), **omitted, specification=MODEL,
-                          home_prior=prior, structure=inputs['strength_structure'], seed=ident['seed'], warmup=1000, draws=1000)
-            exact_samples, diagnostics, _ = describe(sampler)
-            if not diagnostics['sampling_checks_passed']:
-                raise ValueError('Exact LOO failed sampling diagnostics; last published ranking is preserved')
+            def fit_attempt(**settings):
+                return fit(len(inputs['teams']), **omitted, specification=MODEL,
+                           home_prior=prior, structure=inputs['strength_structure'], **settings)
+            exact_samples, diagnostics, attempts = checked_exact_refit(
+                ident['game_id'], ident['seed'], fit_attempt, describe)
             quantities = game_values(flatten(exact_samples), inputs['data'], game, reference_indices=inputs['fbs_indices'])
             folder.mkdir(parents=True)
             np.savez_compressed(folder / 'quantities.npz', **quantities)
-            write_json(folder / 'report.json', {'identity': ident, 'diagnostics': diagnostics,
+            write_json(folder / 'report.json', {'identity': ident, 'diagnostics': diagnostics, 'attempts': attempts,
                        'array_sha256': file_hash(folder / 'quantities.npz')})
             return quantities
 

@@ -44,11 +44,35 @@ def write_series(index, season, destination):
                                'weeks': [weeks[w] for w in sorted(weeks)]}))
 
 
-def prepare_history():
+def record_sampling_failure(plan, error):
+    """Quarantine only a diagnosed sampling failure, keyed to exact inputs/source.
+
+    A broken import, timeout or arbitrary code error still stops the workflow.
+    """
+    from update_rankings import read_index, write_index
+    from sampling_retry import ExactLOOSamplingError
+    if not isinstance(error, ExactLOOSamplingError):
+        raise TypeError('Only a diagnosed exact-LOO failure can defer an archive week')
+    index = read_index()
+    failure = {'season': plan['season'], 'week': plan['through_week'], 'key': plan['key'],
+               'at': dt.datetime.now(UTC).isoformat(), 'reason': str(error), 'details': error.details}
+    index['fit_failures'] = [f for f in index.get('fit_failures', []) if f['key'] != plan['key']] + [failure]
+    for season in index.get('archive', []):
+        if season['season'] == plan['season']:
+            for week in season['weeks']:
+                if week['week'] == plan['through_week']:
+                    week.update(status='needs_attention', reason='Sampling checks failed')
+    index['backfill'] = {**(index.get('backfill') or {}), 'status': 'pending',
+                         'at': failure['at'], 'reason': 'A week needs attention; continuing other weeks.'}
+    write_index(index)
+
+
+def prepare_history(retry_failed=False):
     from update_rankings import (TASK, PLAN, PUBLIC, current_season, matching_snapshot,
                                  read_index, request_key, write_index)
     now = dt.datetime.now(UTC)
     index = read_index()
+    failures = [] if retry_failed else index.get('fit_failures', [])
     queue, coverage, pending_seasons, unscanned = [], [], [], []
     previous_coverage = {row['season']: row for row in index.get('archive', [])}
     fetched_season = None
@@ -94,20 +118,28 @@ def prepare_history():
                 raise
             key = request_key(inputs)
             saved = matching_snapshot(index, key, PUBLIC, historical=True)
-            slots.append({'week': week, 'snapshot': saved['id'] if saved else None})
-            if saved is None:
+            # New inputs/source automatically retry this cutoff. Passed weeks
+            # clear a prior failure. Unchanged failed weeks are not rerun forever.
+            failures = [f for f in failures if (f['season'], f['week']) != (season, week)
+                        or (not saved and f['key'] == key)]
+            failed = next((f for f in failures if f['key'] == key), None)
+            slots.append({'week': week, 'snapshot': saved['id'] if saved else None,
+                          **({'status': 'needs_attention', 'reason': 'Sampling checks failed'} if failed else {})})
+            if saved is None and failed is None:
                 queue.append({'season': season, 'through_week': week, 'key': key, 'needs_fit': True, 'depth': depth})
         coverage.append({'season': season, 'weeks': sorted(slots, key=lambda s: s['week'])})
     index['archive'] = coverage
+    index['fit_failures'] = failures
     pending = bool(queue or pending_seasons or unscanned)
-    index['backfill'] = {'status': 'pending' if pending else 'complete', 'remaining': len(queue),
+    index['backfill'] = {'status': 'pending' if pending else 'needs_attention' if failures else 'complete', 'remaining': len(queue),
+                         'failed_weeks': len(failures),
                          'pending_seasons': pending_seasons, 'unscanned_seasons': unscanned,
                          'first_season': FIRST_SEASON, 'at': now.isoformat()}
     # Latest season first, working backward by week before importing older years.
     queue.sort(key=lambda p: (-p['season'], p['depth']))
     plan = {k: v for k, v in queue[0].items() if k != 'depth'} if queue else {
         'season': current_season(now), 'needs_fit': False,
-        'history_done': not pending, 'history_scan_only': pending}
+        'history_done': not pending, 'history_scan_only': pending, 'failed_weeks': len(failures)}
     TASK.mkdir(parents=True, exist_ok=True)
     PLAN.write_bytes(encoded(plan))
     write_index(index)

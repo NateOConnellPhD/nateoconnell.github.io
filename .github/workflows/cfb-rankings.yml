@@ -17,6 +17,10 @@ on:
         description: 'Refresh roster/calendar too (two additional requests)'
         default: false
         type: boolean
+      retry_failed:
+        description: 'History mode: retry weeks that previously failed sampling checks'
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths:
@@ -68,6 +72,8 @@ jobs:
           python3 -B scripts/cfb/test_history.py
           python3 -B scripts/cfb/test_weekly_publication.py
           python3 -B scripts/cfb/test_archive_range.py
+          python3 -B scripts/cfb/test_sampling_retry.py
+          python3 -B scripts/cfb/test_archive_failures.py
       - name: Fetch the season once and check for changed inputs
         id: prepare
         env:
@@ -75,11 +81,15 @@ jobs:
           CFB_SEASON: ${{ inputs.season || 'current' }}
           CFB_REFRESH_METADATA: ${{ inputs.refresh_metadata }}
           CFB_MODE: ${{ inputs.mode || 'current' }}
+          CFB_RETRY_FAILED: ${{ inputs.retry_failed }}
         run: |
           mkdir -p "$TMPDIR"
           args=(prepare --season "$CFB_SEASON")
           if [ "$CFB_MODE" = history ]; then
             args+=(--history)
+            if [ "$CFB_RETRY_FAILED" = true ]; then
+              args+=(--retry-failed)
+            fi
           fi
           if [ "$CFB_REFRESH_METADATA" = true ]; then
             args+=(--refresh-metadata)
@@ -98,8 +108,9 @@ jobs:
             .codex-tmp/cfb-refit/fits
             .codex-tmp/cfb-refit/scores
             .codex-tmp/cfb-refit/exact
-          key: cfb-20261121-hierarchy-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}
+          key: cfb-20261121-hierarchy-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            cfb-20261121-hierarchy-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-${{ steps.prepare.outputs.key }}-
             cfb-20261121-hierarchy-${{ runner.os }}-${{ steps.prepare.outputs.season }}-${{ hashFiles('scripts/cfb/model.py', 'scripts/cfb/requirements.txt') }}-
       - name: Install pinned numerical packages into the disposable environment
         if: steps.prepare.outputs.needs_fit == 'true'
@@ -148,13 +159,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
-      - name: Continue the historical queue one checked week at a time
-        if: success() && steps.commit.outcome == 'success' && (inputs.mode != 'history' || steps.prepare.outputs.continue_history == 'true')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run cfb-rankings.yml --ref main -f mode=history
       - uses: actions/cache/save@v6
-        if: success() && steps.prepare.outputs.needs_fit == 'true' && steps.cache.outputs.cache-hit != 'true'
+        # A diagnosed exact-LOO failure occurs after the main fit passed. Keep
+        # that fit and earlier checked omitted-game results for the next run.
+        if: always() && !cancelled() && steps.prepare.outputs.needs_fit == 'true' && (steps.complete.outcome == 'success' || steps.complete.outputs.sampling_failed == 'true')
         with:
           path: |
             .codex-tmp/cfb-refit/home
@@ -162,6 +170,11 @@ jobs:
             .codex-tmp/cfb-refit/scores
             .codex-tmp/cfb-refit/exact
           key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Continue the historical queue one checked week at a time
+        if: always() && !cancelled() && steps.commit.outcome == 'success' && ((success() && (inputs.mode != 'history' || steps.prepare.outputs.continue_history == 'true')) || (inputs.mode == 'history' && steps.complete.outputs.continue_history == 'true'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run cfb-rankings.yml --ref main -f mode=history
       - name: Remove this job's temporary environment and arrays
         if: always()
         run: rm -rf -- .codex-tmp/cfb-refit
