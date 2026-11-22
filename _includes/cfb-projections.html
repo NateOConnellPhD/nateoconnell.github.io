@@ -1,0 +1,78 @@
+<section id="projections" class="cfb-projections" role="tabpanel" aria-labelledby="cfb-product-projections" data-cfb-projections data-index="{{ '/assets/data/cfb/projections/index.json' | relative_url }}" hidden>
+  <header class="cfb-forecast-heading">
+    <p class="eyebrow">Looking ahead</p>
+    <h2>Game projections</h2>
+    <p class="page-deck">Who would win, how often, and by how much? These forecasts use a separate power model. They do not determine the merit rankings.</p>
+    <p class="small-note" data-projection-asof></p>
+  </header>
+  <div class="cfb-forecast-controls">
+    <label>Saved forecast<select data-projection-snapshot aria-label="Saved forecast"></select></label>
+    <button type="button" class="button button-outline" data-projection-reload>Reload</button>
+  </div>
+  <p data-projection-status role="status" aria-live="polite"></p>
+  <div data-projection-content hidden>
+    <p class="small-note" data-projection-snapshot-note></p>
+    <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-games-title">
+      <h3 id="cfb-forecast-games-title">Upcoming games</h3>
+      <p>A model line of <strong>Georgia −6.5</strong> means Georgia is favored by about 6½ points. These are model estimates; current sportsbook lines are not included.</p>
+      <div class="cfb-forecast-controls">
+        <label>Games<select data-projection-week></select></label>
+        <label>Find a team<input type="search" data-projection-search placeholder="Team name"></label>
+      </div>
+      <p class="small-note" data-projection-games-note aria-live="polite"></p>
+      <div class="cfb-forecast-table" data-projection-games tabindex="0" role="region" aria-label="Upcoming game projections"></div>
+    </section>
+    <section class="cfb-forecast-card" data-projection-matchup aria-labelledby="cfb-forecast-matchup-title">
+      <h3 id="cfb-forecast-matchup-title">Build a matchup</h3>
+      <p>Choose two teams and a venue. The probability accounts for uncertainty about both teams, the host’s home advantage, and the unpredictability of a single game.</p>
+      <div class="cfb-forecast-controls">
+        <label>Home team<select data-projection-home></select></label>
+        <button type="button" class="button button-outline" data-projection-swap aria-label="Swap home and away teams">Swap</button>
+        <label>Away team<select data-projection-away></select></label>
+        <label>Venue<select data-projection-site><option value="home">Home team’s stadium</option><option value="neutral">Neutral field</option></select></label>
+      </div>
+      <p data-projection-matchup-error role="status" aria-live="polite"></p>
+      <div data-projection-matchup-result hidden>
+        <dl class="cfb-forecast-metrics" aria-live="polite">
+          <div><dt>Model line</dt><dd data-projection-line></dd></div>
+          <div><dt data-projection-home-label>Home win chance</dt><dd data-projection-home-chance></dd></div>
+          <div><dt data-projection-away-label>Away win chance</dt><dd data-projection-away-chance></dd></div>
+          <div><dt data-projection-range-label>80% final-margin range</dt><dd data-projection-range></dd></div>
+        </dl>
+        <p data-projection-matchup-note></p>
+        <div class="cfb-forecast-charts">
+          <div><h4>Uncertainty about team strength</h4><div data-projection-strength-chart></div><p class="small-note">Points above or below the average FBS team on a neutral field. Overlap means the evidence does not cleanly separate the teams.</p></div>
+          <div><h4>How the game could turn out</h4><div data-projection-margin-chart></div><p class="small-note">This wider distribution adds game-to-game variation. An 80% range contains the middle 80% of simulated outcomes, conditional on the model.</p></div>
+        </div>
+      </div>
+      <p class="small-note" data-projection-draw-note></p>
+    </section>
+    <section class="cfb-forecast-card" aria-labelledby="cfb-power-title">
+      <h3 id="cfb-power-title">Power estimates &amp; uncertainty</h3>
+      <p>Power measures expected performance in points against an average FBS team on a neutral field. A team at +10 is estimated to be ten points better. This ordering measures predicted strength, separately from what teams have earned.</p>
+      <div class="cfb-forecast-controls">
+        <label>Find a team<input type="search" data-projection-power-search placeholder="Team name"></label>
+        <label>Conference<select data-projection-conference></select></label>
+        <label>Show<select data-projection-limit><option value="25">Top 25 matching teams</option><option value="all">All matching teams</option></select></label>
+      </div>
+      <p class="small-note" data-projection-power-count aria-live="polite"></p>
+      <div class="cfb-forecast-table" data-projection-powers tabindex="0" role="region" aria-label="Power estimates and probabilities"></div>
+      <p class="small-note">Mean is the average estimate across posterior draws; median is the middle estimate. A 95% interval contains the middle 95% of plausible strengths. “P(top 12)” is the share of draws in which a team is among the twelve strongest; it is not its chance of making the playoff.</p>
+    </section>
+    <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-method-title">
+      <h3 id="cfb-forecast-method-title">How these forecasts work</h3>
+      <p>A <strong>posterior</strong> is the model’s updated picture after seeing the games. Each draw is one plausible set of team strengths, home advantages, and game variability. Comparing teams within the same draw keeps their uncertainty connected.</p>
+      <p>This forecasting model starts with prior expectations based on last season’s strength, roster talent, and preseason AP points. The coefficients are estimated from earlier seasons only. As games accumulate, the model learns how far teams have moved from those expectations. This information is used for predictions, not the merit rankings.</p>
+      <p>The fit blends 75% final scoring margin with 25% efficiency margin, derived from postgame win expectancy. When efficiency information is missing, that game uses its actual margin. The residual variability is rescaled afterward to forecast real score margins. Home advantage includes both a national effect and a school offset, informed by the preceding three seasons; neutral games get neither.</p>
+      <p>Win probabilities average a Student-t predictive distribution over the posterior. This allows unusually large margins and includes game noise. “Stronger team” probability only compares underlying strength, so it need not equal the chance of winning one game.</p>
+      <p class="small-note" data-projection-prior-caveat></p>
+      <details><summary>Fit details</summary><p class="small-note" data-projection-diagnostics></p><p class="small-note">Weekly refreshes reuse the saved game feeds. A changed set of forecasting inputs triggers one separate fit, with no leave-one-game-out refits. If checks fail, the previous forecast stays available. The preseason prior must be reviewed for each new season.</p></details>
+    </section>
+    <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-backtest-title">
+      <h3 id="cfb-forecast-backtest-title">Historical forecast accuracy</h3>
+      <p data-projection-backtest-summary></p>
+      <div class="cfb-forecast-table" data-projection-backtest tabindex="0" role="region" aria-label="Retrospective forecast accuracy by season phase"></div>
+      <p class="small-note">Weekly forecasts were reconstructed using earlier games, with bowls and playoffs forecast from the regular season. Comparisons use the same games with available closing lines. The supplied backtest used two chains with 250 retained draws per chain; its reported strength R̂ ranged from 1.01 to 1.05. Model selection used these seasons, so this is not an independent final evaluation. The 2022 forecasts use the last-season prior because earlier talent and poll training data were unavailable.</p>
+    </section>
+  </div>
+</section>

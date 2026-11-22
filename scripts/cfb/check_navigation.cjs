@@ -45,12 +45,14 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
   }
   const root = new Element(); root.dataset.index = '/assets/data/cfb/index.json';
   root.querySelector = selector => get(selector.match(/data-cfb-([^\]]+)/)[1]);
-  const location = {href: `https://example.test/blog/cfb/${query}`, search: query};
+  const location = {href: `https://example.test/blog/cfb/${query}`, search: query, hash: new URL(`https://example.test/blog/cfb/${query}`).hash};
+  const documentEvents = new Map();
   const requests = [], shown = [], shownReferences = [], tabs = [], contributions = [];
   const context = {URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
     cancelAnimationFrame() {}, requestAnimationFrame(callback) { callback(); return 0; }, location,
     history: {replaceState(_, __, address) { location.href = String(address); location.search = new URL(address).search; }},
-    document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element()},
+    document: {querySelector: () => root, getElementById: () => get('title'), createElement: () => new Element(), createDocumentFragment: () => new Element(),
+      addEventListener(name, callback, options) {documentEvents.set(name, {callback, once: options?.once});}},
     window: {CFBReference: reference, CFBContributions: {render: (_, snapshot, a, b) => contributions.push([snapshot.reference_rank, a, b])}, CFBExplorer: () => ({show: snapshot => {shown.push(snapshot.id); shownReferences.push(snapshot.reference_rank);}, tab: name => tabs.push(name)}), CFBPolicy: policyRun && {run: policyRun, cancel() {}}},
     fetch: async address => {
       requests.push(String(address));
@@ -67,10 +69,21 @@ async function page(query = '', data = index, fixtures = {}, policyRun = null) {
     }};
   vm.runInNewContext(source, context);
   await settle();
-  return {get, root, location, requests, shown, shownReferences, tabs, contributions, async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
+  return {get, root, location, requests, shown, shownReferences, tabs, contributions,
+    async event(name) {const listener=documentEvents.get(name);if(listener){if(listener.once)documentEvents.delete(name);await listener.callback();await settle();}},
+    async change(key, value) { get(key).value = value; await get(key).handlers.change(); await settle(); }};
 }
 
 (async () => {
+  const projections = await page('#projections');
+  assert.equal(projections.requests.length, 0, 'Direct projection links defer merit downloads');
+  await projections.event('cfb:merit-activate');
+  const loadedRequests=projections.requests.length;
+  assert.ok(loadedRequests>0);
+  await projections.event('cfb:merit-activate');
+  assert.equal(projections.requests.length, loadedRequests, 'The first merit activation loads only once');
+  await projections.change('week', '10');
+  assert.equal(new URL(projections.location.href).hash, '#projections', 'A merit load preserves the selected product');
   const p = await page();
   assert.equal(p.get('week').value, '12');
   assert.deepEqual(p.get('week').options.map(o => o.value), ['0', '1', '10', '11', '12']);

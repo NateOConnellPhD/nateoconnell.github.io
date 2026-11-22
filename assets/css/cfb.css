@@ -109,3 +109,38 @@
 @media(max-width:950px){.cfb-history{grid-template-columns:1fr 1fr}}
 @media(max-width:500px){.cfb-pair-controls{grid-template-columns:1fr}.cfb-policy,.cfb-explanations{padding:15px}}
 @media(max-width:700px){.cfb-history{grid-template-columns:1fr 2fr}.cfb-history label[for=cfb-reference],.cfb-history .button{grid-column:1/-1}.cfb-filters{grid-template-columns:1fr 1fr}.cfb-filters label:first-child{grid-column:1/-1}.cfb-page .section-heading{align-items:start;flex-direction:column;gap:10px}.cfb-heading{margin-bottom:35px}.cfb-table th,.cfb-table td{padding:13px 10px}.cfb-method{margin-top:48px}}
+.cfb-product-tabs { display: flex; gap: .75rem; margin: 1rem 0 2rem; border-bottom: 2px solid #bfd2e1; }
+.cfb-product-tabs button { flex: 1; background: transparent; border: 0; border-bottom: 4px solid transparent; padding: 1rem; text-align: left; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.cfb-product-tabs button span { display: block; font-size: .85rem; font-weight: 400; margin-top: .2rem; }
+.cfb-product-tabs button[aria-selected="true"] { border-color: #245a82; background: #dfedf7; }
+.cfb-product-tabs button:focus-visible, .cfb-forecast-game:focus-visible { outline: 2px solid #245a82; outline-offset: 3px; }
+.cfb-projections [hidden], [data-cfb-product-panel][hidden] { display: none !important; }
+/* Direct links show the right product before deferred scripts finish loading. */
+.cfb-page:has(#projections:target) #cfb-merit { display: none; }
+.cfb-projections:target { display: block !important; }
+.cfb-forecast-card { background: rgba(255,255,255,.55); border: 1px solid #bfd2e1; border-radius: 12px; padding: clamp(1rem,2.5vw,2rem); margin: 1.5rem 0; }
+.cfb-forecast-card h3 { margin-top: 0; }
+.cfb-forecast-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin: 1rem 0; }
+.cfb-forecast-controls label { display: flex; flex: 1 1 170px; flex-direction: column; gap: .35rem; font-size: .9rem; font-weight: 600; }
+.cfb-forecast-controls select, .cfb-forecast-controls input { min-width: 0; max-width: 100%; width: 100%; min-height: 44px; padding: .65rem; border: 1px solid #b7cddd; border-radius: 5px; background: #fff; color: inherit; font: inherit; }
+.cfb-forecast-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .8rem; margin: 1.5rem 0; }
+.cfb-forecast-metrics div { border-top: 3px solid #245a82; padding: .8rem; background: #e7f1f8; }
+.cfb-forecast-metrics dt { font-size: .85rem; }
+.cfb-forecast-metrics dd { margin: .4rem 0 0; font-size: clamp(1.2rem,2vw,1.8rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cfb-forecast-charts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1.5rem; }
+.cfb-forecast-charts svg { display: block; width: 100%; height: auto; }
+.cfb-forecast-charts svg text { font: 13px sans-serif; fill: #385369; }
+.cfb-forecast-table { overflow: auto; max-height: 34rem; scrollbar-gutter: stable; }
+.cfb-forecast-table table { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.cfb-forecast-table th, .cfb-forecast-table td { padding: .75rem; border-bottom: 1px solid #d0dfe9; text-align: left; white-space: nowrap; }
+.cfb-forecast-table th { background: #e5f0f8; position: sticky; top: 0; z-index: 1; }
+.cfb-forecast-game { background: none; border: 0; padding: .2rem 0; font: inherit; color: #245a82; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left; }
+.cfb-projections details { margin-top: 1rem; }
+.cfb-projections summary { cursor: pointer; font-weight: 600; }
+@media (max-width: 700px) {
+  .cfb-product-tabs { gap: .2rem; }
+  .cfb-product-tabs button { padding: .7rem .5rem; }
+  .cfb-product-tabs button span { font-size: .75rem; }
+  .cfb-forecast-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cfb-forecast-charts { grid-template-columns: minmax(0,1fr); }
+}

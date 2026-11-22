@@ -460,7 +460,11 @@
       el('csv').href = url(descriptor.csv); el('csv').hidden = false;
       el('csv').textContent = `${rank === reference.defaultRank ? 'Official' : reference.label(rank) + '-reference'} CSV ↓`;
       el('json').href = url(descriptor.json);
-      if (writeURL) history.replaceState(null, '', address);
+      if (writeURL) {
+        // A pending merit load must not change the product tab the reader opened.
+        if (location.hash === '#projections') address.hash = '#projections';
+        history.replaceState(null, '', address);
+      }
       notice(); render(); el('results').hidden = false; explorer.show(current,index); renderArchive();
       loadPolls();
       if (readerSettings) {
@@ -579,5 +583,7 @@
       else await browseSeason(seasons[0], null, false);
     } catch (_) { el('status').textContent = 'The ranking archive could not be loaded. Please reload the page in a moment.'; }
   }
-  start();
+  // A direct projections link does not download the merit archive until needed.
+  if (location.hash === '#projections') document.addEventListener('cfb:merit-activate', start, {once:true});
+  else start();
 })();
