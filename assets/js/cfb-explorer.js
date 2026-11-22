@@ -14,7 +14,7 @@ window.CFBExplorer = (root, api) => {
     tau_fbs: ['FBS team spread (points)', 'Estimated spread of FBS team strengths around their conference levels. Larger values mean greater differences between teams within conferences.'],
     tau_fcs: ['FCS team spread (points)', 'Estimated spread of FCS team strengths around their conference levels.'],
     tau_conf: ['Conference spread (points)', 'Estimated spread of conference effects around zero, using the same prior for every conference in both divisions. Smaller values mean more pooling toward the division baselines.'],
-    sos: ['Strength of schedule (loss probability)', 'Average probability that the reference team—the 25th-strongest team in each draw—would lose against this schedule, accounting for venue. The scale is 0 to 1: 0.30 means 30%. Higher means a harder schedule. Each game is left out when estimating its difficulty.'],
+    sos: ['Strength of schedule (loss probability)', 'Average probability that the selected reference team would lose against this schedule, accounting for venue. The scale is 0 to 1: 0.30 means 30%. Higher means a harder schedule. Each game is left out when estimating its difficulty.'],
     home_adv: ['National home advantage (points)', 'The shared home effect, informed by the preceding three seasons and updated by current results. Neutral-site games receive no home advantage.'],
     home_offset: ['School home offset (points)', 'This school’s adjustment to the national home effect, partially pooled toward zero. It is a venue effect, not a carryover of last season’s team strength.'],
     home_total: ['School home advantage (points)', 'The national home effect plus this school’s offset. This is the advantage used when this team hosts a nonneutral game.'],
@@ -69,7 +69,8 @@ window.CFBExplorer = (root, api) => {
     const key = el('metric').value, global = ['home_adv','sigma','nu','mu_fcs','tau_fbs','tau_fcs','tau_conf'].includes(key);
     const ids = [el('stat-team').value, el('stat-other').value].filter((v,i,a)=>v && a.indexOf(v)===i);
     el('stat-team').disabled = global; el('stat-other').disabled = global;
-    el('stat-context').textContent = metrics[key][1];
+    el('stat-context').textContent = metrics[key][1] + (['merit','raw_rank','sos'].includes(key)
+      ? ` These calculations use the ${window.CFBReference.label(current.reference_rank)}-strongest FBS team in each posterior draw as the reference.` : '');
     const entries = global ? [{name:metrics[key][0], s:current.posterior?.parameters?.[key]}]
       : ids.map(id=>({name:current.teams.find(t=>String(t.id)===id)?.name, s:current.posterior?.teams?.[id]?.[key]}));
     el('stat-summary').replaceChildren(); el('stat-legend').replaceChildren(); el('probabilities').replaceChildren();
@@ -142,19 +143,18 @@ window.CFBExplorer = (root, api) => {
   function renderHistory() {
     if (!current || activeTab !== 'history' || !series) return;
     const key=el('history-metric').value, ids=[el('history-team').value,el('history-other').value].filter((v,i,a)=>v&&a.indexOf(v)===i);
-    const published=new Set(archive.snapshots.map(r=>r.id));
-    const weeks=series.weeks.filter(w=>published.has(w.id)), field=key==='rank'?'rank':`${key}_mean`;
+    const weeks=window.CFBReference.historyWeeks(series,archive.snapshots,current.reference_rank), field=key==='rank'?'rank':`${key}_mean`;
     const entries=ids.map(id=>({name:current.teams.find(t=>String(t.id)===id)?.name, points:weeks.map(w=>({week:w.week,policy:w.policy_sha256,t:w.teams.find(t=>String(t.id)===id),id:w.id}))}));
     const finite=entries.flatMap(e=>e.points.filter(p=>Number.isFinite(p.t?.[field])));
     el('trajectory').replaceChildren(); el('history-rows').replaceChildren();
-    el('history-caption').textContent=`${current.season} weekly history · official saved results`;
-    el('history-status').textContent=`${weeks.length} saved week${weeks.length===1?'':'s'} in ${current.season}. ${weeks.length<2?'A trajectory needs at least two saved weeks. ':''}Weeks awaiting refits break the line. Rule sliders do not alter this history.`;
+    el('history-caption').textContent=`${current.season} weekly history · ${window.CFBReference.label(current.reference_rank)} reference · saved ordering rules`;
+    el('history-status').textContent=`${weeks.length} saved week${weeks.length===1?'':'s'} in ${current.season}, all using the ${window.CFBReference.label(current.reference_rank)} reference. ${weeks.length<2?'A trajectory needs at least two saved weeks. ':''}Weeks awaiting refits break the line. Rule sliders do not alter this history.`;
     if (!finite.length) { el('trajectory').append(node('p','No eligible-game summaries for these teams in the saved weeks.')); return; }
     const lows=finite.map(p=>key==='rank'?p.t.rank:p.t[`${key}_lo90`]);
     const highs=finite.map(p=>key==='rank'?p.t.rank:p.t[`${key}_hi90`]);
     const coverage=archive.archive?.find(s=>s.season===current.season)?.weeks.map(w=>w.week)||[];
     const xmin=Math.min(...weeks.map(w=>w.week),...coverage),xmax=Math.max(...weeks.map(w=>w.week),...coverage);
-    const {plot,x,y}=chart(el('trajectory'),`${current.season}: ${key==='rank'?'official ranks':key+' means with 90% intervals'} by week`,xmin,xmax,Math.min(...lows),Math.max(...highs),key!=='merit',true);
+    const {plot,x,y}=chart(el('trajectory'),`${current.season}: ${key==='rank'?'saved ranks':key+' means with 90% intervals'} by week, ${window.CFBReference.label(current.reference_rank)} reference`,xmin,xmax,Math.min(...lows),Math.max(...highs),key!=='merit',true);
     entries.forEach((entry,j)=> {
       let prior=null;
       for (const point of entry.points) {
@@ -180,7 +180,7 @@ window.CFBExplorer = (root, api) => {
       for (const value of [t.name,t.rank??'—',`${t.wins}–${t.losses}`,`${num(t.merit_mean)} / ${num(t.merit_median)}`,interval(t.merit_lo90,t.merit_hi90),movement]) tr.append(node('td',value));
       el('history-rows').append(tr); previous.set(id,{week:w.week,rank:t.rank,policy:w.policy_sha256});
     }
-    legend(el('history-legend'),entries,key==='rank'?'Official point ranks; no posterior interval is assigned to these rule-adjusted ranks.':'Points = posterior means; bars = equal-tailed 90% intervals.');
+    legend(el('history-legend'),entries,key==='rank'?'Saved point ranks for this reference; no posterior interval is assigned to these rule-adjusted ranks.':'Points = posterior means; bars = equal-tailed 90% intervals.');
   }
   async function loadHistory() {
     if (!current || activeTab!=='history') return;

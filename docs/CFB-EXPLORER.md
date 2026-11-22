@@ -29,7 +29,7 @@ There is one numerical worker at a time, with the existing 35-minute numerical l
 
 GitHub permits explicit `workflow_dispatch` calls using `GITHUB_TOKEN`; `actions: write` is granted for this. See [GitHub's token documentation](https://docs.github.com/en/actions/concepts/security/github_token). The finite missing-week queue and checked snapshot reuse terminate the dispatch sequence.
 
-The archive extends to 2002, subject to saved data and fit validation, using the same model and declared ranking rules. Existing 2024–2026 checked results remain reusable through the exact source-identity compatibility bridge described in [CFB.md](CFB.md). Reconstruction labels describe observed final scores filtered by historical kickoff/week cutoffs; they do not claim those rankings were published then or that exact historical final-status timestamps were archived.
+The archive extends to 2002, subject to saved data and fit validation, using the same model and declared ranking rules. Compatible current-model fits can be reused, but each week must have scores and rankings for all four current reference choices, as described in [CFB.md](CFB.md). Reconstruction labels describe observed final scores filtered by historical kickoff/week cutoffs; they do not claim those rankings were published then or that exact historical final-status timestamps were archived.
 
 ## Browsing and comparisons
 
@@ -68,3 +68,22 @@ Performed locally:
 - JavaScript syntax, HTML IDs/labels/panel references/control selectors, workflow YAML parsing, and Git whitespace checks.
 
 The authorized rendered review was blocked: the browser tool failed to start, localhost bind was denied, and installed headless Chrome exited with SIGABRT. No desktop/mobile visual pass is claimed. The numerical array-to-export bridge and remote Actions chain were source-reviewed, not executed. Synthetic review fixtures were never placed in public data and were removed. The local public index was empty at the start; source changes do not establish that live or historical fits have completed.
+
+## Reference-team selector
+
+The reference selector alongside season/week defaults to 12th, with 2nd, 4th
+and 24th alternatives. All positions are draw-by-draw FBS strength order
+statistics. The selector changes saved merit, SOS, ranking, uncertainty and
+pairwise-comparison results, including the same-reference previous week and
+season trajectory. Model strength and parameter posteriors are shared.
+Downloads and links identify the selected reference. Alternative references
+are labelled as alternatives to the official 12th-reference ranking. Rule
+sliders continue to operate on the selected reference's saved policy inputs;
+switching references preserves custom ordering settings and the chosen revision.
+
+Focused local checks for this change passed: 19 publication checks, five history
+checks, and seven numerical checks using synthetic draws (including shared full
+fit/exact-refit cache reuse). The offline controller checks cover reference
+switching, retained ordering controls, downloads, links, weekly comparisons,
+history and cached file reuse. No HMC, API calls, rendered browser review or
+live publication was performed for this change.

@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from historical_rankings import closed_weeks
-from test_publication import PublicationTests
+from test_publication import PublicationTests, references
 import update_rankings as live
 from sync_data import UTC
 
@@ -52,12 +52,12 @@ class HistoryTests(PublicationTests):
         plan = Path(self.temp.name) / 'plan.json'
         plan.write_text(json.dumps({'season': 2026, 'key': key, 'through_week': 4}))
         calls = []
-        runner = types.SimpleNamespace(run=lambda season, **kw: calls.append((season, kw)) or self.result)
+        runner = types.SimpleNamespace(run=lambda season, **kw: calls.append((season, kw)) or references(self.result)[kw['reference_rank']])
         with patch.object(live, 'PLAN', plan), patch.object(live, 'load_inputs', return_value=self.inputs) as load, \
              patch.dict('sys.modules', {'fit_saved_season': runner}), patch('posterior_summary.attach'):
             live.complete(self.public)
         load.assert_called_once_with(2026, through_week=4)
-        self.assertEqual(calls, [(2026, {'through_week': 4, 'exact_loo': True})])
+        self.assertEqual(calls, [(2026, {'through_week': 4, 'exact_loo': True, 'reference_rank': rank}) for rank in (12, 2, 4, 24)])
 
     def test_sunday_cutoff_and_completion_evidence_survive_publication(self):
         from pathlib import Path
@@ -74,12 +74,12 @@ class HistoryTests(PublicationTests):
         plan.write_text(json.dumps({'season': 2026, 'key': live.request_key(self.inputs),
                                    'through_week': 12, 'as_of': at, 'week_completion': proof}))
         calls = []
-        runner = types.SimpleNamespace(run=lambda season, **kw: calls.append((season, kw)) or self.result)
+        runner = types.SimpleNamespace(run=lambda season, **kw: calls.append((season, kw)) or references(self.result)[kw['reference_rank']])
         with patch.object(live, 'PLAN', plan), patch.object(live, 'load_inputs', return_value=self.inputs) as load, \
              patch.dict('sys.modules', {'fit_saved_season': runner}), patch('posterior_summary.attach'):
             row = live.complete(self.public)
             load.assert_called_once_with(2026, through_week=12, as_of=at)
-            self.assertEqual(calls, [(2026, {'through_week': 12, 'exact_loo': True, 'as_of': at})])
+            self.assertEqual(calls, [(2026, {'through_week': 12, 'exact_loo': True, 'as_of': at, 'reference_rank': rank}) for rank in (12, 2, 4, 24)])
             self.assertEqual(row['week_completion'], proof)
             self.assertEqual(json.loads((self.public / row['json']).read_text())['week_completion'], proof)
             # A changed pending-game feed must invalidate the completion proof,
@@ -87,7 +87,7 @@ class HistoryTests(PublicationTests):
             self.inputs['source']['games-fcs']['payload_sha256'] = 'changed'
             with self.assertRaisesRegex(ValueError, 'completed-week evidence changed'):
                 live.complete(self.public)
-            self.assertEqual(len(calls), 1)
+            self.assertEqual(len(calls), 4)
 
 
 if __name__ == '__main__':

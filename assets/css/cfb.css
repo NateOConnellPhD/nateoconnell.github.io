@@ -6,7 +6,7 @@
 .cfb-page .section-heading{align-items:center}
 .cfb-page .section-heading .eyebrow{margin-bottom:8px}
 .cfb-history,.cfb-filters{display:grid;gap:18px;margin:24px 0;align-items:end}
-.cfb-history{grid-template-columns:130px minmax(200px,1fr) auto;padding-top:20px;border-top:1px solid var(--line);scroll-margin-top:24px}
+.cfb-history{grid-template-columns:130px minmax(140px,1fr) minmax(220px,1.3fr) auto;padding-top:20px;border-top:1px solid var(--line);scroll-margin-top:24px}
 .cfb-filters{grid-template-columns:minmax(200px,1fr) 230px 130px}
 .cfb-poll-controls{display:flex;flex-wrap:wrap;gap:18px;margin:24px 0;max-width:650px}
 .cfb-poll-controls>label{flex:1 1 220px}
@@ -94,5 +94,6 @@
 .cfb-diagnostics{font-size:.83rem;padding:18px 0;border-top:1px solid var(--line);margin-top:25px}
 @media(max-width:600px){.cfb-explorer-controls{grid-template-columns:1fr}.cfb-tabs{gap:18px}.cfb-tabs button{font-size:.8rem}.cfb-plot{padding:8px 0}.cfb-week-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:800px){.cfb-sliders{grid-template-columns:1fr;gap:20px}.cfb-toggles{grid-template-columns:1fr;gap:16px}}
+@media(max-width:950px){.cfb-history{grid-template-columns:1fr 1fr}}
 @media(max-width:500px){.cfb-pair-controls{grid-template-columns:1fr}.cfb-policy,.cfb-explanations{padding:15px}}
-@media(max-width:700px){.cfb-history{grid-template-columns:1fr 2fr}.cfb-history .button{grid-column:1/-1}.cfb-filters{grid-template-columns:1fr 1fr}.cfb-filters label:first-child{grid-column:1/-1}.cfb-page .section-heading{align-items:start;flex-direction:column;gap:10px}.cfb-heading{margin-bottom:35px}.cfb-table th,.cfb-table td{padding:13px 10px}.cfb-method{margin-top:48px}}
+@media(max-width:700px){.cfb-history{grid-template-columns:1fr 2fr}.cfb-history label[for=cfb-reference],.cfb-history .button{grid-column:1/-1}.cfb-filters{grid-template-columns:1fr 1fr}.cfb-filters label:first-child{grid-column:1/-1}.cfb-page .section-heading{align-items:start;flex-direction:column;gap:10px}.cfb-heading{margin-bottom:35px}.cfb-table th,.cfb-table td{padding:13px 10px}.cfb-method{margin-top:48px}}
