@@ -144,6 +144,7 @@
 .cfb-forecast-table th, .cfb-forecast-table td { padding: .75rem; border-bottom: 1px solid #d0dfe9; text-align: left; white-space: nowrap; }
 .cfb-forecast-table th { background: #e5f0f8; position: sticky; top: 0; z-index: 1; }
 .cfb-forecast-game { background: none; border: 0; padding: .2rem 0; font: inherit; color: #245a82; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left; }
+.cfb-lookback-provenance { display: block; color: #385369; margin-top: .25rem; }
 .cfb-projections details { margin-top: 1rem; }
 .cfb-projections summary { cursor: pointer; font-weight: 600; }
 @media (max-width: 700px) {

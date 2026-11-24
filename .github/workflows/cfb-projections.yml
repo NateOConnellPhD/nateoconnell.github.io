@@ -137,6 +137,14 @@ jobs:
             .codex-tmp/cfb-refit/qb
             .codex-tmp/cfb-refit/scores
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Update lookback from frozen predictions and saved final scores
+        # Results can advance even if a new numerical fit fails. This step only
+        # joins saved files and never changes a prediction or runs a model.
+        if: always() && !cancelled()
+        run: |
+          python3 -B scripts/cfb_forecast/test_lookback.py
+          node scripts/cfb_forecast/check_lookback.cjs
+          python3 -B scripts/cfb_forecast/lookback.py
       - name: Commit checked inputs and any passing forecast
         id: commit
         if: always() && !cancelled()

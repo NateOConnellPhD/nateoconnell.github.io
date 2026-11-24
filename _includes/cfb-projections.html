@@ -6,7 +6,7 @@
     <p class="small-note" data-projection-asof></p>
   </header>
   <div class="cfb-forecast-controls">
-    <label>Saved forecast<select data-projection-snapshot aria-label="Saved forecast"></select></label>
+    <label data-projection-snapshot-control>Saved forecast<select data-projection-snapshot aria-label="Saved forecast"></select></label>
     <label>Interval<select data-projection-coverage aria-label="Interval coverage"><option value="80">80%</option><option value="95">95%</option></select></label>
     <button type="button" class="button button-outline" data-projection-reload>Reload</button>
   </div>
@@ -16,6 +16,7 @@
     <div class="cfb-forecast-tabs" role="tablist" aria-label="Power ratings and forecasting views">
       <button type="button" role="tab" id="cfb-forecast-tab-power" aria-controls="cfb-forecast-panel-power" aria-selected="true" tabindex="0" data-projection-view="power">Power ratings</button>
       <button type="button" role="tab" id="cfb-forecast-tab-games" aria-controls="cfb-forecast-panel-games" aria-selected="false" tabindex="-1" data-projection-view="games">Game predictions</button>
+      <button type="button" role="tab" id="cfb-forecast-tab-lookback" aria-controls="cfb-forecast-panel-lookback" aria-selected="false" tabindex="-1" data-projection-view="lookback">Lookback</button>
       <button type="button" role="tab" id="cfb-forecast-tab-compare" aria-controls="cfb-forecast-panel-compare" aria-selected="false" tabindex="-1" data-projection-view="compare">Compare teams</button>
       <button type="button" role="tab" id="cfb-forecast-tab-method" aria-controls="cfb-forecast-panel-method" aria-selected="false" tabindex="-1" data-projection-view="method">Method &amp; accuracy</button>
     </div>
@@ -49,6 +50,40 @@
       <p class="small-note" data-projection-games-note aria-live="polite"></p>
       <div class="cfb-forecast-table" data-projection-games tabindex="0" role="region" aria-label="Upcoming game projections"></div>
     </section>
+    </div>
+    <div role="tabpanel" id="cfb-forecast-panel-lookback" aria-labelledby="cfb-forecast-tab-lookback" data-projection-panel="lookback" hidden>
+      <section class="cfb-forecast-card" data-cfb-lookback data-index="{{ '/assets/data/cfb/projections/lookback-index.json' | relative_url }}" aria-labelledby="cfb-lookback-title">
+        <h3 id="cfb-lookback-title">Past predictions, actual results</h3>
+        <p>Explore a season week by week, follow a team, or select a game to see what was predicted and what happened.</p>
+        <div class="cfb-forecast-controls">
+          <label>Season<select data-lookback-season></select></label>
+          <label>Prediction history<select data-lookback-source></select></label>
+          <label>Week<select data-lookback-week></select></label>
+          <label>Team<select data-lookback-team></select></label>
+        </div>
+        <p data-lookback-status role="status" aria-live="polite"></p>
+        <div data-lookback-body hidden>
+          <p data-lookback-context></p>
+          <dl class="cfb-forecast-metrics">
+            <div><dt>Within 3 points</dt><dd data-lookback-within-3></dd></div>
+            <div><dt>Within 7 points</dt><dd data-lookback-within-7></dd></div>
+            <div><dt>Within 10 points</dt><dd data-lookback-within-10></dd></div>
+            <div><dt>Within 14 points</dt><dd data-lookback-within-14></dd></div>
+            <div><dt>Winner correct</dt><dd data-lookback-winner></dd></div>
+          </dl>
+          <p class="small-note" data-lookback-summary-note aria-live="polite"></p>
+          <p class="small-note" data-lookback-count aria-live="polite"></p>
+          <div class="cfb-forecast-table" data-lookback-games tabindex="0" role="region" aria-label="Past predictions compared with final results"></div>
+          <section data-lookback-detail hidden aria-labelledby="cfb-lookback-game-title">
+            <h4 id="cfb-lookback-game-title" data-lookback-detail-title tabindex="-1"></h4>
+            <div class="cfb-forecast-controls"><label>Prediction saved for this game<select data-lookback-edition></select></label></div>
+            <p class="small-note" data-lookback-detail-note></p>
+            <div class="cfb-forecast-table" data-lookback-comparison tabindex="0" role="region" aria-label="Selected game prediction and result"></div>
+            <div class="cfb-forecast-table" data-lookback-points tabindex="0" role="region" aria-label="Predicted and actual team scores" hidden></div>
+            <div class="cfb-forecast-error-chart" data-lookback-range></div>
+          </section>
+        </div>
+      </section>
     </div>
     <div role="tabpanel" id="cfb-forecast-panel-compare" aria-labelledby="cfb-forecast-tab-compare" data-projection-panel="compare" hidden>
     <section class="cfb-forecast-card" data-projection-matchup aria-labelledby="cfb-forecast-matchup-title">

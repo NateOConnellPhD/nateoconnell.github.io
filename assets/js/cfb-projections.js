@@ -196,6 +196,8 @@
       viewButtons.forEach(b=>{const chosen=b.dataset.projectionView===name;
         b.setAttribute('aria-selected',String(chosen));b.tabIndex=chosen?0:-1;
         if(chosen&&focus)b.focus();});
+      for(const key of ['snapshot-control','snapshot-note','asof'])el(key).hidden=name==='lookback';
+      if(name==='lookback')doc.dispatchEvent(new Event('cfb:lookback-activate'));
     }
     viewButtons.forEach((b,i)=>{
       b.addEventListener('click',()=>selectView(b.dataset.projectionView));
@@ -532,7 +534,7 @@
       return initializing;
     }
     el('snapshot').addEventListener('change',()=>selectSnapshot(el('snapshot').value));
-    el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');cache.delete('backtest.json');qbStatus=null;initializing=null;initialize();});
+    el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');cache.delete('backtest.json');qbStatus=null;initializing=null;initialize();doc.dispatchEvent(new Event('cfb:lookback-reload'));});
     el('coverage').addEventListener('change',()=>{renderRatings();renderGames();renderMatchup();renderEvaluation();});
     for(const key of ['home','away','site','horizon'])el(key).addEventListener('change',renderMatchup);
     for(const side of ['home','away'])for(const suffix of ['','-first','-second','-weight'])

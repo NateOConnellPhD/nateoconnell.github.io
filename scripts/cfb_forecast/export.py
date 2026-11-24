@@ -144,11 +144,15 @@ def add_details(public, arrays, inputs, prior, home_ids, expectancy):
 def write(public, draws, destination):
     """Content-addressed snapshots; the index is replaced only after both files exist."""
     import hashlib
+    from datetime import datetime, timezone
     destination = Path(destination); destination.mkdir(parents=True, exist_ok=True)
     encode = lambda v: (json.dumps(v, allow_nan=False, separators=(',', ':')) + '\n').encode()
     dr = encode(draws); draw_id = hashlib.sha256(dr).hexdigest()[:16]
     draw_name = f'draws-{draw_id}.json'
-    public = {**public, 'draws_file': draw_name}
+    # A data observation timestamp is not a forecast creation timestamp. Record
+    # the actual save time, including for retrospective fits, for honest grading.
+    public = {**public, 'draws_file': draw_name,
+              'meta': {**public['meta'], 'saved_at': datetime.now(timezone.utc).isoformat()}}
     body = encode(public); ident = hashlib.sha256(body).hexdigest()[:16]
     name = f'forecast-{ident}.json'
     (destination / draw_name).write_bytes(dr); (destination / name).write_bytes(body)

@@ -56,8 +56,9 @@ async function controller(hash='',overrides={}) {
   get('limit').value='all';const root=new Element(),main=new Element();root.dataset.index='/assets/data/cfb/projections/index.json';
   root.querySelector=s=>get(s.match(/data-projection-([^\]]+)/)[1]);
   const buttons=['merit','projections'].map(name=>{const b=new Element('button');b.dataset.cfbProductTab=name;return b;});
-  const viewButtons=['power','games','compare','method'].map(name=>{const b=new Element('button');b.dataset.projectionView=name;return b;});
-  const viewPanels=['power','games','compare','method'].map(name=>{const p=new Element();p.dataset.projectionPanel=name;return p;});
+  const views=[...template.matchAll(/data-projection-view="([^"]+)"/g)].map(m=>m[1]);
+  const viewButtons=views.map(name=>{const b=new Element('button');b.dataset.projectionView=name;return b;});
+  const viewPanels=views.map(name=>{const p=new Element();p.dataset.projectionPanel=name;return p;});
   const requests=[],events=[];
   const doc={querySelector:s=>s.includes('product-panel')?main:root,querySelectorAll:s=>s.includes('product-tab')?buttons:s.includes('projection-view')?viewButtons:s.includes('projection-panel')?viewPanels:[],
     createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),createTextNode:text=>({textContent:text}),dispatchEvent:e=>events.push(e.type)};
@@ -80,16 +81,21 @@ async function controller(hash='',overrides={}) {
   assert.ok(p.get('games').children[0].children[0].children[0].children.every(h=>!(/market|line|opener/i.test(h.textContent))));
   assert.ok(p.get('strength-chart').children.length>0);assert.ok(p.get('margin-chart').children.length>0);
   assert.equal(p.get('powers').children[0].children[1].children.length,data.ratings.length);
-  assert.deepEqual(p.viewPanels.map(x=>x.hidden),[false,true,true,true]);
-  p.viewButtons[1].handlers.click();assert.deepEqual(p.viewPanels.map(x=>x.hidden),[true,false,true,true]);
+  const visible=()=>p.viewPanels.filter(x=>!x.hidden).map(x=>x.dataset.projectionPanel);
+  assert.deepEqual(visible(),['power']);
+  p.viewButtons[1].handlers.click();assert.deepEqual(visible(),['games']);
   p.get('games').children[0].children[1].children[0].children[1].children[0].handlers.click();
-  assert.deepEqual(p.viewPanels.map(x=>x.hidden),[true,true,false,true]);
+  assert.deepEqual(visible(),['compare']);
   p.viewButtons[0].handlers.click();
   p.get('powers').children[0].children[1].children[0].children[1].children[0].handlers.click();
   assert.equal(p.get('home').value,data.ratings[0].id);assert.equal(p.get('site').value,'neutral');
-  assert.deepEqual(p.viewPanels.map(x=>x.hidden),[true,true,false,true]);
+  assert.deepEqual(visible(),['compare']);
+  p.viewButtons.find(b=>b.dataset.projectionView==='lookback').handlers.click();
+  assert.deepEqual(visible(),['lookback']);assert.ok(p.events.includes('cfb:lookback-activate'));
+  assert.equal(p.get('snapshot-control').hidden,true);assert.equal(p.get('asof').hidden,true);
   p.viewButtons[2].handlers.keydown({key:'Home',preventDefault(){}});
   assert.equal(p.viewButtons[0].attrs['aria-selected'],'true');
+  assert.equal(p.get('snapshot-control').hidden,false);assert.equal(p.get('asof').hidden,false);
   const before=p.requests.length;p.get('swap').handlers.click();p.get('site').value='neutral';p.get('site').handlers.change();
   p.buttons[0].handlers.click();p.buttons[1].handlers.click();await p.settle();assert.equal(p.requests.length,before,'Changing teams/tabs must reuse static data');
   p.get('away').value=p.get('home').value;p.get('away').handlers.change();assert.match(p.get('matchup-error').textContent,/different/);
