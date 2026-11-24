@@ -10,7 +10,7 @@ import gzip
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'cfb'))
-from cfb_forecast import qb, qb_data, export, model
+from cfb_forecast import qb, qb_data, qb_availability, export, model
 from cfb_forecast.qb_extract import dropbacks
 import numpy as np
 import pandas as pd
@@ -18,6 +18,30 @@ from scipy.stats import t
 
 
 class QBTests(unittest.TestCase):
+    def test_live_availability_changes_projection_not_training(self):
+        q=qb.term_class().__new__(qb.term_class());q.week=13;q.season=2026
+        q.S=pd.DataFrame([{'game_id':1,'week':11,'pos_team':'UCLA','passer_id':5092275,'n':30,'first_play':1},
+            {'game_id':2,'week':12,'pos_team':'UCLA','passer_id':5092275,'n':30,'first_play':1},
+            {'game_id':2,'week':12,'pos_team':'UCLA','passer_id':5142594,'n':9,'first_play':50},
+            {'game_id':2,'week':12,'pos_team':'UCLA','passer_id':4899366,'n':1,'first_play':60}])
+        q.names=pd.Series({5092275:'Ty Dieffenbach',5142594:'5142594',4899366:'Semaj Morgan'})
+        q.value=lambda p,before_week=None:{5092275:.2,5142594:-.1,4899366:-.2}.get(p,0.)
+        frame=pd.DataFrame([{'game_id':2,'week':12,'home_team':'UCLA','away_team':'USC'}])
+        training=q.x_training(frame).copy()
+        roster={str(p):{'id':str(p),'name':n} for p,n in [(5092275,'Ty Dieffenbach'),(5142594,'Madden Iamaleava')]}
+        state={'season':2026,'checked_at':'2026-11-24T12:00:00Z','injuries_observed_at':'2026-11-24T12:00:00Z',
+            'teams':{'26':{'players':roster}},'injuries':{'26':{'5092275':{'status':'out'}}},'errors':[]}
+        x,pid=q.x_for('UCLA')
+        teams={'26':{'starter':str(pid),'name':'Ty Dieffenbach','x':x,'options':[
+            {'id':str(p),'name':str(q.names.get(p,p)),'x':q.x_for('UCLA',p)[0]} for p in q.names.index]}}
+        with patch.object(qb_availability,'read',return_value=state):
+            qb_availability.apply(q,teams,{'26':'UCLA'},2026)
+        self.assertEqual(teams['26']['starter'],'5142594')
+        self.assertEqual(teams['26']['name'],'Madden Iamaleava')
+        self.assertLess(teams['26']['x'],x)
+        self.assertFalse(next(p for p in teams['26']['options'] if p['id']=='4899366')['is_qb'])
+        np.testing.assert_array_equal(q.x_training(frame),training)
+
     def test_extraction_identity_sacks_and_garbage_time(self):
         base={'pass':1.,'EPA':1.,'completion_player_id':None,'incompletion_player_id':None,
             'interception_thrown_player_id':None,'sack_taken_player_id':None,'pos_team':'A','def_pos_team':'B',
@@ -97,7 +121,8 @@ class QBTests(unittest.TestCase):
             before=qb_data.identity(2026,directory)
             (directory/'refresh.json').write_text('{"checked_at":"later"}')
             self.assertEqual(before,qb_data.identity(2026,directory))
-            (directory/'status').mkdir();(directory/'status/2026.csv').write_text('team,passer_id,note\nA,42,Starter\n')
+            (directory/'availability.json').write_text(json.dumps({'season':2026,
+                'injuries':{'1':{'42':{'status':'out'}}},'teams':{}}))
             after=qb_data.identity(2026,directory)
             self.assertEqual(before['data'],after['data']);self.assertNotEqual(before['status'],after['status'])
             self.assertEqual(before,qb_data.identity(2026,directory,historical=True))

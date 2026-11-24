@@ -68,6 +68,11 @@ jobs:
           python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --no-cache-dir -r scripts/cfb_forecast/qb-requirements.txt
       - name: Refresh quarterback play-by-play daily (conditional downloads)
         run: python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/qb_data.py --season "$CFB_FORECAST_SEASON"
+      - name: Refresh public QB injuries and rosters daily
+        if: inputs.week == '' || github.event_name != 'workflow_dispatch'
+        run: python3 -B scripts/cfb_forecast/qb_availability.py --season "$CFB_FORECAST_SEASON"
+      - name: Check starter resolution without network calls
+        run: python3 -B scripts/cfb_forecast/test_qb_availability.py
       - name: Check saved inputs before installing or sampling
         id: prepare
         run: |
@@ -110,6 +115,7 @@ jobs:
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_qb.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_scores.py
           node scripts/cfb_forecast/check_projections.cjs
+          node scripts/cfb_forecast/check_qb_scenarios.cjs
       - name: Build changed or new-season prior with the supplied estimators
         if: steps.prepare.outputs.needs_update == 'true' && steps.refresh.outputs.needs_prior == 'true'
         run: python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/publish.py build-prior --season "$CFB_FORECAST_SEASON"

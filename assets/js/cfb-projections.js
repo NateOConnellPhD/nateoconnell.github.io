@@ -279,9 +279,11 @@
         selector.value='';
         for(const suffix of ['first','second'])el(side+'-qb-'+suffix).replaceChildren(...options.map(p=>node('option',p.name,{value:p.id})));
         el(side+'-qb-first').value=q?.starter||options[0]?.id||'';
-        el(side+'-qb-second').value=options.find(p=>p.id!==q?.starter&&p.status!=='out')?.id||options.find(p=>p.id!==q?.starter)?.id||'';
+        const first=el(side+'-qb-first').value,out=new Set(['out','out for season','injured reserve','suspended']);
+        el(side+'-qb-second').value=options.find(p=>p.id!==first&&!out.has(p.status))?.id||options.find(p=>p.id!==first)?.id||'';
         el(side+'-qb-weight').value='50';
         el(side+'-qb-source').textContent=q?`${q.source}. ${q.note||''}${q.checked_at?' Checked '+date(q.checked_at)+'.':''}`:'No QB information in this saved forecast.';
+        for(const url of q?.sources||[])if(url.startsWith('https://site.api.espn.com/'))el(side+'-qb-source').append(' ',node('a',url.includes('/injuries')?'Injury source':'Roster source',{href:url,target:'_blank',rel:'noopener'}));
       }
     }
     function qbChoice(side) {
@@ -332,7 +334,7 @@
       const columns=hasScores?[`Home points · mean (${level}% range)`,`Away points · mean (${level}% range)`]:[];
       table(el('games'),['Date','Matchup',...columns,'Predicted margin','Home win','Away win'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
-        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
+        b.addEventListener('click',()=>{qbControlKey='';el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
         const score=s=>`${fmt(s.mean)} (${scoreRange(s,level)})`;
         const prediction=hasScores?[score(g.scores.home),score(g.scores.away)]:[];
         return [date(g.date),b,...prediction,predictedMargin(g.home_margin,g.home,g.away),pct(g.p_home),pct(1-g.p_home)];
@@ -358,6 +360,7 @@
       const qm=data.meta.quarterbacks;
       el('qb-status').textContent=qm?`QB play-by-play observed ${qm.observed_at?date(qm.observed_at):'before this season'}. ${qm.starter_rule} ${qm.missing_training_game_ids.length} training games lack usable passer data.${qm.warnings?.length?' A source refresh failed; the last usable data are shown.':''}`:'This saved forecast does not include the QB model.';
       if(qbStatus?.season===data.meta.season)el('qb-status').textContent+=` Last daily source check: ${date(qbStatus.checked_at)}.${qbStatus.warnings?.length?' Source refresh needs attention; saved estimates have been retained.':''}`;
+      if(qbStatus?.season===data.meta.season&&qbStatus.availability_checked_at)el('qb-status').textContent+=` Injury/roster check: ${date(qbStatus.availability_checked_at)}.${qbStatus.availability_warnings?.length?' Availability refresh needs attention; previous observations were retained.':''}`;
     }
     function trajectory(target,path,label) {
       const w=640,h=240,l=48,r=620,top=20,b=205;
@@ -385,7 +388,7 @@
             const rows=[['Expected quarterback',quarterback.name||`Passer ${quarterback.starter}`],['Contribution to power',sign(adjustment)]];
             if(rating)rows.push(['Power with usual passer mix',sign(rating.mean)],['Power with expected starter',sign(rating.rating_qb_now)]);
             table(wrap,['Detail','Estimate'],rows);section.append(wrap);
-          } else section.append(node('p','No eligible current-season dropbacks are saved for this team, so there is no starter-specific adjustment in this forecast.'));
+          } else section.append(node('p','This forecast uses the usual passer mix because no current starter could be inferred.'));
           section.append(node('p',`${quarterback.source}${quarterback.note?': '+quarterback.note:''}. This contribution is included automatically in matchup forecasts.`,{class:'small-note'}));
         }
         if(!info){section.append(node('p','Detailed inputs were not saved for this team.'));return section;}

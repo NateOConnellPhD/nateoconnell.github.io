@@ -120,6 +120,7 @@ class ForecastTests(unittest.TestCase):
                    'sigma': np.full(shape, 12.), 'nu': np.full(shape, 7.), 's_prev': np.full(shape, 6.), 'lam': np.ones(shape)}
         quarterbacks = {'training': [0., 0., 0.], 'training_key': 'fixture-qb', 'meta': {}, 'importance': [],
                         'teams': {str(i): {'x': 0., 'name': 'Fixture QB', 'starter': 'fixture', 'options': []} for i in (1, 2, 3)}}
+        qb_identity = {'status':'incumbent'}
         score_rows = [{'season': 2026, 'id': g['id'], 'home': str(g['home_id']), 'away': str(g['away_id']),
                        'hp': g['home_points'], 'ap': g['away_points']} for g in inputs['games']]
         score_fit = {'version': publish.scores.VERSION, 'teams': ['1', '2', '3'],
@@ -129,7 +130,7 @@ class ForecastTests(unittest.TestCase):
             with patch.object(publish, 'TASK', Path(tmp) / 'task'), patch.object(publish, 'PUBLIC', Path(tmp) / 'public'), \
                  patch.object(source, 'load', side_effect=load), \
                  patch.object(publish.qb, 'load', return_value=quarterbacks), \
-                 patch.object(publish.qb_data, 'identity', return_value={}), \
+                 patch.object(publish.qb_data, 'identity', return_value=qb_identity), \
                  patch.object(publish.scores, 'load_rows', return_value=score_rows), \
                  patch.object(publish.scores, 'fit', return_value=score_fit) as score_fitter, \
                  patch('cfb_forecast.home.load_or_estimate', return_value=home), \
@@ -137,6 +138,15 @@ class ForecastTests(unittest.TestCase):
                  patch.object(forecast, 'diagnose', return_value=(samples, {'sampling_checks_passed': True}, {})):
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)
+                qb_identity['status']='reported out'
+                quarterbacks['teams']['1'].update(x=-4.,starter='replacement',name='Inferred replacement')
+                publish.complete(2026)
+                self.assertEqual(fitter.call_count,1,'Availability-only change must reuse the margin posterior')
+                saved=json.loads((publish.PUBLIC/'index.json').read_text())
+                latest=next(r for r in saved['snapshots'] if r['id']==saved['latest'])
+                snapshot=json.loads((publish.PUBLIC/latest['file']).read_text())
+                self.assertEqual(snapshot['quarterbacks']['1']['starter'],'replacement')
+                self.assertEqual(snapshot['games'][0]['qb_x_home'],-4.)
                 state['observed'] = '2026-09-03T00:00:00Z'
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)
                 future[0]['neutral'] = True

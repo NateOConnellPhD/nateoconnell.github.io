@@ -1,10 +1,9 @@
 """Saved-data adapter for the unchanged supplied QBTerm and Gaussian QB model."""
-import csv
 import importlib
 from pathlib import Path
 import sys
 
-from . import qb_data
+from . import qb_data, qb_availability
 from .refresh import read, write
 from sync_data import digest
 
@@ -94,29 +93,22 @@ def load(inputs, games, observed, *, directory=qb_data.DIRECTORY, cache=None, hi
         columns=['game_id','week','home_team','away_team'])
     x=q.x_training(train,'start')
     if not np.isfinite(x).all(): raise ValueError('Invalid training QB covariate')
-    override={}; status_file=Path(directory)/'status'/f'{season}.csv'
-    if status_file.exists() and not historical:
-        with status_file.open() as stream:
-            for row in csv.DictReader(stream):
-                if not row.get('passer_id'): continue
-                t=row['team']; pid=int(row['passer_id'])
-                if t not in team_names.values() or t in override or pid<=0: raise ValueError('Invalid or duplicate QB status team')
-                override[t]={'id':pid,'note':row.get('note','')}
     teams={}
     for key,t in team_names.items():
-        st=q._team_state(t,week); ov=override.get(t)
-        now,pid=q.x_for(t,ov['id'] if ov else None)
+        st=q._team_state(t,week)
+        now,pid=q.x_for(t)
         options=[]
         mix=q.S[q.S.pos_team==t].groupby('passer_id').n.sum()
-        pids=set(map(int,mix.index)) | ({ov['id']} if ov else set())
+        pids=set(map(int,mix.index))
         for p in sorted(pids):
             value,_=q.x_for(t,p)
             options.append({'id':str(p),'name':str(q.names.get(p,p)), 'dropbacks':int(mix.get(p,0)),
                 'value':float(q.value(p)), 'x':float(value)})
         teams[key]={'starter':str(pid) if pid is not None else None,'name':str(q.names.get(pid,pid)) if pid is not None else None,
-            'x':float(now),'source':'status override' if ov else 'last game’s first passer' if st else 'no current-season dropbacks',
-            'note':ov['note'] if ov else '', 'options':options,
+            'x':float(now),'source':'last game’s first passer' if st else 'no current-season dropbacks',
+            'note':'', 'options':options,
             'dropbacks_per_game':float(st['nbar']) if st else None,'reference_value':float(st['v_ref']) if st else None}
+    availability = {} if historical else qb_availability.apply(q,teams,team_names,season,directory)
     available=set(q.S.game_id)
     missing=sorted(set(train.game_id)-available)
     if len(train) and len(missing)==len(train): raise ValueError('QB feed has no games matching the power fit')
@@ -128,6 +120,8 @@ def load(inputs, games, observed, *, directory=qb_data.DIRECTORY, cache=None, hi
     return {'training':x.tolist(), 'training_key':digest({'x':x.tolist(),'hp':hp_key}), 'teams':teams,
         'importance':importance,
         'meta':{'observed_at':observations.get(str(season)), 'checked_at':state.get('checked_at'),
-            'warnings':state.get('errors',[]), 'missing_training_game_ids':missing,
+            'warnings':state.get('errors',[])+availability.get('warnings',[]), 'missing_training_game_ids':missing,
             'hyperparameter_training_through':season-1,'hyperparameters':hp,
-            'starter_rule':'Last game’s first passer unless explicitly overridden; no injury feed.'}}
+            'starter_rule':availability.get('starter_rule','Historical first passer; current injury reports are excluded.'),
+            'availability_checked_at':availability.get('availability_checked_at'),
+            'availability_observed_at':availability.get('availability_observed_at')}}

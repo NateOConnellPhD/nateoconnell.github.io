@@ -23,17 +23,26 @@ adjustment, as in the handoff. Missing play-by-play is reported, not imputed
 from another efficiency measure. QB values are conditional posterior means;
 the power draws propagate uncertainty in `lam`, not in those QB means.
 
-To update an expected starter, maintain
-`_cfb_data/forecast_inputs/qb/status/<season>.csv` with columns:
+The daily availability collector reads ESPN's league injury feed and team QB
+rosters, matching ESPN athlete IDs (including IDs recovered from injury-card
+links). The default keeps the incumbent unless reported out, out for the season,
+on injured reserve, or suspended. Questionable/doubtful/day-to-day retains him.
+An absent injury entry means “not listed,” not “confirmed healthy.”
 
-```csv
-team,passer_id,note
-```
+When the incumbent is out, choose a roster-listed QB who is not reported out,
+ordered by most recent game appearance, then dropbacks in that game. This is
+explicitly an **inferred replacement**, not a confirmed depth chart. Receivers'
+trick passes do not qualify. With no supported replacement, report that limitation
+and use the usual passer mix rather than continuing to project a known-out QB.
+Current observations never enter historical reconstructions or training covariates.
+No team-specific manual CSV override is used.
 
-Use the exact saved team name and ESPN passer ID. Removing a row restores the
-incumbent assumption. Overrides are excluded from historical reconstructions.
-The public comparison tool automatically uses the saved expected starter; it
-has no QB selector. This release does not invent an injury feed or scrape injury news.
+Inside expandable matchup details, readers can choose QB-specific scenarios.
+Uncertain availability enables a two-QB blend with explicit reader-selected
+weights (initially 50/50, labeled as an assumption, not a probability estimate).
+Mixtures combine predictions and outcome distributions; they do not just average
+interval endpoints or QB covariates. Two teams' scenario weights are independent.
+Published game tables always retain the default forecast.
 
 ## Daily collection and caching
 
@@ -55,6 +64,17 @@ and reduces one season at a time.
 Historical years are also checked for corrections; unchanged bodies are not
 downloaded. No CFBD request is made by the QB collector and no reader visit
 makes a data request beyond static site files.
+
+`qb_availability.py` also checks the public ESPN [injury endpoint](https://site.api.espn.com/apis/site/v2/sports/football/college-football/injuries)
+and one roster per saved Division I team daily. The [provider's wrapper documentation](https://py.sportsdataverse.org/docs/cfb/reference/site/team)
+documents the roster endpoint. No additional API key, paid service, or AI call is
+used. Only reduced QB identities/statuses are saved to `availability.json`;
+raw responses are held one at a time in memory and capped at 4 MiB. Calls are
+sequential, with same-day cache reuse and a five-minute roster-refresh limit.
+Three consecutive roster failures defer remaining requests. Failed sources
+retain previous observations and publish a warning with their observation date.
+An empty league response cannot clear previously known injuries. This free feed
+may lag announcements and does not supply confirmed depth-chart order.
 
 The reducer preserves the passer-ID repair, sacks, EPA values, garbage-time
 thresholds, first-play selection and grouping. It does not replace cfbfastR
@@ -79,8 +99,8 @@ the handoff's rating and rank-uncertainty definitions. The main table shows
 ratings and uncertainty. Clicking a team opens its details, including the
 expected QB, adjustment and current-starter power. Matchup forecasts automatically
 include each expected starter's contribution in the aligned posterior draws,
-probabilities, margins, intervals and plots. QB controls and repeated starter
-status messages are absent from the matchup form. The component breakdown is
+probabilities, margins, intervals and plots. QB controls and status explanations
+are confined to expandable matchup details. The component breakdown is
 expandable inside team details. Importance compares the
 incumbent with the supplied recent-backup rule; it is not a medical assessment.
 Snapshots that predate QB integration are identified once at the snapshot level;
@@ -91,6 +111,9 @@ refresh diagnostics appear under Method & accuracy → Fit details.
 
 `test_qb.py` checks extraction, starter versus in-game mix, likelihood,
 joint-draw export and cache/status boundaries without sampling or network.
+`test_qb_availability.py` checks parsing, daily reuse, outages and replacement
+resolution with in-memory source responses. `check_qb_scenarios.cjs` checks
+weighted margins, probabilities, scores, and distribution ranges without a DOM.
 `check_qb_handoff.py` replays the supplied ratings and next-week forecasts;
 `--values` also reconstructs the QB-value adapter from the packet's parquet.
 `check_sampling.py --week 12 --qb-covariates <packet>/data/qb/x_2026.csv`
@@ -111,4 +134,6 @@ current-window end-to-end fitting require execution in an environment that
 can read those inputs. No raw handoff data or private packet is committed.
 Checking daily cannot make an upstream release arrive sooner. Missing game IDs
 and retained-data warnings are shown so a fresh check cannot masquerade as
-complete new play-by-play. No automatic injury-status source is included.
+complete new play-by-play. Local injury-feed checks use fixtures: the network
+proxy also blocks direct ESPN requests here, so a successful live refresh must
+be verified in GitHub Actions after deployment.

@@ -169,10 +169,10 @@ def identity(season, directory=DIRECTORY, historical=False, *, require_current=F
         reason = state.get('seasons', {}).get(str(season), {}).get('error')
         raise ValueError(f'Missing QB dropbacks for {season}: '
                          f'{reason or "run the daily QB refresh before publishing"}')
-    status = Path(directory)/'status'/f'{season}.csv'
+    from . import qb_availability
     return {'data':{y:v['input_key'] if v else None for y,v in files.items()},
         'names':digest({y:v.get('names',{}) if v else {} for y,v in files.items()}),
-        'status':digest(status.read_text()) if status.exists() and not historical else None}
+        'status':qb_availability.identity(season,directory) if not historical else None}
 
 
 if __name__ == '__main__':

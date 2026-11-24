@@ -127,6 +127,8 @@
 .cfb-forecast-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin: 1rem 0; }
 .cfb-forecast-controls label { display: flex; flex: 1 1 170px; flex-direction: column; gap: .35rem; font-size: .9rem; font-weight: 600; }
 .cfb-forecast-controls select, .cfb-forecast-controls input { min-width: 0; max-width: 100%; width: 100%; min-height: 44px; padding: .65rem; border: 1px solid #b7cddd; border-radius: 5px; background: #fff; color: inherit; font: inherit; }
+[data-projection-qb-scenarios] label { display: flex; flex-direction: column; gap: .35rem; margin: .8rem 0; font-size: .9rem; font-weight: 600; }
+[data-projection-qb-scenarios] select, [data-projection-qb-scenarios] input { width: 100%; min-width: 0; min-height: 44px; padding: .65rem; border: 1px solid #b7cddd; border-radius: 5px; background: #fff; color: inherit; font: inherit; }
 .cfb-forecast-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,12rem),1fr)); gap: .8rem; margin: 1.5rem 0; }
 .cfb-forecast-metrics div { border-top: 3px solid #245a82; padding: .8rem; background: #e7f1f8; }
 .cfb-forecast-metrics dt { font-size: .85rem; }

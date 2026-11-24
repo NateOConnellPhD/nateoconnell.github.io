@@ -94,7 +94,8 @@ async function controller(hash='',overrides={}) {
   p.buttons[0].handlers.click();p.buttons[1].handlers.click();await p.settle();assert.equal(p.requests.length,before,'Changing teams/tabs must reuse static data');
   p.get('away').value=p.get('home').value;p.get('away').handlers.change();assert.match(p.get('matchup-error').textContent,/different/);
   const direct=await controller('#projections');assert.equal(direct.main.hidden,true);assert.ok(direct.requests.length>0);
-  assert.equal(direct.get('home-qb'),null);assert.equal(direct.get('away-qb'),null);
+  assert.equal(direct.get('home-qb').value,'');assert.equal(direct.get('away-qb').value,'');
+  assert.equal(direct.get('qb-scenarios').hidden,!data.quarterbacks);
   assert.equal(direct.get('status').textContent,'');assert.equal(direct.get('content').hidden,false);
   assert.equal(direct.get('matchup-error').textContent,'');assert.equal(direct.get('matchup-result').hidden,false);
   for(const snapshot of index.snapshots) {
