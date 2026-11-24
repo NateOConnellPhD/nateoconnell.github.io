@@ -145,7 +145,8 @@ async function controller(hash='',overrides={}) {
   delete dynamic.teams;delete dynamic.means;api.validateDraws(dynamic);
   const game={...data.games[0],ahead:4}, result=api.matchup(dynamic,game.home,game.away,game.neutral,4);
   Object.assign(game,{home_margin:result.margin,home_line:result.homeLine,p_home:result.pHome,margin_lo80:result.range80[0],margin_hi80:result.range80[1]});
-  const part=result.parts;assert.ok(Math.abs(part.home-part.away+part.qbHome-part.qbAway+part.national+part.stadium-result.margin)<1e-9);
+  const part=result.parts,partsTotal=part.home-part.away+part.qbHome-part.qbAway+part.national+part.stadium;
+  assert.ok(Math.abs(partsTotal-result.margin)<1e-9,`Sampled-draw components (${partsTotal}) must sum to the sampled margin (${result.margin})`);
   const fixture={...data,games:[game],draws_file:'draws-fixture.json',meta:{...data.meta,model:'forecast-v7'},
     team_details:Object.fromEntries([game.home,game.away].map(id=>[id,{path:[{week:1,mean:5,sd:2},{week:2,mean:6,sd:1.5}],games:[]}]))};
   dynamic.scores={version:'conditional-scores-1',intercept:dynamic.sigma.map(()=>20),slope:dynamic.sigma.map(()=>-3),
@@ -182,7 +183,8 @@ async function controller(hash='',overrides={}) {
   const backup=api.matchup(qbDraws,game.home,game.away,true,1,{home:'backup'});
   assert.ok(starter.margin>base.margin&&backup.margin<base.margin);
   assert.ok(starter.pHome>base.pHome&&backup.pHome<base.pHome);
-  assert.ok(Math.abs(backup.parts.qbHome+4)<1e-12);
+  const sampledLambda=qbDraws.lam.reduce((a,b)=>a+b,0)/qbDraws.lam.length;
+  assert.ok(Math.abs(backup.parts.qbHome+4*sampledLambda)<1e-12,'Sampled-draw QB component must use the sampled coefficient mean');
   const reverseQB=api.matchup(qbDraws,game.away,game.home,true,1);
   assert.ok(Math.abs(starter.pHome+reverseQB.pHome-1)<1e-12);
   assert.throws(()=>api.matchup(qbDraws,game.home,game.away,true,1,{home:'unknown'}),/Unknown quarterback/);

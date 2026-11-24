@@ -5,6 +5,18 @@ const n=1000,fill=x=>Array(n).fill(x);
 const d={schema:'cfb-projections-v1',teams:{h:fill(0),a:fill(0)},home:{national:fill(0)},sigma:fill(1),nu:fill(8),
   noise:[fill(-1),fill(1)],lam:fill(1),quarterbacks:{h:{x:20,options:{one:20,two:-20}},a:{x:0,options:{one:0,two:2}}}};
 api.validateDraws(d);
+// A full-draw QB summary alone cannot replace the coefficient mean in a
+// matchup whose power/margin are computed entirely from the saved sample.
+const summaryOnly={...d,lambda_mean:2};
+const sampled=api.matchup(summaryOnly,'h','a',true);
+assert.equal(sampled.margin,20);assert.equal(sampled.parts.qbHome,20);
+const withMeans={...summaryOnly,means:{teams:{h:0,a:0},home:{national:0}}};
+const full=api.matchup(withMeans,'h','a',true);
+assert.equal(full.margin,40);assert.equal(full.parts.qbHome,40);
+for(const r of [sampled,full]) {
+  const p=r.parts,total=p.home-p.away+p.qbHome-p.qbAway+p.national+p.stadium;
+  assert.ok(Math.abs(total-r.margin)<1e-12,`QB components ${total} must sum to margin ${r.margin}`);
+}
 const first=api.matchup(d,'h','a',true),second=api.matchup(d,'h','a',true,1,{home:'two'});
 const blend=weight=>api.matchup(d,'h','a',true,1,{home:{first:'one',second:'two',weight}});
 assert.equal(blend(.25).margin,.25*first.margin+.75*second.margin);

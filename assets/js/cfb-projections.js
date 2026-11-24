@@ -110,7 +110,9 @@
     const pred=[...paired].sort((a,b)=>a-b);
     const p=mean(loc.map((v,i)=>tcdf(v/d.sigma[i],d.nu[i])));
     const fullPower=(id,values)=>d.means?.last?d.means.last[id]+Math.sqrt(ahead)*d.means.drift[id]:(d.means?.teams?.[id]??mean(values));
-    const lm=d.lambda_mean??mean(lam);
+    // The breakdown must use the same draw population as the margin. Without
+    // saved full-draw power means, the margin below is computed from these draws.
+    const lm=d.means?(d.lambda_mean??mean(lam)):mean(lam);
     const sorted=[...loc].sort((a,b)=>a-b),margin=d.means?fullPower(home,baseH)-fullPower(away,baseA)+lm*(hx-ax)
       +(neutral?0:d.means.home.national+(d.means.home[home]||0)):mean(loc);
     const result={margin,homeLine:-margin,pHome:p,pAway:1-p,pBetter:mean(strength.map(v=>v>0?1:v===0?.5:0)),
