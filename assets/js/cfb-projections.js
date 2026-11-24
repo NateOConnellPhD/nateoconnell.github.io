@@ -257,12 +257,14 @@
       if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value;
       const rows=data.ratings.filter(r=>(!conf||r.conference===conf)&&(!q||r.name.toLowerCase().includes(q)));
       const shown=el('limit').value==='all'?rows:rows.slice(0,25);
-      table(el('powers'),['Rank','Team','Record','Mean (usual mix)','Expected QB','QB adjustment','Current-starter power','Median','95% interval','80% rank range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
-        const name=node('button',r.name,{type:'button',class:'cfb-forecast-game'});
+      table(el('powers'),['Rank','Team','Record','Mean power','Median','95% interval','80% rank range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
+        const name=node('button',r.name,{type:'button',class:'cfb-forecast-game','aria-label':`View details for ${r.name}`});
         name.addEventListener('click',()=>{el('home').value=r.id;
           if(el('away').value===r.id)el('away').value=data.ratings.find(t=>t.id!==r.id).id;
-          el('site').value='neutral';el('horizon').value='1';selectView('compare',true);renderMatchup();});
-        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),r.qb_now||'Unavailable',sign(r.qb_adjustment),sign(r.rating_qb_now),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
+          el('home-qb').value='';el('away-qb').value='';
+          el('site').value='neutral';el('horizon').value='1';selectView('compare',true);renderMatchup();
+          if(draws&&!el('details-card').hidden){el('details-card').scrollIntoView({behavior:'smooth',block:'start'});el('detail-title').focus({preventScroll:true});}});
+        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
       }));
       el('power-count').textContent=`Showing ${shown.length} of ${rows.length} matching FBS teams. Order is by posterior mean power; probabilities describe strength, not playoff qualification.`;
       const qm=data.meta.quarterbacks;
@@ -282,10 +284,22 @@
       target.append(plot,node('p','Week of season · line: posterior mean; band: ±1 posterior SD. All weeks use this snapshot’s evidence.',{class:'small-note'}));
     }
     function renderDetails(home,away) {
-      const values=data.team_details;el('details-card').hidden=!values;
-      if(!values)return;
+      const values=data.team_details||{};el('details-card').hidden=!data.team_details&&!data.quarterbacks;
+      if(el('details-card').hidden)return;
       const labels={prev:'Last season’s strength',talent_z:'Roster talent (z-score)',ap:'Preseason AP points (log scale)',p4:'Conference-era indicator',rpc:'Returning offense share − 0.5',prev_rp:'Strength × returning production',rec_z:'Recruiting class (z-score)',newcoach:'New head coach',prev_coach:'Strength × coaching change',portal_z:'Transfer-portal points (z-score)',g5_prev:'Additional G5 carryover'};
       const cards=[home,away].map(id=>{const info=values[id],section=node('section');section.append(node('h4',team(id)));
+        const quarterback=data.quarterbacks?.[id],rating=data.ratings.find(r=>r.id===id);
+        if(quarterback) {
+          section.append(node('h5','Quarterback contribution'));
+          if(quarterback.starter) {
+            const wrap=node('div',null,{class:'cfb-forecast-table',tabindex:'0'});
+            const adjustment=rating?.qb_adjustment??data.meta.qb_lambda*quarterback.x;
+            const rows=[['Expected quarterback',quarterback.name||`Passer ${quarterback.starter}`],['Contribution to power',sign(adjustment)]];
+            if(rating)rows.push(['Power with usual passer mix',sign(rating.mean)],['Power with expected starter',sign(rating.rating_qb_now)]);
+            table(wrap,['Detail','Estimate'],rows);section.append(wrap);
+          } else section.append(node('p','No eligible current-season dropbacks are saved for this team, so there is no starter-specific adjustment in this forecast.'));
+          section.append(node('p',`${quarterback.source}${quarterback.note?': '+quarterback.note:''}. Changing the quarterback above explores a scenario; these details show the saved forecast.`,{class:'small-note'}));
+        }
         if(!info){section.append(node('p','Detailed inputs were not saved for this team.'));return section;}
         if(info.path?.length)trajectory(section,info.path,`${team(id)}’s estimated weekly strength`);
         const prior=node('details'),title=node('summary','Preseason inputs & contributions');prior.append(title);
@@ -323,7 +337,7 @@
         el('horizon').replaceChildren(...horizons.map(w=>node('option',w===1?'Next week':`${w} weeks ahead`,{value:String(w)})));
         el('horizon').value='1';
         el('asof').textContent=`${m.season} season · fit includes results through ${date(m.through_date)} (week ${m.week}) · ${m.games_used.toLocaleString()} games · ${m.draws.toLocaleString()} posterior draws.`;
-        el('snapshot-note').textContent=(m.model?'':index.snapshots.some(r=>r.model)?'Archived forecast from an earlier model. ':'Archived earlier-model forecast. The updated forecasting model will appear after its first passing fit. ')+`Schedule observed ${date(m.observed_at)}. This is a saved forecast, not a live score feed. Games and estimates do not change while you browse.`;
+        el('snapshot-note').textContent=(m.model?'':index.snapshots.some(r=>r.model)?'Archived forecast from an earlier model. ':'Archived earlier-model forecast. The updated forecasting model will appear after its first passing fit. ')+(!data.quarterbacks?'This saved forecast predates quarterback adjustments. ':'')+`Schedule observed ${date(m.observed_at)}. This is a saved forecast, not a live score feed. Games and estimates do not change while you browse.`;
         el('prior-caveat').textContent=m.prior_caveat||'';
         const teams=[...data.teams].sort((a,b)=>a.division.localeCompare(b.division)||a.name.localeCompare(b.name));
         for(const key of ['home','away'])el(key).replaceChildren(...teams.map(t=>node('option',t.name+(t.division==='fcs'?' (FCS)':''),{value:t.id})));
