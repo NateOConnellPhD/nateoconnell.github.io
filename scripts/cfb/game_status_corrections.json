@@ -20,6 +20,26 @@
         "https://goviks.com/sports/football/schedule/2024"
       ],
       "reviewed_on": "2026-11-22"
+    },
+    {
+      "game_id": 401638341,
+      "status": "cancelled",
+      "expected": {
+        "season": 2024,
+        "week": 5,
+        "seasonType": "regular",
+        "startDate": "2024-09-28T18:00:00.000Z",
+        "homeId": 231,
+        "awayId": 2535,
+        "homeTeam": "Furman",
+        "awayTeam": "Samford"
+      },
+      "reason": "Postponed due to Hurricane Helene, then officially canceled on November 21, 2024 without being rescheduled. The provider's completed 0–0 record is not an observed tied result.",
+      "sources": [
+        "https://furmanpaladins.com/news/2024/11/21/sept-28-furman-samford-football-game-officially-canceled.aspx",
+        "https://samfordsports.com/sports/football/schedule/2024"
+      ],
+      "reviewed_on": "2026-11-23"
     }
   ]
 }
