@@ -64,8 +64,9 @@ def sync(season, observation_key, key, directory=DIRECTORY, fetcher=fetch):
         return {'requests':0,'status':'cached'}
     if not key or key.startswith('Bearer '): return {'requests':0,'status':'CFBD_API_KEY missing or invalid; market comparison remains unavailable/stale'}
     games=consensus(fetcher(season,key))
+    now=dt.datetime.now(dt.timezone.utc).isoformat()
     body={'schema':'cfb-market-consensus-v1','season':season,'observation_key':observation_key,
-        'observed_at':dt.datetime.now(dt.timezone.utc).isoformat(),'games':games}
+        'observed_at':old['observed_at'] if old.get('games')==games else now,'checked_at':now,'games':games}
     directory.mkdir(parents=True,exist_ok=True)
     (directory/f'{season}.json').write_text(json.dumps(body,allow_nan=False,separators=(',',':'))+'\n')
     return {'requests':1,'status':'updated','games':len(games)}

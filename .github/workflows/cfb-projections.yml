@@ -1,10 +1,12 @@
 name: Update CFB projections
 
 on:
+  schedule:
+    - cron: '23 13 * * *'
   workflow_dispatch:
     inputs:
       season:
-        description: 'Forecast season (requires its reviewed preseason prior)'
+        description: 'Forecast season; current rolls forward in July and builds its prior automatically'
         default: current
         type: string
       week:
@@ -28,7 +30,7 @@ permissions:
   pages: write
 
 concurrency:
-  group: cfb-projections
+  group: cfb-data
   cancel-in-progress: false
 
 jobs:
@@ -52,7 +54,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-      - name: Refresh optional market comparison once per changed game feed
+      - name: Refresh current games and model covariates once per day
+        id: refresh
+        if: inputs.week == '' || github.event_name != 'workflow_dispatch'
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+        run: python3 -B scripts/cfb_forecast/refresh.py --season "$CFB_FORECAST_SEASON"
+      - name: Refresh optional market comparison once per day
         if: inputs.week == '' || github.event_name != 'workflow_dispatch'
         env:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
@@ -60,6 +68,17 @@ jobs:
       - name: Check saved inputs before installing or sampling
         id: prepare
         run: |
+          if [ -z "$CFB_FORECAST_WEEK" ]; then
+            if [ "${{ steps.refresh.outputs.history_ready }}" != true ] || [ "${{ steps.refresh.outputs.covariates_ready }}" != true ]; then
+              echo 'Waiting for complete new-season inputs; previous forecasts remain available.'
+              echo 'needs_update=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ "${{ steps.refresh.outputs.needs_prior }}" = true ]; then
+              echo 'needs_update=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           args=(--season "$CFB_FORECAST_SEASON")
           if [ -n "$CFB_FORECAST_WEEK" ]; then args+=(--week "$CFB_FORECAST_WEEK"); fi
           python3 -B scripts/cfb_forecast/publish.py prepare "${args[@]}"
@@ -86,7 +105,11 @@ jobs:
         run: |
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_forecasts.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_v7.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_refresh.py
           node scripts/cfb_forecast/check_projections.cjs
+      - name: Build changed or new-season prior with the supplied estimators
+        if: steps.prepare.outputs.needs_update == 'true' && steps.refresh.outputs.needs_prior == 'true'
+        run: python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/publish.py build-prior --season "$CFB_FORECAST_SEASON"
       - name: Fit independently and publish checked forecasts
         if: steps.prepare.outputs.needs_update == 'true'
         run: |
@@ -101,10 +124,11 @@ jobs:
             .codex-tmp/cfb-refit/forecast-fits
             .codex-tmp/cfb-refit/home
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Commit projections and cache the optional market feed
-        if: always() && !cancelled() && steps.prepare.outcome == 'success'
+      - name: Commit checked inputs and any passing forecast
+        if: always() && !cancelled()
         run: |
           git add -- assets/data/cfb/projections
+          git add -- _cfb_data/seasons _cfb_data/forecast_inputs _cfb_data/forecast_priors
           if [ -d _cfb_data/forecast_markets ]; then git add -- _cfb_data/forecast_markets; fi
           if git diff --cached --quiet; then exit 0; fi
           git diff --cached --check

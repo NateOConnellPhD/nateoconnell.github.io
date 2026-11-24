@@ -63,13 +63,13 @@ Known limits:
 - The supplied 2026 talent snapshot was collected in November. Coaching changes
   were collected in February. These are not perfect frozen preseason inputs.
 - The 2026 product NPZ reports two divergent transitions and retains only partial
-  diagnostics. It is **not imported as a validated production fit**. The next
-  workflow must produce a passing fit; the old saved forecast is visibly labeled
-  as an earlier-model archive until then.
-  A local 2026 refit on November 23 passed all checks with 8,000 retained draws:
-  zero divergences/tree-depth hits, maximum R-hat 1.00552, minimum bulk ESS 482.81,
-  minimum tail ESS 525.50, and minimum BFMI 0.85069. Sampling took 91 seconds on
-  the local machine, excluding diagnostics. The original 4,000-draw settings
+  diagnostics. It is **not imported as a validated production fit**. The older
+  website fit remains available as an explicitly labeled earlier-model archive.
+  The corrected supplied-code 2026 refit on November 23 passed all checks with
+  8,000 retained draws: zero divergences/tree-depth hits, maximum R-hat 1.00796,
+  minimum bulk ESS 489.21, minimum tail ESS 697.13, and minimum BFMI 0.87786.
+  Sampling took 89 seconds locally, excluding diagnostics. It is saved in the
+  public projections archive. The original 4,000-draw settings
   had zero divergences in the local reproduction but poor drift-scale mixing
   (q R-hat 1.02334, ESS 197.91); increasing target acceptance alone did not fix it.
   The supplied file lacks transition-level flags, so its two original divergent
@@ -79,19 +79,50 @@ Known limits:
 - Current saved feeds support forecasting for 2025–2026. Fresh historical refits
   for 2023–2024 need their missing saved FCS feeds (and 2023 also needs 2020 home
   history). The supplied 2023–2025 evaluation is available without those refits.
-- Each future season needs its reviewed preseason inputs and regenerated prior;
-  annual feature definitions cannot silently be swapped for another provider.
+- Future seasons assemble their inputs automatically beginning in July. The
+  first forecast waits for complete source coverage (including the preseason AP
+  poll) and the August home-history boundary. Missing data are reported, never
+  replaced by another season or a different model.
 - No injury or player-availability inputs. No play-by-play downloads are needed
   for the retained postgame-expectancy target.
 
 ## Publishing and caching
 
-`Update CFB projections` follows the rankings workflow and also runs when its own
-source changes. It consumes existing saved game feeds, without making additional
-game requests. An optional single `/lines?year=…&seasonType=both` request is cached
-per changed game-feed payload, using the existing `CFBD_API_KEY` repository
-secret. A provider failure leaves the old dated comparison available; it never
-blocks the model. No secret enters static JSON.
+`Update CFB projections` runs daily at 13:23 UTC, follows the rankings workflow,
+and runs when its own source changes. Daily requests use the existing
+`CFBD_API_KEY` repository secret. The shared `cfb-data` concurrency group
+serializes it with rankings and data collection. No secret enters static JSON.
+
+The daily collector checks games, roster/calendar, talent, CFBD offensive
+returning PPA, recruiting points, preseason AP votes, 247 transfer-team points,
+and coaching records. It retains the handoff's definitions: AP includes others
+receiving votes (the total must equal 325 times the ballot count); the complete
+College Poll Archive table is the fallback when CFBD returns only the top 25.
+Portal points come from all pages of the 247 team table, never player counts.
+Coaching compares each season's opening coach with the prior season's opening
+coach. Bulk coach identities avoid routine per-team calls; ambiguous seasons use
+cached tenure dates. A midseason replacement does not redefine this covariate.
+Sources: [CFBD API](https://api.collegefootballdata.com/api/coaches),
+[247 transfer rankings](https://247sports.com/season/2026-football/transferteamrankings/),
+and [the handoff's AP archive](https://collegepollarchive.com/football/ap/seasons.cfm?appollid=1268).
+The collector repeats at most once per UTC date, including when a rankings run
+also triggers forecasts. Market lines are checked once per day independently of
+score changes. Unchanged lines do not create another large public snapshot.
+
+Live values are stored in `forecast_inputs/live/<season>.json`; their generated
+priors are in `forecast_priors/live/`. Frozen handoff evidence and earlier priors
+remain untouched. New annual training summaries call the supplied
+`season_ratings` and `di_ratings` functions; completed-season feeds and summaries
+are cached. Future-season historical inputs are frozen when incorporated into
+the annual training set. Public snapshots retain their input observations and
+their original prior values. Historical manual runs use the frozen prior and
+do not refresh current covariates.
+
+A failed covariate feed retains its last usable values and emits a workflow
+warning and step summary. A new season with an unavailable required feed waits
+and retries automatically the next day. Checked data are committed even if a
+later fit fails; the last passing forecast remains published. Daily timestamps
+alone trigger neither fitting nor large snapshot exports.
 
 A changed schedule or market feed rebuilds the export but reuses the checked
 posterior. A changed forecast model or training data triggers a new fit. Failed
@@ -124,12 +155,19 @@ python3 -B scripts/cfb_forecast/publish.py complete --season 2026
 python3 -B scripts/cfb_forecast/publish.py complete --season 2025 --week 1
 ```
 
-Targeted checks: `test_forecasts.py`, `test_v7.py`, and `check_projections.cjs`.
+Targeted checks: `test_forecasts.py`, `test_v7.py`, `test_refresh.py`, and `check_projections.cjs`.
 They cover frozen prior/evaluation replay, time boundaries, FCS scales, dynamic
 likelihood, aligned forecast distributions, line consensus, and cache reuse.
 They do not run HMC or a browser. Numerical test caches must be directed to the
 approved task directory. Production sampling and rendered UI review require
 separate task authorization locally.
+
+The refresh/rollover checks use local simulated provider responses and saved
+inputs, without API calls or annual/full-season fitting. The local network
+rejected direct HTTP access to the provider pages, so unattended portal/AP
+scraping and the repository-secret-backed refresh have **not** been verified
+against live responses here. The first deployed run's feed summary must confirm
+them; parse/coverage failures preserve saved inputs and are visible as warnings.
 
 Historical comparisons report the opening line as primary and the close as
 secondary, with season-week clustered SEs. Development: 2,535 games in 2023–2025,

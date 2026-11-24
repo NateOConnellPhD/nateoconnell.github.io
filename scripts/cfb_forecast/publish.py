@@ -30,7 +30,7 @@ def source_identity():
 def request(season, week=None):
     inputs, prior, expectancy, games, observed, training_key = source.load(season, forecast_week=week)
     # Observation timestamps alone do not trigger fitting or publication.
-    key = digest({'training_key': training_key, 'prior': prior, 'games': games, 'market': markets.read(season), 'source': source_identity()})
+    key = digest({'training_key': training_key, 'prior': prior, 'games': games, 'market': markets.read(season)['games'], 'source': source_identity()})
     return inputs, prior, expectancy, games, observed, training_key, key
 
 
@@ -84,6 +84,7 @@ def make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home,
         'source': 'saved-feed fit' if inputs['games'] else 'preseason prior', 'home_years': home['years'],
         'prior_sd': prior['sd'],
         'prior_training_seasons': prior['training_seasons'], 'prior_caveat': prior['caveat'],
+        'input_observations': prior.get('input_observations', {}),
         'forecast_week': inputs.get('forecast_week', week), 'historical_reconstruction': week is not None}
     public, draws = export.build(arrays, teams, home_ids, games, meta, prior['mean_by_id'], records)
     export.add_details(public, arrays, inputs, prior, home_ids, expectancy)
@@ -111,16 +112,22 @@ def complete(season, week=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare', 'complete', 'sync-markets'])
+    parser.add_argument('command', choices=['prepare', 'complete', 'sync-markets', 'build-prior'])
     parser.add_argument('--season', default='current')
     parser.add_argument('--week', type=int, help='Historical forecast week; 99 for CFP')
     args = parser.parse_args()
     now = datetime.now(timezone.utc)
-    season = now.year - int(now.month < 8) if args.season == 'current' else int(args.season)
+    from cfb_forecast.refresh import season_for
+    season = season_for(now) if args.season == 'current' else int(args.season)
+    if args.command == 'build-prior':
+        from cfb_forecast.annual import build_live
+        build_live(season)
+        return
     if args.command == 'sync-markets':
         folder = ROOT / f'_cfb_data/seasons/{season}'
         keys = [json.loads((folder / (name+'.json')).read_text())['payload_sha256'] for name in ('games','games-fcs')]
-        try: print(json.dumps(markets.sync(season, digest(keys), os.environ.get('CFBD_API_KEY',''))))
+        # Market lines can change even when the games payload does not.
+        try: print(json.dumps(markets.sync(season, digest([keys,now.date().isoformat()]), os.environ.get('CFBD_API_KEY',''))))
         except ValueError as e: print(json.dumps({'status':str(e), 'saved_market_preserved':True}))
     else:
         (prepare if args.command == 'prepare' else complete)(season, args.week)

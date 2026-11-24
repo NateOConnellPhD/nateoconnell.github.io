@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PRIORS = ROOT / '_cfb_data' / 'forecast_priors'
 
 
-def preseason(season, directory=PRIORS):
-    path = directory / f'{season}.json'
+def preseason(season, directory=PRIORS, *, live=False):
+    path = directory / ('live' if live and (directory/'live'/f'{season}.json').exists() else '') / f'{season}.json'
     if not path.exists():
         raise ValueError(f'No reviewed preseason forecasting prior for {season}; previous forecasts are preserved')
     value = json.loads(path.read_text())
@@ -54,8 +54,12 @@ def schedule_rows(raw, teams, cutoff):
 
 
 def load(season, root=DATA, prior_directory=PRIORS, forecast_week=None):
-    prior = preseason(season, prior_directory)
-    inputs = load_fit_inputs(season, root=root)
+    prior = preseason(season, prior_directory, live=forecast_week is None)
+    try:
+        inputs = load_fit_inputs(season, root=root)
+    except ValueError as error:
+        if str(error) != 'No eligible completed games at the selected cutoff': raise
+        inputs = preseason_inputs(season, root)
     folder = Path(root) / str(season)
     saved = [json.loads((folder / f'{name}.json').read_text()) for name in ('games', 'games-fcs')]
     raw = merge_games(*(s['payload'] for s in saved)); by_id = {g['id']: g for g in raw}
@@ -98,3 +102,23 @@ def load(season, root=DATA, prior_directory=PRIORS, forecast_week=None):
     training_key = digest({'teams': inputs['teams'], 'data': inputs['data'],
         'structure': inputs['strength_structure'], 'expectancy': expectancy, 'weeks': [g['week'] for g in inputs['games']], 'prior': numerical_prior, 'history': inputs['home_history']['input_sha256']})
     return inputs, prior, expectancy, upcoming, observed.isoformat(), training_key
+
+
+def preseason_inputs(season, root):
+    """Schedule-only forecast inputs; never relax merit's completed-game rule."""
+    from sync_data import read_saved, normalize
+    from home_history_inputs import load_history
+    from model import strength_structure
+    specs = {'teams':('/teams/fbs',{'year':season}), 'calendar':('/calendar',{'year':season}),
+        'games':('/games',{'year':season,'seasonType':'both','classification':'fbs'}),
+        'games-fcs':('/games',{'year':season,'seasonType':'both','classification':'fcs'})}
+    sources = {n:read_saved(Path(root)/str(season)/(n+'.json'),season,ep,params) for n,(ep,params) in specs.items()}
+    if any(s is None for s in sources.values()): raise ValueError('Missing preseason schedule feeds')
+    observed = min(instant(sources[n]['retrieved_at']) for n in ('games','games-fcs'))
+    raw = merge_games(sources['games']['payload'], sources['games-fcs']['payload'])
+    normalized = normalize(season,sources['teams']['payload'],sources['calendar']['payload'],raw,observed,include_fcs=True)
+    if any(g['eligible'] for g in normalized['games']): raise ValueError('Preseason fallback cannot discard completed games')
+    teams = normalized['teams']
+    return {'season':season,'teams':teams,'games':[], 'data':{k:[] for k in ('home','away','venue','margin','host')},
+        'fbs_indices':[i for i,t in enumerate(teams) if t['classification']=='fbs'],
+        'strength_structure':strength_structure(teams),'home_history':load_history(season,root=root)}
