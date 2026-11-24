@@ -12,7 +12,7 @@ tags:
   - Football
   - Spread
 comments: true
-title: Built College Football Projections That Match Vegas in Two Days. Don't Bet on Them.
+title: I Built College Football Projections That Match Vegas in Two Days. Don't Bet on Them.
 description: I built a college football projection model from public data, and it lands within a half of a point of the Vegas lines. What that shows is how much uncertainty sits behind every number, why even a model that matches Vegas still loses to the house, and why the way sports betting has flooded the game is a public-health problem.
 ---
 ## Why I built this
