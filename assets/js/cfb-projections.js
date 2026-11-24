@@ -133,7 +133,7 @@
       activate(buttons[j].dataset.cfbProductTab,true);});});
     window.addEventListener('hashchange',()=>activate(location.hash==='#projections'?'projections':'merit'));
     doc.querySelectorAll('.cfb-jumps a[href^="#"]').forEach(a=>a.addEventListener('click',()=>activate(a.getAttribute('href')==='#projections'?'projections':'merit')));
-    function line(m) {const v=Math.round(Math.abs(m)*2)/2;return !v?'Pick’em':`${team(m>0?el('home').value:el('away').value)} −${v.toFixed(1)}`;}
+    function predictedMargin(m,h,a) {return Math.abs(m)<.05?'Evenly matched':`${team(m>0?h:a)} by ${Math.abs(m).toFixed(1)} points`;}
     const team=id=>data.teams.find(t=>t.id===id)?.name||id;
     function table(target,heads,rows) {
       const table=node('table'),head=node('thead'),tr=node('tr'),body=node('tbody');
@@ -176,10 +176,12 @@
         const official=data.games.find(g=>g.home===h&&g.away===a&&g.neutral===(el('site').value==='neutral'));
         if(official&&!choices.home&&!choices.away&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
         el('matchup-error').textContent='';el('matchup-result').hidden=false;
-        el('line').textContent=line(r.margin);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
+        el('line').textContent=predictedMargin(r.margin,h,a);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
         el('home-label').textContent=`${team(h)} wins`;el('away-label').textContent=`${team(a)} wins`;
         el('range').textContent=interval(r.range80);
         el('range-label').textContent=`80% range · ${team(h)}’s final margin`;
+        el('range95').textContent=interval(r.range95);
+        el('range95-label').textContent=`95% range · ${team(h)}’s final margin`;
         el('matchup-note').textContent=`${team(h)}’s expected margin: ${sign(r.margin)} points (posterior median ${sign(r.expectedMedian)}; 80% interval ${interval(r.expected80)}). Its chance of being the stronger team on a neutral field is ${pct(r.pBetter)}. The 95% range for an actual game is ${interval(r.range95)} points. Positive margins favor ${team(h)}; negative margins favor ${team(a)}.`;
         const parts=r.parts;
         table(el('line-parts'),['Component','Points toward home margin'],[[`${team(h)} usual-mix power`,sign(parts.home)],[`${team(a)} usual-mix power (subtracted)`,sign(-parts.away)],[`${team(h)} QB adjustment`,sign(parts.qbHome||0)],[`${team(a)} QB adjustment (subtracted)`,sign(-(parts.qbAway||0))],['National home advantage',sign(parts.national)],['Host’s additional advantage',sign(parts.stadium)],['Expected home margin',sign(r.margin)]]);
@@ -191,14 +193,12 @@
     function renderGames() {
       if(!data)return;const week=el('week').value,q=el('search').value.trim().toLowerCase();
       const rows=data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q)));
-      table(el('games'),['Date','Matchup','Model line','Market opener','Market latest','Home win','Away win','80% final-margin range (home)'],rows.map(g=>{
+      table(el('games'),['Date','Matchup','Predicted margin','Home win','Away win','80% final-margin range (home)','95% final-margin range (home)'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
         b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('home-qb').value='';el('away-qb').value='';el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
-        const by=Math.round(Math.abs(g.home_margin)*2)/2;
-        const marketLine=v=>Number.isFinite(v)?(v===0?'Pick’em':`${team(v<0?g.home:g.away)} −${Math.abs(v).toFixed(1)}`):'Unavailable';
-        return [date(g.date),b,by?`${team(g.home_margin>0?g.home:g.away)} −${by.toFixed(1)}`:'Pick’em',marketLine(g.market?.open),marketLine(g.market?.latest),pct(g.p_home),pct(1-g.p_home),interval([g.margin_lo80,g.margin_hi80])];
+        return [date(g.date),b,predictedMargin(g.home_margin,g.home,g.away),pct(g.p_home),pct(1-g.p_home),interval([g.margin_lo80,g.margin_hi80]),interval([g.margin_lo95,g.margin_hi95])];
       }));
-      el('games-note').textContent=rows.length?`${rows.length} scheduled games in this saved forecast. Select a game to open Compare teams. ${data.meta.market_observed_at?'Market feed saved '+date(data.meta.market_observed_at)+'.':'No saved market feed is available.'}`:'No upcoming games match this selection in this saved snapshot.';
+      el('games-note').textContent=rows.length?`${rows.length} scheduled games in this saved forecast. Select a game to open Compare teams. Positive ranges favor the home team; negative ranges favor the away team.`:'No upcoming games match this selection in this saved snapshot.';
     }
     function renderRatings() {
       if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value;
@@ -252,8 +252,9 @@
       if(!backtest)return;
       const period=el('eval-period').value||'development',group=el('eval-group').value||'phase';
       const overall=backtest[period].phase.find(r=>r.group==='all');
-      el('backtest-summary').textContent=`${period==='development'?'2023–2025 development sample':'2026 frozen-model reconstruction, through week '+backtest.through_week}: ${overall.n.toLocaleString()} games. Model average absolute miss ${fmt(overall.model_mae)} points; opener ${fmt(overall.opener_mae)}; close ${fmt(overall.close_mae)}. Difference from opener ${sign(overall.difference)} points (clustered SE ${fmt(overall.se)}).`;
-      table(el('evaluation'),['Group','Games','Model miss','Opener miss','Close miss','Model − opener','Clustered SE'],backtest[period][group].map(r=>[r.group,r.n,fmt(r.model_mae),fmt(r.opener_mae),fmt(r.close_mae),sign(r.difference),fmt(r.se)]));
+      const ci=r=>Number.isFinite(r.model_mae_se)?`${fmt(Math.max(0,r.model_mae-1.96*r.model_mae_se))} to ${fmt(r.model_mae+1.96*r.model_mae_se)}`:'Unavailable';
+      el('backtest-summary').textContent=`${period==='development'?'2023–2025 development sample':'2026 frozen-model reconstruction, through week '+backtest.through_week}: ${overall.n.toLocaleString()} games. Average absolute miss ${fmt(overall.model_mae)} points; approximate 95% confidence interval ${ci(overall)}.`;
+      table(el('evaluation'),['Group','Games','Average absolute miss (pts)','95% confidence interval','Season-week clusters'],backtest[period][group].map(r=>[r.group||'Unclassified',r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
     }
     async function selectSnapshot(id) {
       const turn=++sequence;draws=null;el('content').hidden=true;el('status').textContent='Loading saved projections…';
@@ -283,7 +284,7 @@
         el('diagnostics').textContent=`${m.source}. ${diag.scope||'All retained parameters were checked for convergence and effective sample size.'} ${m.prior_only?'':`Maximum ${diag.max_rhat_theta!=null?'theta ':''}R̂: ${(diag.max_rhat_theta??diag.max_rank_normalized_rhat).toFixed(4)}. Divergences: ${diag.divergences}.`} Home-field history: ${m.home_years.join(', ')}. Preseason coefficients trained on ${m.prior_training_seasons.join(', ')}.`;
         el('draw-note').textContent='Loading saved draws for the matchup tool…';el('matchup-result').hidden=true;
         const loaded=validateDraws(await read(data.draws_file));if(turn!==sequence)return;draws=loaded;el('horizon').disabled=!draws.last;
-        el('draw-note').textContent=draws.gaussian?'Preseason projections use the Gaussian approximation from the annual prior and home-field covariance. Charts use saved prior draws; no current-season sampler has run.':draws.last?`Power summaries, model lines, and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities and charts use ${m.matchup_draws.toLocaleString()} aligned draws. Future drift grows with the selected horizon. These are numerical approximations; no model runs while you browse.`:`Model lines and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities and charts use ${m.matchup_draws.toLocaleString()} aligned draws, with two simulated games per draw; these are numerical approximations. No model is run in your browser.`;
+        el('draw-note').textContent=draws.gaussian?'Preseason projections use the Gaussian approximation from the annual prior and home-field covariance. Charts use saved prior draws; no current-season sampler has run.':draws.last?`Power summaries, mean margins, and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities, predictive ranges and charts use ${m.matchup_draws.toLocaleString()} aligned draws. Future drift grows with the selected horizon. These are numerical approximations; no model runs while you browse.`:`Mean margins and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities, predictive ranges and charts use ${m.matchup_draws.toLocaleString()} aligned draws, with two simulated games per draw; these are numerical approximations. No model is run in your browser.`;
         renderMatchup();
       } catch(e){if(turn===sequence){el('status').textContent=`${e.message} Use Reload to try again.`;el('draw-note').textContent='Matchup draws unavailable.';}}
     }

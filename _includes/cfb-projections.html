@@ -14,7 +14,7 @@
     <p class="small-note" data-projection-snapshot-note></p>
     <div class="cfb-forecast-tabs" role="tablist" aria-label="Power ratings and forecasting views">
       <button type="button" role="tab" id="cfb-forecast-tab-power" aria-controls="cfb-forecast-panel-power" aria-selected="true" tabindex="0" data-projection-view="power">Power ratings</button>
-      <button type="button" role="tab" id="cfb-forecast-tab-games" aria-controls="cfb-forecast-panel-games" aria-selected="false" tabindex="-1" data-projection-view="games">Games &amp; lines</button>
+      <button type="button" role="tab" id="cfb-forecast-tab-games" aria-controls="cfb-forecast-panel-games" aria-selected="false" tabindex="-1" data-projection-view="games">Game predictions</button>
       <button type="button" role="tab" id="cfb-forecast-tab-compare" aria-controls="cfb-forecast-panel-compare" aria-selected="false" tabindex="-1" data-projection-view="compare">Compare teams</button>
       <button type="button" role="tab" id="cfb-forecast-tab-method" aria-controls="cfb-forecast-panel-method" aria-selected="false" tabindex="-1" data-projection-view="method">Method &amp; accuracy</button>
     </div>
@@ -36,7 +36,7 @@
     <div role="tabpanel" id="cfb-forecast-panel-games" aria-labelledby="cfb-forecast-tab-games" data-projection-panel="games" hidden>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-games-title">
       <h3 id="cfb-forecast-games-title">Upcoming games</h3>
-      <p>A model line of <strong>Georgia −6.5</strong> means Georgia is favored by about 6½ points. Opening and latest available sportsbook lines are shown alongside the model when available. Each market line is the median across books, from a dated saved feed.</p>
+      <p>A prediction of <strong>Georgia by 6.5 points</strong> is the model’s average score difference. The win probabilities and 80% and 95% ranges show how uncertain the outcome is. A range crossing zero allows either team to win. Select a game to explore its distributions and quarterback scenarios.</p>
       <div class="cfb-forecast-controls">
         <label>Games<select data-projection-week></select></label>
         <label>Find a team<input type="search" data-projection-search placeholder="Team name"></label>
@@ -62,10 +62,11 @@
       <p class="small-note" data-projection-qb-note></p>
       <div data-projection-matchup-result hidden>
         <dl class="cfb-forecast-metrics" aria-live="polite">
-          <div><dt>Model line</dt><dd data-projection-line></dd></div>
+          <div><dt>Predicted margin</dt><dd data-projection-line></dd></div>
           <div><dt data-projection-home-label>Home win chance</dt><dd data-projection-home-chance></dd></div>
           <div><dt data-projection-away-label>Away win chance</dt><dd data-projection-away-chance></dd></div>
           <div><dt data-projection-range-label>80% final-margin range</dt><dd data-projection-range></dd></div>
+          <div><dt data-projection-range95-label>95% final-margin range</dt><dd data-projection-range95></dd></div>
         </dl>
         <p data-projection-matchup-note></p>
         <div class="cfb-forecast-table" data-projection-line-parts tabindex="0" role="region" aria-label="How the projected margin adds up"></div>
@@ -90,7 +91,7 @@
       <p>This forecasting model starts with prior expectations based on last season’s strength, roster talent, preseason AP points, returning offensive production, recruiting, coaching changes, transfer-portal points, and conference-era indicators. The coefficients are fitted to early-season game margins from earlier seasons only. FCS teams get their own prior from last season’s Division I results. As games accumulate, the model learns how far teams have moved from those expectations. Team strength follows a weekly random walk: more weeks ahead means more uncertainty about where a team will be. This information is used for predictions, not the merit rankings.</p>
       <p>The fit blends 75% final scoring margin with 25% efficiency margin, derived from postgame win expectancy. When efficiency information is missing, that game uses its actual margin. The residual variability is rescaled afterward to forecast real score margins. Home advantage includes both a national effect and a school offset, informed by the preceding three seasons; neutral games get neither.</p>
       <p>Win probabilities average a Student-t predictive distribution over the posterior. This allows unusually large margins and includes game noise. “Stronger team” probability only compares underlying strength, so it need not equal the chance of winning one game.</p>
-      <p>The quarterback model learns passer value per dropback while separating offense, defense, experience, and season effects. A starter’s adjustment compares his value with his team’s usual passer mix, multiplied by its expected dropbacks. The power model learns how strongly that adjustment translates into points. Both teams’ QB adjustments enter the line and win probability. QB values are conditional estimates; the forecast draws include uncertainty in their learned points multiplier, not a second simulation of QB values.</p>
+      <p>The quarterback model learns passer value per dropback while separating offense, defense, experience, and season effects. A starter’s adjustment compares his value with his team’s usual passer mix, multiplied by its expected dropbacks. The power model learns how strongly that adjustment translates into points. Both teams’ QB adjustments enter the predicted margin and win probability. QB values are conditional estimates; the forecast draws include uncertainty in their learned points multiplier, not a second simulation of QB values.</p>
       <p>Play-by-play is checked daily. The expected starter is the last game’s first passer unless an explicit status update names another player. This is an assumption, not an injury report. Changing a quarterback here explores a scenario and does not change the published starter. With no current-season dropbacks the supplied rule gives zero adjustment.</p>
       <p class="small-note" data-projection-prior-caveat></p>
       <details><summary>Fit details</summary><p class="small-note" data-projection-diagnostics></p><p class="small-note">Daily refreshes reuse saved data and passing fits. New training inputs trigger a fit; a starter-only change updates forecasts using the saved fit. If checks fail, the previous forecast stays available. New-season inputs are checked automatically from July.</p></details>
@@ -103,8 +104,8 @@
         <label>Break down by<select data-projection-eval-group><option value="phase">Season phase</option><option value="season">Season</option><option value="tier">Game type</option></select></label>
       </div>
       <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Forecast accuracy by period and group"></div>
-      <p class="small-note">Scoring includes regular-season and CFP games with both opening and closing lines. Other bowls are excluded because opt-outs are outside the model. Lower average absolute error is better; a negative difference favors the model. SE measures uncertainty in the paired difference, clustered by season and week. It is unavailable for a group containing only one week.</p>
-      <p class="small-note">The 2023–2025 seasons were used to develop this model. The frozen-model 2026 check performed worse than the opener; the earlier side-picking advantage did not persist. Weekly windows use earlier games, but some supplied preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions, not a fully archived prospective betting record. Backtests used two chains × 250 draws; they are separate from the stricter production checks.</p>
+      <p class="small-note">Average absolute miss compares the predicted score difference with the actual result; lower is better. Its approximate 95% confidence interval describes uncertainty about average error across games, clustering by season and week. It is different from a single game’s predictive range and is unavailable for a group with only one week.</p>
+      <p class="small-note">These saved checks evaluate the original power model before the QB extension. They use the handoff’s fixed regular-season and CFP evaluation sample; other bowls and games outside that sample are excluded. The 2023–2025 seasons were used for model development. Weekly windows use earlier games, but some preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions. Backtests used two chains × 250 draws, separately from production checks.</p>
     </section>
     </div>
   </div>

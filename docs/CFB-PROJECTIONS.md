@@ -106,8 +106,8 @@ Sources: [CFBD API](https://api.collegefootballdata.com/api/coaches),
 [247 transfer rankings](https://247sports.com/season/2026-football/transferteamrankings/),
 and [the handoff's AP archive](https://collegepollarchive.com/football/ap/seasons.cfm?appollid=1268).
 The collector repeats at most once per UTC date, including when a rankings run
-also triggers forecasts. Market lines are checked once per day independently of
-score changes. Unchanged lines do not create another large public snapshot.
+also triggers forecasts. Sportsbook collection and comparisons have been removed
+from the production workflow and public interface.
 
 Live values are stored in `forecast_inputs/live/<season>.json`; their generated
 priors are in `forecast_priors/live/`. Frozen handoff evidence and earlier priors
@@ -124,23 +124,24 @@ and retries automatically the next day. Checked data are committed even if a
 later fit fails; the last passing forecast remains published. Daily timestamps
 alone trigger neither fitting nor large snapshot exports.
 
-A changed schedule or market feed rebuilds the export but reuses the checked
+A changed schedule rebuilds the export but reuses the checked
 posterior. A changed forecast model or training data triggers a new fit. Failed
 fits are not published or cached as passing. Retained arrays omit duplicated
 latent representations after diagnostics; caches keep only the current fit.
 The task-storage guard remains in place. Snapshot archives preserve past forecasts;
 a historical reconstruction cannot replace the latest current-season forecast.
 
-Scheduled win probabilities and all model lines use full-posterior summaries.
+Scheduled win probabilities and expected score differences use full-posterior summaries.
 Exploratory matchup probabilities and charts use 1,000 aligned rounded draws. For horizon h, strength is `theta_last + sqrt(h) * innovation`.
 This preserves the weekly random walk's marginal forecast variance; it is not a
 joint simulation of an entire future schedule. Power summaries retain the original uncentered model scale and use all draws. There is no inference, API call, or charged service when browsing.
 
 Team details show the regression inputs and prior contributions, posterior weekly
 paths, and retrospective game evidence. Game-implied strength is descriptive,
-not an additive attribution of the posterior. Opening and latest market lines
-are median home spreads across available books; negative means home favored.
-Latest available lines are not labeled closing lines before the game is finished.
+not an additive attribution of the posterior. Game predictions show the expected
+margin in points, both win probabilities and 80%/95% predictive intervals.
+The supplied model predicts score differences, not separate team totals; these
+intervals must not be presented as intervals for a team's final score.
 
 ## Commands and validation
 
@@ -169,8 +170,11 @@ scraping and the repository-secret-backed refresh have **not** been verified
 against live responses here. The first deployed run's feed summary must confirm
 them; parse/coverage failures preserve saved inputs and are visible as warnings.
 
-Historical comparisons report the opening line as primary and the close as
-secondary, with season-week clustered SEs. Development: 2,535 games in 2023–2025,
-model MAE 12.2008 versus opener 12.1256. Frozen 2026 reconstruction through week
-12: 822 games, model 12.4643 versus opener 11.9836. One-week groups have no
-estimable cluster SE; the display does not report a misleading zero.
+Historical accuracy reports the model's average absolute margin error against
+actual results and an approximate 95% confidence interval using season-week
+clustered SEs of the model's errors. This is not the SE of a paired comparison.
+Development: 2,535 games in 2023–2025, model MAE 12.2008. Frozen 2026 reconstruction
+through week 12: 822 games, model MAE 12.4643. These are pre-QB model checks on the
+original handoff's fixed evaluation sample. One-week groups have no estimable
+cluster SE; the display does not report a misleading zero. Rebuild the public
+aggregate from existing saved evidence with `python3 -B scripts/cfb_forecast/evaluation.py`.

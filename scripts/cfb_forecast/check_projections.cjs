@@ -54,7 +54,9 @@ async function controller(hash='',overrides={}) {
   const p=await controller();assert.equal(p.requests.length,0,'Merit view must not download projections');
   p.buttons[1].handlers.click();await p.settle();assert.equal(p.main.hidden,true);assert.equal(p.root.hidden,false);
   assert.equal(p.get('status').textContent,'');assert.equal(p.get('content').hidden,false);
-  assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/−|Pick/);
+  assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/by .* points|Evenly matched/);
+  assert.match(p.get('range95').textContent,/ to /);
+  assert.ok(p.get('games').children[0].children[0].children[0].children.every(h=>!(/market|line|opener/i.test(h.textContent))));
   assert.ok(p.get('strength-chart').children.length>0);assert.ok(p.get('margin-chart').children.length>0);
   assert.equal(p.get('powers').children[0].children[1].children.length,data.ratings.length);
   assert.deepEqual(p.viewPanels.map(x=>x.hidden),[false,true,true,true]);
