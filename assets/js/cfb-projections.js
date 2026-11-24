@@ -176,6 +176,11 @@
     window.addEventListener('hashchange',()=>activate(location.hash==='#projections'?'projections':'merit'));
     doc.querySelectorAll('.cfb-jumps a[href^="#"]').forEach(a=>a.addEventListener('click',()=>activate(a.getAttribute('href')==='#projections'?'projections':'merit')));
     function predictedMargin(m,h,a) {return Math.abs(m)<.05?'Evenly matched':`${team(m>0?h:a)} by ${Math.abs(m).toFixed(1)} points`;}
+    function scoreAvailability() {
+      return el('snapshot').value===index.latest
+        ? 'Team score predictions have not been published yet. Showing the latest available margins and win probabilities.'
+        : 'This older forecast contains margins and win probabilities only.';
+    }
     const team=id=>data.teams.find(t=>t.id===id)?.name||id;
     function table(target,heads,rows) {
       const table=node('table'),head=node('thead'),tr=node('tr'),body=node('tbody');
@@ -225,7 +230,7 @@
         el('range95').textContent=interval(r.range95);
         el('range95-label').textContent=`95% range · ${team(h)}’s final margin`;
         el('scores').hidden=!r.scores;
-        el('score-status').textContent=r.scores?'':'This saved forecast predates individual score predictions. Choose a newer forecast after the next successful update.';
+        el('score-status').textContent=r.scores?'':scoreAvailability();
         if(r.scores) {
           el('home-score-label').textContent=team(h);el('away-score-label').textContent=team(a);
           el('home-score').textContent=Math.round(r.scores.home.mean);el('away-score').textContent=Math.round(r.scores.away.mean);
@@ -245,13 +250,18 @@
     function renderGames() {
       if(!data)return;const week=el('week').value,q=el('search').value.trim().toLowerCase();
       const rows=data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q)));
-      table(el('games'),['Date','Matchup','Home points · mean (80% range)','Away points · mean (80% range)','Home win','Away win'],rows.map(g=>{
+      const hasScores=data.games.length>0&&data.games.every(g=>g.scores?.home&&g.scores?.away);
+      const columns=hasScores?['Home points · mean (80% range)','Away points · mean (80% range)']:['Predicted margin'];
+      table(el('games'),['Date','Matchup',...columns,'Home win','Away win'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
         b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('home-qb').value='';el('away-qb').value='';el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
-        const score=s=>s?`${fmt(s.mean)} (${scoreRange(s,80)})`:'Not in this snapshot';
-        return [date(g.date),b,score(g.scores?.home),score(g.scores?.away),pct(g.p_home),pct(1-g.p_home)];
+        const score=s=>`${fmt(s.mean)} (${scoreRange(s,80)})`;
+        const prediction=hasScores?[score(g.scores.home),score(g.scores.away)]:[predictedMargin(g.home_margin,g.home,g.away)];
+        return [date(g.date),b,...prediction,pct(g.p_home),pct(1-g.p_home)];
       }));
-      el('games-note').textContent=rows.length?`${rows.length} scheduled games in this saved forecast. Point ranges include game-to-game variation. Select a game for both score distributions, medians, 95% ranges, and quarterback scenarios.`:'No upcoming games match this selection in this saved snapshot.';
+      el('games-note').textContent=rows.length
+        ? (hasScores?'':scoreAvailability()+' ')+`${rows.length} scheduled games match your selection. `+(hasScores?'Point ranges include game-to-game variation. Select a game for score distributions, medians, and 95% ranges.':'Select a game to explore the predicted margin and its uncertainty.')
+        : 'No upcoming games match your selection.';
     }
     function renderRatings() {
       if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value;
