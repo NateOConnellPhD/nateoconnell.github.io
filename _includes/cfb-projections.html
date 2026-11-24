@@ -35,7 +35,7 @@
     <div role="tabpanel" id="cfb-forecast-panel-games" aria-labelledby="cfb-forecast-tab-games" data-projection-panel="games" hidden>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-games-title">
       <h3 id="cfb-forecast-games-title">Upcoming games</h3>
-      <p>See the predicted points for each team, their 80% predictive ranges, and each team’s chance of winning. These are averages over possible outcomes, not exact-score promises. Select a game for score distributions, 95% ranges, and quarterback scenarios.</p>
+      <p>Browse game predictions and each team’s chance of winning. Where team scores are available, the table shows mean points and 80% predictive ranges. These describe possible outcomes, not exact-score promises. Select a game to explore its prediction and uncertainty.</p>
       <div class="cfb-forecast-controls">
         <label>Games<select data-projection-week></select></label>
         <label>Find a team<input type="search" data-projection-search placeholder="Team name"></label>
@@ -52,13 +52,10 @@
         <label>Home team<select data-projection-home></select></label>
         <button type="button" class="button button-outline" data-projection-swap aria-label="Swap home and away teams">Swap</button>
         <label>Away team<select data-projection-away></select></label>
-        <label>Home quarterback<select data-projection-home-qb></select></label>
-        <label>Away quarterback<select data-projection-away-qb></select></label>
         <label>Venue<select data-projection-site><option value="home">Home team’s stadium</option><option value="neutral">Neutral field</option></select></label>
         <label>Weeks ahead<select data-projection-horizon><option value="1">Next week</option></select></label>
       </div>
       <p data-projection-matchup-error role="status" aria-live="polite"></p>
-      <p class="small-note" data-projection-qb-note></p>
       <div data-projection-matchup-result hidden>
         <p class="small-note" data-projection-score-status></p>
         <section data-projection-scores hidden aria-labelledby="cfb-score-title">
@@ -80,7 +77,6 @@
           <div><dt data-projection-range95-label>95% final-margin range</dt><dd data-projection-range95></dd></div>
         </dl>
         <p data-projection-matchup-note></p>
-        <div class="cfb-forecast-table" data-projection-line-parts tabindex="0" role="region" aria-label="How the projected margin adds up"></div>
         <div class="cfb-forecast-charts">
           <div><h4>Uncertainty about team strength</h4><div data-projection-strength-chart></div><p class="small-note">Points on the model’s FBS reference scale. Differences between teams estimate neutral-field margins. Overlap means the evidence does not cleanly separate the teams.</p></div>
           <div><h4>How the game could turn out</h4><div data-projection-margin-chart></div><p class="small-note">This wider distribution adds game-to-game variation. An 80% range contains the middle 80% of simulated outcomes, conditional on the model.</p></div>
@@ -92,6 +88,7 @@
       <h3 id="cfb-forecast-detail-title" data-projection-detail-title tabindex="-1">Where do these estimates come from?</h3>
       <p>Details for the two teams selected above. The preseason inputs establish a starting expectation; game results then update it and allow strength to move from week to week.</p>
       <div class="cfb-forecast-charts" data-projection-team-details></div>
+      <details><summary>How the matchup estimate adds up</summary><div class="cfb-forecast-table" data-projection-line-parts tabindex="0" role="region" aria-label="How the projected margin adds up"></div></details>
       <p class="small-note">Weekly paths are retrospective estimates using every game available at this snapshot, not predictions made during those weeks. Game-implied strength is the blended game margin plus the opponent’s estimated strength, minus venue and quarterback advantages. It is a descriptive comparison, not an additive share of the posterior rating.</p>
     </section>
     </div>
@@ -103,22 +100,38 @@
       <p>The fit blends 75% final scoring margin with 25% efficiency margin, derived from postgame win expectancy. When efficiency information is missing, that game uses its actual margin. The residual variability is rescaled afterward to forecast real score margins. Home advantage includes both a national effect and a school offset, informed by the preceding three seasons; neutral games get neither.</p>
       <p>Win probabilities average a Student-t predictive distribution over the posterior. This allows unusually large margins and includes game noise. “Stronger team” probability only compares underlying strength, so it need not equal the chance of winning one game.</p>
       <p>Individual scores add a separate scoring model learned from final results in the preceding three seasons and games already played this season. It learns scoring tendencies for each school and season, allowing sparse teams to borrow information from the wider league. For each simulated margin, it draws the lower team score and adds the margin to get the winner’s score. Both scores stay nonnegative, and their difference keeps the power model’s simulated margin.</p>
-      <p>The scoring extension uses an approximate posterior (a Laplace approximation), while the power model keeps its existing posterior. The new score ranges have not yet been calibrated in a historical forecast evaluation. Scores are modeled continuously, so decimals describe average points, not literal football scoring events. Rounded scores can tie even when one team has a higher win probability. The score model has no separate injury, weather, or possession forecast; QB and venue scenarios affect scores through the margin model.</p>
+      <p>The scoring extension uses an approximate posterior (a Laplace approximation), while the power model keeps its existing posterior. The new score ranges have not yet been calibrated in a historical forecast evaluation. Scores are modeled continuously, so decimals describe average points, not literal football scoring events. Rounded scores can tie even when one team has a higher win probability. The score model has no separate injury, weather, or possession forecast; the expected starter and selected venue affect scores through the margin model.</p>
       <p>The quarterback model learns passer value per dropback while separating offense, defense, experience, and season effects. A starter’s adjustment compares his value with his team’s usual passer mix, multiplied by its expected dropbacks. The power model learns how strongly that adjustment translates into points. Both teams’ QB adjustments enter the predicted margin and win probability. QB values are conditional estimates; the forecast draws include uncertainty in their learned points multiplier, not a second simulation of QB values.</p>
       <p>The power-ranking table summarizes strength with each team’s usual passer mix. Team details show the expected starter’s contribution; matchup predictions include it.</p>
-      <p>Play-by-play is checked daily. The expected starter is the last game’s first passer unless an explicit status update names another player. This is an assumption, not an injury report. Changing a quarterback here explores a scenario and does not change the published starter. With no current-season dropbacks the supplied rule gives zero adjustment.</p>
+      <p>Play-by-play is checked daily. Matchup forecasts automatically use the expected starter: the last game’s first passer unless an explicit status update names another player. This is an assumption, not an injury report. Team details show the starter and contribution used. With no current-season dropbacks the supplied rule gives zero adjustment.</p>
       <p class="small-note" data-projection-prior-caveat></p>
       <details><summary>Fit details</summary><p class="small-note" data-projection-diagnostics></p><p class="small-note" data-projection-qb-status></p><p class="small-note">Daily refreshes reuse saved data and passing fits. New training inputs trigger a fit; a starter-only change updates forecasts using the saved fit. If checks fail, the previous forecast stays available. New-season inputs are checked automatically from July.</p></details>
     </section>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-backtest-title">
-      <h3 id="cfb-forecast-backtest-title">Historical forecast accuracy</h3>
+      <h3 id="cfb-forecast-backtest-title">How past predictions compared with results</h3>
+      <p>These saved checks cover the earlier power model, before the quarterback and individual-score extensions. They do not measure the current model’s accuracy.</p>
       <p data-projection-backtest-summary></p>
       <div class="cfb-forecast-controls">
         <label>Period<select data-projection-eval-period><option value="development">2023–2025 · development</option><option value="holdout">2026 · through week 12</option></select></label>
         <label>Break down by<select data-projection-eval-group><option value="phase">Season phase</option><option value="season">Season</option><option value="tier">Game type</option></select></label>
       </div>
-      <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Forecast accuracy by period and group"></div>
-      <p class="small-note">Average absolute miss compares the predicted score difference with the actual result; lower is better. Its approximate 95% confidence interval describes uncertainty about average error across games, clustering by season and week. It is different from a single game’s predictive range and is unavailable for a group with only one week.</p>
+      <div data-projection-error-summary hidden>
+        <dl class="cfb-forecast-metrics" aria-live="polite">
+          <div><dt>Average signed error (bias)</dt><dd data-projection-error-bias></dd></div>
+          <div><dt>Middle 80% of past errors</dt><dd data-projection-error-range80></dd></div>
+          <div><dt>Middle 95% of past errors</dt><dd data-projection-error-range95></dd></div>
+        </dl>
+        <p>Error means predicted home-team margin minus actual home-team margin, in points. Zero is an exact margin prediction; positive values overestimate the home team’s margin and negative values underestimate it. An average near zero means overestimates and underestimates balance. The spread shows how far individual predictions were off.</p>
+        <div class="cfb-forecast-error-chart" data-projection-error-chart></div>
+        <p class="small-note" data-projection-error-bias-note></p>
+        <p class="small-note">The 80% and 95% ranges contain the middle portions of the observed errors in these past games. They are not confidence intervals for the average or a predictive interval for a particular future game.</p>
+        <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Signed forecast errors by period and group"></div>
+      </div>
+      <details>
+        <summary>Technical accuracy measures</summary>
+        <div class="cfb-forecast-table" data-projection-evaluation-technical tabindex="0" role="region" aria-label="Absolute margin error by period and group"></div>
+        <p class="small-note">Mean absolute error (MAE) averages the magnitude of each margin error, ignoring its sign. It measures error size, not directional bias, and is not an interval. Its approximate 95% confidence interval describes uncertainty about that average, clustering by season and week. A group with only one week has no estimable cluster-based interval.</p>
+      </details>
       <p class="small-note">These saved checks evaluate the original power model before the QB extension. They use the handoff’s fixed regular-season and CFP evaluation sample; other bowls and games outside that sample are excluded. The 2023–2025 seasons were used for model development. Weekly windows use earlier games, but some preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions. Backtests used two chains × 250 draws, separately from production checks.</p>
     </section>
     </div>

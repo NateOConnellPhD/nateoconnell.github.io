@@ -1,4 +1,5 @@
 name: Update and publish CFB rankings
+run-name: ${{ inputs.mode == 'history' && 'Backfill historical CFB rankings' || 'Update current CFB rankings' }}
 
 on:
   workflow_dispatch:
@@ -27,7 +28,6 @@ on:
       - 'scripts/cfb/**'
       - 'assets/js/cfb-policy*.js'
       - 'assets/js/cfb-exact-order.js'
-      - '.github/workflows/cfb-rankings.yml'
   schedule:
     - cron: '17 8 * 8-12 0'
       timezone: 'America/New_York'
@@ -40,6 +40,8 @@ permissions:
 concurrency:
   group: cfb-data
   cancel-in-progress: false
+  # Do not replace a waiting daily projection with the next archive week.
+  queue: max
 
 jobs:
   update:

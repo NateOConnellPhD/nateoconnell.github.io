@@ -88,10 +88,19 @@ Known limits:
 
 ## Publishing and caching
 
-`Update CFB projections` runs daily at 13:23 UTC, follows the rankings workflow,
-and runs when its own source changes. Daily requests use the existing
+`Update CFB projections` runs daily at 13:23 UTC, on manual dispatch,
+and when its own source or forecast inputs change. It does not run in response
+to completed rankings jobs, including historical backfill. Daily requests use the existing
 `CFBD_API_KEY` repository secret. The shared `cfb-data` concurrency group
-serializes it with rankings and data collection. No secret enters static JSON.
+serializes it with rankings and data collection because they update the same
+saved season files. All three workflows use `queue: max`: a newly dispatched
+archive week no longer replaces a waiting projection run. Jobs already waiting
+take precedence over the archive's next continuation; a job that is already
+running still finishes first. There is no wait for the entire archive to finish.
+See [GitHub's concurrency queue documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+Workflow-only scheduling changes do not trigger rankings; ranking model and
+policy source changes still do. Historical jobs are labeled
+`Backfill historical CFB rankings` in Actions. No secret enters static JSON.
 
 The daily collector checks games, roster/calendar, talent, CFBD offensive
 returning PPA, recruiting points, preseason AP votes, 247 transfer-team points,
@@ -105,8 +114,8 @@ cached tenure dates. A midseason replacement does not redefine this covariate.
 Sources: [CFBD API](https://api.collegefootballdata.com/api/coaches),
 [247 transfer rankings](https://247sports.com/season/2026-football/transferteamrankings/),
 and [the handoff's AP archive](https://collegepollarchive.com/football/ap/seasons.cfm?appollid=1268).
-The collector repeats at most once per UTC date, including when a rankings run
-also triggers forecasts. Sportsbook collection and comparisons have been removed
+The collector repeats at most once per UTC date, including when manual and
+source-triggered projection runs occur on that date. Sportsbook collection and comparisons have been removed
 from the production workflow and public interface.
 
 Live values are stored in `forecast_inputs/live/<season>.json`; their generated
@@ -172,11 +181,21 @@ scraping and the repository-secret-backed refresh have **not** been verified
 against live responses here. The first deployed run's feed summary must confirm
 them; parse/coverage failures preserve saved inputs and are visible as warnings.
 
-Historical accuracy reports the model's average absolute margin error against
-actual results and an approximate 95% confidence interval using season-week
-clustered SEs of the model's errors. This is not the SE of a paired comparison.
+Historical validation displays signed error (predicted home margin minus actual
+home margin): its average bias, full observed distribution, and central 80%/95%
+empirical error ranges. A near-zero mean describes directional balance; it does
+not mean individual predictions are exact. Observed ranges are distinct from
+confidence intervals for the mean and from future-game predictive intervals.
+The average bias also has an approximate 95% confidence interval using
+season-week clustered SEs. MAE and its own clustered confidence interval remain
+in expandable technical details; neither uses the paired-comparison SE.
 Development: 2,535 games in 2023–2025, model MAE 12.2008. Frozen 2026 reconstruction
 through week 12: 822 games, model MAE 12.4643. These are pre-QB model checks on the
-original handoff's fixed evaluation sample. One-week groups have no estimable
+original handoff's fixed evaluation sample, explicitly labeled as earlier-model
+validation in the UI. Signed mean errors are −0.4143 and −0.4233 points,
+respectively. The handoff game-level predictions and actual margins were checked
+against all 3,357 saved evaluation rows with zero mismatches. This reconciles
+the displayed MAE with the supplied files; it is not a new backtest or validation
+of the QB or individual-score extensions. One-week groups have no estimable
 cluster SE; the display does not report a misleading zero. Rebuild the public
 aggregate from existing saved evidence with `python3 -B scripts/cfb_forecast/evaluation.py`.
