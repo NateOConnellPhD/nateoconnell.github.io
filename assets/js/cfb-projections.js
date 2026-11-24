@@ -6,6 +6,15 @@
 })(typeof window === 'undefined' ? globalThis : window, function () {
   'use strict';
   const schema = 'cfb-projections-v1';
+  function cleanQBName(value) {
+    if(typeof value!=='string')return null;
+    const name=value.trim().replace(/\s+/g,' ');
+    if(!/\p{L}/u.test(name)||Number.isFinite(Number(name))||/^(unknown(?: player)?|unavailable|name unavailable|n\/a|na|nan|none|null|tbd|qb)$/i.test(name)||/^(player|passer|qb)\s*\d+$/i.test(name))return null;
+    return name;
+  }
+  function quarterbackName(value,id,names={}) {
+    return cleanQBName(names[String(id)])||cleanQBName(value);
+  }
   const mean = x => x.reduce((a,b) => a+b,0)/x.length;
   const quantile = (sorted,p) => {const i=(sorted.length-1)*p, lo=Math.floor(i);return sorted[lo]+(sorted[Math.ceil(i)]-sorted[lo])*(i-lo);};
   function lgamma(x) {
@@ -270,19 +279,22 @@
       const wrap=el('qb-scenarios');if(!wrap)return;
       wrap.hidden=!data.quarterbacks;
       for(const [side,id] of [['home',h],['away',a]]) {
-        const q=data.quarterbacks?.[id],options=(q?.options||[]).filter(p=>p.is_qb!==false);
+        const q=data.quarterbacks?.[id],candidates=(q?.options||[]).filter(p=>p.is_qb!==false);
+        const options=candidates.map(p=>({...p,name:quarterbackName(p.name,p.id,qbStatus?.names)})).filter(p=>p.name);
+        const defaultName=quarterbackName(q?.name,q?.starter,qbStatus?.names);
         el(side+'-qb-label').textContent=team(id);
         const selector=el(side+'-qb');
-        selector.replaceChildren(node('option',`Default: ${q?.name||'usual passer mix'}`,{value:''}),
+        selector.replaceChildren(node('option',`Default: ${defaultName||(q?.starter?'starter name unavailable':'usual passer mix')}`,{value:''}),
           ...options.map(p=>node('option',p.name+(p.status&&p.status!=='not listed'?' · '+p.status:''),{value:p.id})),
           ...(q?.uncertain&&options.length>1?[node('option','Blend two possible starters',{value:'blend'})]:[]));
         selector.value='';
         for(const suffix of ['first','second'])el(side+'-qb-'+suffix).replaceChildren(...options.map(p=>node('option',p.name,{value:p.id})));
-        el(side+'-qb-first').value=q?.starter||options[0]?.id||'';
+        el(side+'-qb-first').value=options.find(p=>p.id===q?.starter)?.id||options[0]?.id||'';
         const first=el(side+'-qb-first').value,out=new Set(['out','out for season','injured reserve','suspended']);
         el(side+'-qb-second').value=options.find(p=>p.id!==first&&!out.has(p.status))?.id||options.find(p=>p.id!==first)?.id||'';
         el(side+'-qb-weight').value='50';
         el(side+'-qb-source').textContent=q?`${q.source}. ${q.note||''}${q.checked_at?' Checked '+date(q.checked_at)+'.':''}`:'No QB information in this saved forecast.';
+        if(options.length<candidates.length)el(side+'-qb-source').append(' Some QB names are unavailable; those choices will appear once their names are resolved.');
         for(const url of q?.sources||[])if(url.startsWith('https://site.api.espn.com/'))el(side+'-qb-source').append(' ',node('a',url.includes('/injuries')?'Injury source':'Roster source',{href:url,target:'_blank',rel:'noopener'}));
       }
     }
@@ -385,7 +397,7 @@
           if(quarterback.starter) {
             const wrap=node('div',null,{class:'cfb-forecast-table',tabindex:'0'});
             const adjustment=rating?.qb_adjustment??data.meta.qb_lambda*quarterback.x;
-            const rows=[['Expected quarterback',quarterback.name||`Passer ${quarterback.starter}`],['Contribution to power',sign(adjustment)]];
+            const rows=[['Expected quarterback',quarterbackName(quarterback.name,quarterback.starter,qbStatus?.names)||'Starter name unavailable'],['Contribution to power',sign(adjustment)]];
             if(rating)rows.push(['Power with usual passer mix',sign(rating.mean)],['Power with expected starter',sign(rating.rating_qb_now)]);
             table(wrap,['Detail','Estimate'],rows);section.append(wrap);
           } else section.append(node('p','This forecast uses the usual passer mix because no current starter could be inferred.'));
@@ -400,7 +412,7 @@
         else prior.append(node('p','No FBS team-specific preseason regression prior was available. The model uses the relevant division prior.'));
         section.append(prior);
         const qi=data.qb_importance?.find(q=>q.team_id===id);
-        if(qi)section.append(node('p',`QB importance: ${qi.qb} versus ${qi.backup} changes the estimate by ${sign(qi.importance_pts)} points, using ${fmt(qi.dropbacks_per_game)} dropbacks per game. This compares the last starter with the recent backup selected by the model; it is not an injury assessment.`));
+        if(qi)section.append(node('p',`QB importance: ${quarterbackName(qi.qb,qi.passer_id,qbStatus?.names)||'Starter (name unavailable)'} versus ${quarterbackName(qi.backup,qi.backup_id,qbStatus?.names)||'backup (name unavailable)'} changes the estimate by ${sign(qi.importance_pts)} points, using ${fmt(qi.dropbacks_per_game)} dropbacks per game. This compares the last starter with the recent backup selected by the model; it is not an injury assessment.`));
         const games=node('details');games.append(node('summary','Game evidence in this fit'));
         const wrap=node('div',null,{class:'cfb-forecast-table',tabindex:'0'});
         table(wrap,['Week','Opponent','Venue','Actual margin','Blended margin','Opponent strength','Venue effect','QB effect','Game-implied strength'],info.games.map(g=>[g.week,team(g.opponent),g.site,sign(g.margin),sign(g.target),sign(g.opponent_strength),sign(g.home_edge),sign(g.qb_edge||0),sign(g.game_implied_strength)]));games.append(wrap);section.append(games);return section;});
@@ -509,8 +521,10 @@
       initializing=(async()=>{try{
         index=await read('index.json');if(index.schema!==schema||!index.snapshots?.length)throw new Error('No saved projections yet.');
         el('snapshot').replaceChildren(...index.snapshots.map(r=>node('option',`${r.season} · week ${r.week} · ${date(r.through_date)}${r.id===index.latest?' · latest':''}`,{value:r.id})));
+        // Names refresh independently of numerical snapshots, including archived ones.
+        // Only display labels use this catalog; starter selections/statuses stay saved.
+        try{qbStatus=await read('qb-status.json');}catch(_){qbStatus=null;} // Older deployments may omit it.
         await selectSnapshot(index.latest);
-        try{qbStatus=await read('qb-status.json');renderRatings();}catch(_){} // Not present in older deployments.
         backtest=await read('backtest.json');renderEvaluation();
       }catch(e){el('status').textContent=`${e.message} Use Reload to try again.`;initializing=null;}})();
       return initializing;
@@ -527,5 +541,5 @@
     for(const key of ['conference','limit','power-search'])el(key).addEventListener(key==='power-search'?'input':'change',renderRatings);
     activate(location.hash==='#projections'?'projections':'merit');
   }
-  return {tcdf,matchup,validateDraws,scoreOutcomes,strengthPositions,orderGames,mount};
+  return {tcdf,matchup,validateDraws,scoreOutcomes,strengthPositions,orderGames,quarterbackName,mount};
 });

@@ -27,6 +27,41 @@ OUT = {'out', 'out for season', 'injured reserve', 'suspended'}
 UNCERTAIN = {'questionable', 'doubtful', 'day-to-day'}
 
 
+def clean_name(value):
+    """Names are display metadata; an athlete ID is never a substitute."""
+    if not isinstance(value, str): return None
+    value = ' '.join(value.split())
+    if value.lower() in {'unknown','unknown player','unavailable','name unavailable',
+                         'n/a','na','nan','none','null','tbd','qb'}: return None
+    if not any(c.isalpha() for c in value): return None
+    if re.fullmatch(r'(?:player|passer|qb)\s*\d+', value, re.I): return None
+    try: float(value)
+    except ValueError: return value
+    return None
+
+
+def athlete_name(athlete):
+    return (clean_name(athlete.get('displayName')) or clean_name(athlete.get('fullName'))
+            or clean_name(' '.join(str(athlete.get(k) or '') for k in ('firstName','lastName'))))
+
+
+def name_catalog(season, state, directory=DIRECTORY):
+    """Join names by athlete ID without copying current status into old forecasts."""
+    names = {}
+    def merge(values):
+        for pid, value in values.items():
+            name = clean_name(value)
+            if str(pid).isdigit() and name: names[str(pid)] = name
+    for year in range(2021, season+1):
+        merge(read(Path(directory)/f'{year}.json',{}).get('names',{}))
+    if state.get('season') == season:
+        for rows in state.get('injuries',{}).values():
+            merge({p:r.get('name') for p,r in rows.items()})
+        for team in state.get('teams',{}).values():
+            merge({p:r.get('name') for p,r in team.get('players',{}).items()})
+    return names
+
+
 def fetch(url):
     if urlsplit(url).netloc != 'site.api.espn.com' or not url.startswith(BASE+'/'):
         raise ValueError('Unexpected availability source')
@@ -64,7 +99,7 @@ def injury_rows(payload):
             status = str(row.get('status') or '').strip().lower()
             status = {'o':'out','ir':'injured reserve','day to day':'day-to-day'}.get(status,status)
             if not status: raise ValueError('Injury status missing for player '+pid)
-            item = {'id':pid,'name':athlete.get('displayName',pid),'status':status,
+            item = {'id':pid,'name':athlete_name(athlete),'status':status,
                     'reported_at':row.get('date'),'return_date':row.get('details',{}).get('returnDate')}
             if pid in rows and rows[pid]!=item: raise ValueError('Conflicting injury records for '+pid)
             rows[pid] = item
@@ -84,8 +119,9 @@ def roster_rows(payload, team, season):
         for p in group.get('items',[]):
             if p.get('position',{}).get('abbreviation')!='QB': continue
             pid = player_id(p)
-            if not pid or not p.get('displayName'): raise ValueError('Unidentified roster QB')
-            players[pid] = {'id':pid,'name':p['displayName']}
+            name = athlete_name(p)
+            if not pid or not name: raise ValueError('Unidentified roster QB')
+            players[pid] = {'id':pid,'name':name}
     if not players: raise ValueError('Roster has no quarterbacks')
     return players
 
@@ -159,6 +195,12 @@ def resolve(incumbent, recent, roster, injuries):
 def apply(q, teams, team_names, season, directory=DIRECTORY):
     """Apply live observations only AFTER the historical covariates have been calculated."""
     state = read(Path(directory)/'availability.json',{})
+    names = name_catalog(season,state,directory)
+    for pid, name in names.items(): q.names.loc[int(pid)] = name
+    for info in teams.values():
+        for option in info['options']:
+            option['name'] = names.get(option['id']) or clean_name(option.get('name'))
+        info['name'] = names.get(info['starter']) or clean_name(info.get('name'))
     if state.get('season')!=season: return {'warnings':['No current availability observation'], 'starter_rule':RULE}
     for tid, info in teams.items():
         record = state.get('teams',{}).get(tid,{})
@@ -168,16 +210,14 @@ def apply(q, teams, team_names, season, directory=DIRECTORY):
         # Later appearance first; among passers in that game prefer the largest role.
         recent = prev.sort_values(['week','game_id','n'],ascending=False).passer_id.drop_duplicates().tolist()
         decision = resolve(info['starter'],recent,roster,injuries)
-        names = {int(p):r['name'] for p,r in roster.items()}
-        q.names.update(names)
         options = {p['id']:p for p in info['options']}
         for pid,player in roster.items():
             p = int(pid)
             if pid not in options:
-                options[pid] = {'id':pid,'name':player['name'],'dropbacks':0,
+                options[pid] = {'id':pid,'name':names.get(pid),'dropbacks':0,
                                'value':float(q.value(p)),'x':float(q.x_for(team_names[tid],p)[0])}
         for pid,option in options.items():
-            option.update(name=roster.get(pid,{}).get('name',option['name']),
+            option.update(name=names.get(pid) or clean_name(option.get('name')),
                           status=injuries.get(pid,{}).get('status','not listed'),is_qb=pid in roster if roster else None)
         selected = decision['starter']
         if decision['replaced'] and selected is None:
@@ -215,7 +255,8 @@ def main():
     public=ROOT/'assets/data/cfb/projections/qb-status.json'
     current=read(public,{})
     current.update(availability_checked_at=state['checked_at'],availability_observed_at=state.get('injuries_observed_at'),
-                   availability_warnings=state['errors'],starter_rule=RULE)
+                   availability_warnings=state['errors'],starter_rule=RULE,
+                   names=name_catalog(year,state))
     write(public,current)
     print(json.dumps({'availability_checked_at':state['checked_at'],'rosters':len(state['teams']),
                       'warnings':state['errors']}))

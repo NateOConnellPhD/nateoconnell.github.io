@@ -59,6 +59,28 @@ class AvailabilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'season'):a.roster_rows(roster(),'26',2025)
         with self.assertRaisesRegex(ValueError,'team'):a.roster_rows(roster(),'30',2026)
 
+    def test_roster_names_recover_from_full_name_but_never_ids(self):
+        feed=roster();player=feed['athletes'][0]['items'][0]
+        player.update(displayName='5092275',fullName='Ty Dieffenbach')
+        self.assertEqual(a.roster_rows(feed,'26',2026)['5092275']['name'],'Ty Dieffenbach')
+        player.pop('fullName');player.update(firstName='Ty',lastName='Dieffenbach')
+        self.assertEqual(a.roster_rows(feed,'26',2026)['5092275']['name'],'Ty Dieffenbach')
+        player.pop('firstName');player.pop('lastName')
+        with self.assertRaisesRegex(ValueError,'Unidentified'):a.roster_rows(feed,'26',2026)
+        for value in (None,5092275,'5092275','5092275.0','5.092275e6','unknown','Passer 5092275',''):
+            with self.subTest(value=value):self.assertIsNone(a.clean_name(value))
+        self.assertEqual(a.clean_name('  D’Andre   Smith II '),'D’Andre Smith II')
+
+    def test_name_catalog_keeps_valid_history_and_roster_names_without_status(self):
+        saved={2025:{'names':{'1':'Previous Name','2':'Known Backup','3':'3'}},
+               2026:{'names':{'1':'1','2':'Unknown','3':'New Name'}}}
+        state={'season':2026,'teams':{'30':{'players':{'1':{'name':'Roster Name'},'4':{'name':'Rookie QB'}}}},
+               'injuries':{'30':{'2':{'name':'2','status':'out'},'5':{'name':'Injured QB','status':'out'}}}}
+        with patch.object(a,'read',side_effect=lambda path,default=None:saved.get(int(path.stem),default)):
+            self.assertEqual(a.name_catalog(2026,state),{'1':'Roster Name','2':'Known Backup',
+                '3':'New Name','4':'Rookie QB','5':'Injured QB'})
+            self.assertEqual(a.name_catalog(2025,state),{'1':'Previous Name','2':'Known Backup'})
+
     def test_feed_schema_and_link_id_recovery(self):
         self.assertEqual(a.injury_rows(injury())['26']['5092275']['status'],'questionable')
         for broken in ({},{'injuries':None},{'injuries':[{'id':'26'}]}):

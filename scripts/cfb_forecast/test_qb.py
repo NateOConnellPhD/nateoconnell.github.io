@@ -28,7 +28,7 @@ class QBTests(unittest.TestCase):
         q.value=lambda p,before_week=None:{5092275:.2,5142594:-.1,4899366:-.2}.get(p,0.)
         frame=pd.DataFrame([{'game_id':2,'week':12,'home_team':'UCLA','away_team':'USC'}])
         training=q.x_training(frame).copy()
-        roster={str(p):{'id':str(p),'name':n} for p,n in [(5092275,'Ty Dieffenbach'),(5142594,'Madden Iamaleava')]}
+        roster={str(p):{'id':str(p),'name':n} for p,n in [(5092275,'Ty Dieffenbach'),(5142594,'Madden Iamaleava'),(9000000,'New Roster QB')]}
         state={'season':2026,'checked_at':'2026-11-24T12:00:00Z','injuries_observed_at':'2026-11-24T12:00:00Z',
             'teams':{'26':{'players':roster}},'injuries':{'26':{'5092275':{'status':'out'}}},'errors':[]}
         x,pid=q.x_for('UCLA')
@@ -38,6 +38,8 @@ class QBTests(unittest.TestCase):
             qb_availability.apply(q,teams,{'26':'UCLA'},2026)
         self.assertEqual(teams['26']['starter'],'5142594')
         self.assertEqual(teams['26']['name'],'Madden Iamaleava')
+        self.assertEqual(q.names.loc[9000000],'New Roster QB')
+        self.assertEqual(next(p for p in teams['26']['options'] if p['id']=='9000000')['name'],'New Roster QB')
         self.assertLess(teams['26']['x'],x)
         self.assertFalse(next(p for p in teams['26']['options'] if p['id']=='4899366')['is_qb'])
         np.testing.assert_array_equal(q.x_training(frame),training)
