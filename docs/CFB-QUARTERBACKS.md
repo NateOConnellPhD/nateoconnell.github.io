@@ -75,11 +75,15 @@ the saved passing fit. Publication retains the last checked forecast on failure.
 ## Published interpretation
 
 The ranked power table remains strength with the usual passer mix, preserving
-the handoff's rating and rank-uncertainty definitions. Additional columns show
+the handoff's rating and rank-uncertainty definitions. The main table shows
+ratings and uncertainty. Clicking a team opens its details, including the
 expected QB, adjustment and current-starter power. Matchup choices adjust each
 aligned posterior draw and update probabilities, margins, intervals and plots.
 The comparison lists each QB adjustment separately. Importance compares the
 incumbent with the supplied recent-backup rule; it is not a medical assessment.
+Snapshots that predate QB integration are identified once at the snapshot level;
+missing QB fields do not create an “Unavailable” column for every team. Source
+refresh diagnostics appear under Method & accuracy → Fit details.
 
 ## Validation boundary
 
