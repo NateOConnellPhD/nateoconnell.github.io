@@ -13,10 +13,6 @@ on:
         description: 'Optional historical forecast week (1–16; 99 for CFP). Blank updates current.'
         default: ''
         type: string
-  workflow_run:
-    workflows: ['Update and publish CFB rankings']
-    types: [completed]
-    branches: [main]
   push:
     branches: [main]
     paths:
@@ -32,6 +28,8 @@ permissions:
 concurrency:
   group: cfb-data
   cancel-in-progress: false
+  # Preserve waiting projections when the archive dispatches its next week.
+  queue: max
 
 jobs:
   projections:
