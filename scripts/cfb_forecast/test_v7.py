@@ -1,5 +1,6 @@
 """Focused frozen-prior, drift, evaluation and cache checks. No HMC or API calls."""
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -53,7 +54,54 @@ class V7Tests(unittest.TestCase):
 
     def test_saved_priors_match_shared_builder(self):
         for year in range(2023,2027):
-            self.assertEqual(source.preseason(year),priors.build(self.bundle,year))
+            with self.subTest(season=year):
+                self.assertPriorMatches(source.preseason(year),priors.build(self.bundle,year),f'prior[{year}]')
+
+    def assertPriorMatches(self, saved, rebuilt, path='prior'):
+        """Exact structure/provenance, with only floating-point roundoff allowed.
+
+        LAPACK implementations need not return identical final bits for least
+        squares. The tolerance is 1e-10 absolute plus 1e-12 relative; model inputs,
+        season boundaries, counts, identifiers and source hashes stay exact.
+        """
+        if isinstance(rebuilt,dict):
+            self.assertIsInstance(saved,dict,path)
+            self.assertEqual(saved.keys(),rebuilt.keys(),f'{path}: keys differ')
+            for key in rebuilt:self.assertPriorMatches(saved[key],rebuilt[key],f'{path}.{key}')
+        elif isinstance(rebuilt,list):
+            self.assertIsInstance(saved,list,path)
+            self.assertEqual(len(saved),len(rebuilt),f'{path}: lengths differ')
+            for i,(a,b) in enumerate(zip(saved,rebuilt)):self.assertPriorMatches(a,b,f'{path}[{i}]')
+        elif isinstance(rebuilt,float):
+            self.assertIsInstance(saved,float,path)
+            self.assertTrue(math.isfinite(saved) and math.isfinite(rebuilt),f'{path}: nonfinite value')
+            self.assertTrue(math.isclose(saved,rebuilt,rel_tol=1e-12,abs_tol=1e-10),
+                f'{path}: saved={saved!r}, rebuilt={rebuilt!r}, absolute difference={abs(saved-rebuilt):.12g}')
+        else:
+            self.assertIs(type(saved),type(rebuilt),path)
+            self.assertEqual(saved,rebuilt,path)
+
+    def test_saved_priors_match_alternative_lapack_solver(self):
+        from scipy.linalg import lstsq
+        # Same regressions and inputs, solved with pivoted QR rather than SVD.
+        # An exact dictionary comparison rejects their harmless rounding differences.
+        with patch('numpy.linalg.lstsq',side_effect=lambda a,b,rcond=None:lstsq(a,b,cond=rcond,lapack_driver='gelsy')):
+            for year in range(2023,2027):
+                with self.subTest(season=year):
+                    self.assertPriorMatches(source.preseason(year),priors.build(self.bundle,year),f'prior[{year}]')
+
+    def test_prior_comparison_rejects_substantive_and_structural_changes(self):
+        import copy
+        baseline={'mean_by_id':{'1':20.},'training_seasons':[2023,2024],
+                  'training_games':1005,'source_hashes':{'input':'abc'}}
+        for field,value in [('mean_by_id',{'1':20.000001}),('mean_by_id',{'1':float('nan')}),
+                            ('mean_by_id',{'1':float('inf')}),('mean_by_id',{'2':20.}),
+                            ('training_seasons',[2023,2025]),('training_games',1006),
+                            ('source_hashes',{'input':'changed'})]:
+            with self.subTest(field=field,value=value):
+                changed=copy.deepcopy(baseline);changed[field]=value
+                with self.assertRaisesRegex(AssertionError,f'prior\\.{field}'):
+                    self.assertPriorMatches(changed,baseline)
 
     def test_dynamic_density_and_fcs_scale(self):
         import jax
