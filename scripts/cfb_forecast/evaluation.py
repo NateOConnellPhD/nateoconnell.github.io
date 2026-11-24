@@ -8,6 +8,30 @@ from collections import defaultdict
 from statistics import mean
 
 
+def signed_errors(rows):
+    """Bias and observed spread of predicted minus actual home margins."""
+    values = [r['model'] - r['actual'] for r in rows]
+    ordered = sorted(values)
+    bias = mean(values)
+    clusters = defaultdict(list)
+    for row, value in zip(rows, values): clusters[row['cluster']].append(value)
+    k = len(clusters)
+    se = math.sqrt(k / (k - 1) * sum((sum(v) - bias * len(v)) ** 2
+                                    for v in clusters.values())) / len(values) if k > 1 else None
+    def quantile(p):
+        at = (len(ordered) - 1) * p
+        lo, hi = math.floor(at), math.ceil(at)
+        return ordered[lo] + (ordered[hi] - ordered[lo]) * (at - lo)
+    width = 5
+    start = math.floor(ordered[0] / width) * width
+    counts = [0] * (math.floor((ordered[-1] - start) / width) + 1)
+    for value in values: counts[math.floor((value - start) / width)] += 1
+    return {'model_bias': bias, 'model_bias_se': se, 'error_median': quantile(.5),
+            'error_lo80': quantile(.1), 'error_hi80': quantile(.9),
+            'error_lo95': quantile(.025), 'error_hi95': quantile(.975),
+            'error_histogram': {'start': start, 'width': width, 'counts': counts}}
+
+
 def summarize(rows):
     if not rows: raise ValueError('No scored forecasts')
     errors = {'model':[], 'opener':[], 'close':[]}; clusters=defaultdict(list)
@@ -21,7 +45,7 @@ def summarize(rows):
     mae=mean(errors['model'])
     model_se=math.sqrt(k/(k-1)*sum((sum(v)-mae*len(v))**2 for v in model_clusters.values()))/n if k>1 else None
     return {'n':n, **{key+'_mae':mean(val) for key,val in errors.items()}, 'difference':diff, 'se':se,
-            'model_mae_se':model_se,'clusters':k}
+            'model_mae_se':model_se,'clusters':k, **signed_errors(rows)}
 
 
 def grouped(rows, by):
@@ -29,8 +53,11 @@ def grouped(rows, by):
 
 
 def public_report(report):
-    fields=('group','n','model_mae','model_mae_se','clusters')
-    return {**report, **{period:{by:[{k:r[k] for k in fields} for r in rows]
+    fields=('group','n','model_mae','model_mae_se','clusters','model_bias','model_bias_se',
+            'error_median','error_lo80','error_hi80','error_lo95','error_hi95','error_histogram')
+    return {**report, 'error_definition':'predicted_home_margin_minus_actual_home_margin',
+            'evaluated_model':'V7LDe75', 'includes_quarterbacks':False, 'includes_team_scores':False,
+            **{period:{by:[{k:r[k] for k in fields} for r in rows]
             for by,rows in report[period].items()} for period in ('development','holdout')}}
 
 

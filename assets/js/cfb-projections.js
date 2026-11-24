@@ -325,13 +325,45 @@
         table(wrap,['Week','Opponent','Venue','Actual margin','Blended margin','Opponent strength','Venue effect','QB effect','Game-implied strength'],info.games.map(g=>[g.week,team(g.opponent),g.site,sign(g.margin),sign(g.target),sign(g.opponent_strength),sign(g.home_edge),sign(g.qb_edge||0),sign(g.game_implied_strength)]));games.append(wrap);section.append(games);return section;});
       el('team-details').replaceChildren(...cards);
     }
+    function renderErrorDistribution(row) {
+      const bins=row.error_histogram,w=640,h=275,left=50,right=620,top=20,bottom=215;
+      const lo=Math.min(0,bins.start),hi=Math.max(0,bins.start+bins.width*bins.counts.length);
+      const peak=Math.max(...bins.counts)/row.n;
+      const x=v=>left+(v-lo)/(hi-lo)*(right-left),y=v=>bottom-v/peak*(bottom-top);
+      const plot=svg('svg',{viewBox:`0 0 ${w} ${h}`,role:'img','aria-label':'Distribution of past signed margin errors; dashed line: zero, gold line: average error'});
+      plot.append(svg('title',{},'Predicted minus actual home margin in past games'));
+      for(let i=0;i<=4;i++){const share=peak*i/4;
+        plot.append(svg('line',{x1:left,x2:right,y1:y(share),y2:y(share),stroke:'#d2dfe8'}));
+        plot.append(svg('text',{x:left-8,y:y(share)+4,'text-anchor':'end'},`${(100*share).toFixed(0)}%`));}
+      bins.counts.forEach((count,i)=>plot.append(svg('rect',{x:x(bins.start+i*bins.width),y:y(count/row.n),
+        width:x(lo+bins.width)-x(lo),height:bottom-y(count/row.n),fill:'#245a82',opacity:.65})));
+      plot.append(svg('line',{x1:x(0),x2:x(0),y1:top,y2:bottom,stroke:'#142f43','stroke-width':2,'stroke-dasharray':'4 4'}));
+      plot.append(svg('line',{x1:x(row.model_bias),x2:x(row.model_bias),y1:top,y2:bottom,stroke:'#b67d25','stroke-width':2}));
+      for(let i=0;i<=4;i++){const value=lo+(hi-lo)*i/4;
+        plot.append(svg('text',{x:x(value),y:bottom+22,'text-anchor':'middle'},value.toFixed(0)));}
+      plot.append(svg('text',{x:(left+right)/2,y:h-8,'text-anchor':'middle'},'Predicted home margin − actual home margin (points)'));
+      el('error-chart').replaceChildren(plot,node('p',`All ${row.n.toLocaleString()} games · bars: share of games in each ${bins.width}-point bin · dashed: zero error · gold: average signed error.`,{class:'small-note'}));
+    }
     function renderEvaluation() {
       if(!backtest)return;
       const period=el('eval-period').value||'development',group=el('eval-group').value||'phase';
       const overall=backtest[period].phase.find(r=>r.group==='all');
-      const ci=r=>Number.isFinite(r.model_mae_se)?`${fmt(Math.max(0,r.model_mae-1.96*r.model_mae_se))} to ${fmt(r.model_mae+1.96*r.model_mae_se)}`:'Unavailable';
-      el('backtest-summary').textContent=`${period==='development'?'2023–2025 development sample':'2026 frozen-model reconstruction, through week '+backtest.through_week}: ${overall.n.toLocaleString()} games. Average absolute miss ${fmt(overall.model_mae)} points; approximate 95% confidence interval ${ci(overall)}.`;
-      table(el('evaluation'),['Group','Games','Average absolute miss (pts)','95% confidence interval','Season-week clusters'],backtest[period][group].map(r=>[r.group||'Unclassified',r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
+      const ci=r=>Number.isFinite(r.model_mae_se)?`${fmt(Math.max(0,r.model_mae-1.96*r.model_mae_se))} to ${fmt(r.model_mae+1.96*r.model_mae_se)}`:'Not estimable from one week';
+      el('backtest-summary').textContent=`${period==='development'?'2023–2025 development sample':'2026 retrospective reconstruction, through week '+backtest.through_week}: ${overall.n.toLocaleString()} games.`;
+      const available=Number.isFinite(overall.model_bias)&&overall.error_histogram;
+      el('error-summary').hidden=!available;
+      if(available) {
+        el('error-bias').textContent=`${sign(overall.model_bias)} points`;
+        el('error-range80').textContent=interval([overall.error_lo80,overall.error_hi80]);
+        el('error-range95').textContent=interval([overall.error_lo95,overall.error_hi95]);
+        el('error-bias-note').textContent=Number.isFinite(overall.model_bias_se)
+          ? `Approximate 95% confidence interval for the average signed error: ${interval([overall.model_bias-1.96*overall.model_bias_se,overall.model_bias+1.96*overall.model_bias_se])} points, using season-week clusters. This estimates uncertainty in the average, not variation between games.`
+          : 'A cluster-based confidence interval for the average needs more than one season-week.';
+        renderErrorDistribution(overall);
+        table(el('evaluation'),['Group','Games','Average signed error (pts)','Middle 80% of errors (pts)','Middle 95% of errors (pts)'],backtest[period][group].map(r=>[
+          r.group||'Unclassified',r.n,sign(r.model_bias),interval([r.error_lo80,r.error_hi80]),interval([r.error_lo95,r.error_hi95])]));
+      } else el('backtest-summary').textContent+=' The signed-error summary has not been published for this report.';
+      table(el('evaluation-technical'),['Group','Games','Margin MAE (pts)','95% confidence interval for MAE','Season-week clusters'],backtest[period][group].map(r=>[r.group||'Unclassified',r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
     }
     async function selectSnapshot(id) {
       const turn=++sequence;draws=null;el('content').hidden=true;el('status').textContent='Loading saved projections…';

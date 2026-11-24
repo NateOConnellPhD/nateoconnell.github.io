@@ -181,11 +181,21 @@ scraping and the repository-secret-backed refresh have **not** been verified
 against live responses here. The first deployed run's feed summary must confirm
 them; parse/coverage failures preserve saved inputs and are visible as warnings.
 
-Historical accuracy reports the model's average absolute margin error against
-actual results and an approximate 95% confidence interval using season-week
-clustered SEs of the model's errors. This is not the SE of a paired comparison.
+Historical validation displays signed error (predicted home margin minus actual
+home margin): its average bias, full observed distribution, and central 80%/95%
+empirical error ranges. A near-zero mean describes directional balance; it does
+not mean individual predictions are exact. Observed ranges are distinct from
+confidence intervals for the mean and from future-game predictive intervals.
+The average bias also has an approximate 95% confidence interval using
+season-week clustered SEs. MAE and its own clustered confidence interval remain
+in expandable technical details; neither uses the paired-comparison SE.
 Development: 2,535 games in 2023–2025, model MAE 12.2008. Frozen 2026 reconstruction
 through week 12: 822 games, model MAE 12.4643. These are pre-QB model checks on the
-original handoff's fixed evaluation sample. One-week groups have no estimable
+original handoff's fixed evaluation sample, explicitly labeled as earlier-model
+validation in the UI. Signed mean errors are −0.4143 and −0.4233 points,
+respectively. The handoff game-level predictions and actual margins were checked
+against all 3,357 saved evaluation rows with zero mismatches. This reconciles
+the displayed MAE with the supplied files; it is not a new backtest or validation
+of the QB or individual-score extensions. One-week groups have no estimable
 cluster SE; the display does not report a misleading zero. Rebuild the public
 aggregate from existing saved evidence with `python3 -B scripts/cfb_forecast/evaluation.py`.

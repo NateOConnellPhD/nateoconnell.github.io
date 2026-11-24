@@ -105,6 +105,7 @@ jobs:
         run: |
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_forecasts.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_v7.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_evaluation.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_refresh.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_qb.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_scores.py
