@@ -86,6 +86,7 @@
     return d;
   }
   function matchup(d,home,away,neutral,ahead=1,qbs={}) {
+    if([qbs.home,qbs.away].some(q=>q&&typeof q==='object'))return mixtureMatchup(d,home,away,neutral,ahead,qbs);
     if(home===away||!d.teams[home]||!d.teams[away])throw new Error('Choose two different teams.');
     if(!Number.isInteger(ahead)||ahead<1||ahead>52)throw new Error('Choose a horizon from 1 to 52 weeks.');
     const strengthAt=id=>d.last?d.last[id].map((v,i)=>v+Math.sqrt(ahead)*d.drift[id][i]):d.teams[id];
@@ -106,7 +107,7 @@
     const result={margin,homeLine:-margin,pHome:p,pAway:1-p,pBetter:mean(strength.map(v=>v>0?1:v===0?.5:0)),
       expectedMedian:quantile(sorted,.5),expected80:[quantile(sorted,.1),quantile(sorted,.9)],expected95:[quantile(sorted,.025),quantile(sorted,.975)],
       range80:[quantile(pred,.1),quantile(pred,.9)],range95:[quantile(pred,.025),quantile(pred,.975)],
-      homeDraws:h,awayDraws:a,pred,parts:{home:fullPower(home,baseH),away:fullPower(away,baseA),qbHome:lm*hx,qbAway:lm*ax,national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
+      homeDraws:h,awayDraws:a,expectedDraws:loc,pred,parts:{home:fullPower(home,baseH),away:fullPower(away,baseA),qbHome:lm*hx,qbAway:lm*ax,national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
     if(d.gaussian) {
       const g=d.gaussian,hg=g.teams[home],ag=g.teams[away],slot=Math.max(0,g.home_ids.indexOf(home));
       const national=neutral?0:g.home_mean[0],stadium=neutral||!slot?0:g.home_mean[slot];
@@ -119,6 +120,41 @@
         parts:{home:hg.mean,away:ag.mean,national,stadium}});
     }
     if(d.scores)result.scores=scoreOutcomes(d.scores,home,away,paired);
+    return result;
+  }
+  function mixtureMatchup(d,home,away,neutral,ahead,qbs) {
+    const choices=q=>{
+      if(!q||typeof q!=='object')return [{id:q,weight:1}];
+      if(!Number.isFinite(q.weight)||q.weight<0||q.weight>1||!q.first||!q.second||q.first===q.second)
+        throw new Error('Choose two different quarterbacks and a weight from 0 to 100%.');
+      return [{id:q.first,weight:q.weight},{id:q.second,weight:1-q.weight}].filter(x=>x.weight>0);
+    };
+    const components=choices(qbs.home).flatMap(h=>choices(qbs.away).map(a=>({weight:h.weight*a.weight,
+      result:matchup(d,home,away,neutral,ahead,{home:h.id,away:a.id})})));
+    if(components.length===1)return {...components[0].result,mixture:true};
+    const average=fn=>components.reduce((total,c)=>total+c.weight*fn(c.result),0);
+    const distribution=fn=>{const rows=components.flatMap(c=>{const v=fn(c.result);return v.map(value=>({value,weight:c.weight/v.length}));}).sort((a,b)=>a.value-b.value);
+      let cumulative=0;return rows.map(r=>({...r,cumulative:cumulative+=r.weight}));};
+    const at=(values,p)=>{let lo=0,hi=values.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(values[mid].cumulative<p-1e-12)lo=mid+1;else hi=mid;}return values[lo].value;};
+    const sample=values=>Array.from({length:d.sigma.length*2},(_,i)=>at(values,(i+.5)/(d.sigma.length*2)));
+    const predicted=distribution(r=>r.pred),expected=distribution(r=>r.expectedDraws);
+    const result={margin:average(r=>r.margin),pHome:average(r=>r.pHome),pAway:average(r=>r.pAway),pBetter:average(r=>r.pBetter),
+      expectedMedian:at(expected,.5),pred:sample(predicted),homeDraws:sample(distribution(r=>r.homeDraws)),awayDraws:sample(distribution(r=>r.awayDraws)),
+      parts:Object.fromEntries(Object.keys(components[0].result.parts).map(k=>[k,average(r=>r.parts[k]||0)])),mixture:true};
+    result.homeLine=-result.margin;
+    for(const [level,tail] of [[80,.1],[95,.025]]) {
+      result['range'+level]=[at(predicted,tail),at(predicted,1-tail)];
+      result['expected'+level]=[at(expected,tail),at(expected,1-tail)];
+    }
+    if(components.every(c=>c.result.scores)) {
+      result.scores={};
+      for(const side of ['home','away']) {
+        const values=distribution(r=>r.scores[side+'Draws']);
+        result.scores[side]={mean:average(r=>r.scores[side].mean),median:at(values,.5),
+          lo80:at(values,.1),hi80:at(values,.9),lo95:at(values,.025),hi95:at(values,.975)};
+        result.scores[side+'Draws']=sample(values);
+      }
+    }
     return result;
   }
   function strengthPositions(draws,ids) {
@@ -226,15 +262,46 @@
       for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4;plot.append(svg('text',{x:x(v),y:bottom+23,'text-anchor':'middle'},v.toFixed(0)));}
       target.replaceChildren(plot,node('p',series.map(s=>s.name).join(' / ')+` · colored vertical lines mark each ${coverage()}% range. Bars show the share of draws per bin; plot shows the central 99%.`,{class:'small-note'}));
     }
+    let qbControlKey='';
+    function qbControls(h,a) {
+      const key=[el('snapshot').value,h,a].join(':');
+      if(key===qbControlKey)return;
+      qbControlKey=key;
+      const wrap=el('qb-scenarios');if(!wrap)return;
+      wrap.hidden=!data.quarterbacks;
+      for(const [side,id] of [['home',h],['away',a]]) {
+        const q=data.quarterbacks?.[id],options=(q?.options||[]).filter(p=>p.is_qb!==false);
+        el(side+'-qb-label').textContent=team(id);
+        const selector=el(side+'-qb');
+        selector.replaceChildren(node('option',`Default: ${q?.name||'usual passer mix'}`,{value:''}),
+          ...options.map(p=>node('option',p.name+(p.status&&p.status!=='not listed'?' · '+p.status:''),{value:p.id})),
+          ...(q?.uncertain&&options.length>1?[node('option','Blend two possible starters',{value:'blend'})]:[]));
+        selector.value='';
+        for(const suffix of ['first','second'])el(side+'-qb-'+suffix).replaceChildren(...options.map(p=>node('option',p.name,{value:p.id})));
+        el(side+'-qb-first').value=q?.starter||options[0]?.id||'';
+        el(side+'-qb-second').value=options.find(p=>p.id!==q?.starter&&p.status!=='out')?.id||options.find(p=>p.id!==q?.starter)?.id||'';
+        el(side+'-qb-weight').value='50';
+        el(side+'-qb-source').textContent=q?`${q.source}. ${q.note||''}${q.checked_at?' Checked '+date(q.checked_at)+'.':''}`:'No QB information in this saved forecast.';
+      }
+    }
+    function qbChoice(side) {
+      const choice=el(side+'-qb')?.value||'';
+      const blend=el(side+'-qb-blend');if(blend)blend.hidden=choice!=='blend';
+      if(choice!=='blend')return choice||undefined;
+      return {first:el(side+'-qb-first').value,second:el(side+'-qb-second').value,weight:Number(el(side+'-qb-weight').value)/100};
+    }
     function renderMatchup() {
       if(!draws)return;
       try {
         const h=el('home').value,a=el('away').value;
+        qbControls(h,a);
+        const qbs={home:qbChoice('home'),away:qbChoice('away')};
         const level=coverage();
-        const r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1));
+        const r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1),qbs);
         // Retain the full-draw probabilities for a scheduled matchup.
         const official=data.games.find(g=>g.home===h&&g.away===a&&g.neutral===(el('site').value==='neutral'));
-        if(official&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
+        if(official&&!qbs.home&&!qbs.away&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
+        if(el('qb-scenario-note'))el('qb-scenario-note').textContent=r.mixture?'Scenario blend using your chosen weights. These weights are assumptions, not estimated chances of starting.':qbs.home||qbs.away?'Your QB scenario is shown below. The published game table keeps its default forecast.':'Using the saved default starter assumptions.';
         el('matchup-error').textContent='';el('matchup-result').hidden=false;
         el('line').textContent=predictedMargin(r.margin,h,a);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
         el('home-label').textContent=`${team(h)} wins`;el('away-label').textContent=`${team(a)} wins`;
@@ -401,6 +468,7 @@
       table(el('evaluation-technical'),['Week','Games','Margin MAE (pts)',`${level}% confidence interval for MAE`,'Season-week clusters'],weekly.map(r=>[weekLabel(r),r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
     }
     async function selectSnapshot(id) {
+      qbControlKey='';
       const turn=++sequence;draws=null;positions=null;el('content').hidden=true;el('status').textContent='Loading saved projections…';
       try {
         const row=index.snapshots.find(r=>r.id===id);if(!row)throw new Error('Unknown forecast snapshot');
@@ -448,6 +516,8 @@
     el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');cache.delete('backtest.json');qbStatus=null;initializing=null;initialize();});
     el('coverage').addEventListener('change',()=>{renderRatings();renderGames();renderMatchup();renderEvaluation();});
     for(const key of ['home','away','site','horizon'])el(key).addEventListener('change',renderMatchup);
+    for(const side of ['home','away'])for(const suffix of ['','-first','-second','-weight'])
+      el(side+'-qb'+suffix)?.addEventListener('change',renderMatchup);
     el('eval-period').addEventListener('change',renderEvaluation);
     el('swap').addEventListener('click',()=>{const h=el('home').value;el('home').value=el('away').value;el('away').value=h;renderMatchup();});
     for(const key of ['week','search'])el(key).addEventListener(key==='search'?'input':'change',renderGames);

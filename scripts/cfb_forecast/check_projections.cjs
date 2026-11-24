@@ -144,7 +144,7 @@ async function controller(hash='',overrides={}) {
   delete dynamic.teams;delete dynamic.means;api.validateDraws(dynamic);
   const game={...data.games[0],ahead:4}, result=api.matchup(dynamic,game.home,game.away,game.neutral,4);
   Object.assign(game,{home_margin:result.margin,home_line:result.homeLine,p_home:result.pHome,margin_lo80:result.range80[0],margin_hi80:result.range80[1]});
-  const part=result.parts;assert.ok(Math.abs(part.home-part.away+part.national+part.stadium-result.margin)<1e-9);
+  const part=result.parts;assert.ok(Math.abs(part.home-part.away+part.qbHome-part.qbAway+part.national+part.stadium-result.margin)<1e-9);
   const fixture={...data,games:[game],draws_file:'draws-fixture.json',meta:{...data.meta,model:'forecast-v7'},
     team_details:Object.fromEntries([game.home,game.away].map(id=>[id,{path:[{week:1,mean:5,sd:2},{week:2,mean:6,sd:1.5}],games:[]}]))};
   dynamic.scores={version:'conditional-scores-1',intercept:dynamic.sigma.map(()=>20),slope:dynamic.sigma.map(()=>-3),

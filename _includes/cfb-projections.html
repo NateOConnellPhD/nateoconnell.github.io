@@ -62,6 +62,32 @@
         <label>Weeks ahead<select data-projection-horizon><option value="1">Next week</option></select></label>
       </div>
       <p data-projection-matchup-error role="status" aria-live="polite"></p>
+        <details data-projection-qb-scenarios hidden>
+          <summary>Quarterback assumptions &amp; scenarios</summary>
+          <p>The default uses the incumbent unless he is reported out. When a replacement is inferred from recent QB participation, it is labeled below. Choose a different QB to explore a scenario. If availability is uncertain, you can blend two possibilities with your own weights.</p>
+          <div class="cfb-forecast-charts">
+            <div>
+              <label><span data-projection-home-qb-label>Home</span><select data-projection-home-qb aria-label="Home quarterback scenario"></select></label>
+              <p class="small-note" data-projection-home-qb-source></p>
+              <div data-projection-home-qb-blend hidden>
+                <label>First QB<select data-projection-home-qb-first aria-label="First home quarterback"></select></label>
+                <label>Alternative QB<select data-projection-home-qb-second aria-label="Alternative home quarterback"></select></label>
+                <label>First QB weight (%)<input data-projection-home-qb-weight type="number" min="0" max="100" step="1" value="50"></label>
+              </div>
+            </div>
+            <div>
+              <label><span data-projection-away-qb-label>Away</span><select data-projection-away-qb aria-label="Away quarterback scenario"></select></label>
+              <p class="small-note" data-projection-away-qb-source></p>
+              <div data-projection-away-qb-blend hidden>
+                <label>First QB<select data-projection-away-qb-first aria-label="First away quarterback"></select></label>
+                <label>Alternative QB<select data-projection-away-qb-second aria-label="Alternative away quarterback"></select></label>
+                <label>First QB weight (%)<input data-projection-away-qb-weight type="number" min="0" max="100" step="1" value="50"></label>
+              </div>
+            </div>
+          </div>
+          <p class="small-note" data-projection-qb-scenario-note></p>
+          <p class="small-note">A blend averages the two predictions using the selected weights and combines their outcome distributions. Its range includes both possible starters; it is not an average of interval endpoints. With two uncertain teams, the selected starter probabilities are treated as independent. These controls affect only your matchup view.</p>
+        </details>
       <div data-projection-matchup-result hidden>
         <p class="small-note" data-projection-score-status></p>
         <section data-projection-scores hidden aria-labelledby="cfb-score-title">
