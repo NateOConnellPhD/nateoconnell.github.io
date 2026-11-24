@@ -45,16 +45,25 @@ def summarize(rows):
     mae=mean(errors['model'])
     model_se=math.sqrt(k/(k-1)*sum((sum(v)-mae*len(v))**2 for v in model_clusters.values()))/n if k>1 else None
     return {'n':n, **{key+'_mae':mean(val) for key,val in errors.items()}, 'difference':diff, 'se':se,
-            'model_mae_se':model_se,'clusters':k, **signed_errors(rows)}
+            'model_mae_se':model_se,'clusters':k,
+            'within_points':{str(limit):sum(error <= limit for error in errors['model'])
+                             for limit in (3,7,10,14)}, **signed_errors(rows)}
 
 
 def grouped(rows, by):
-    return [{'group':key, **summarize([r for r in rows if r[by]==key])} for key in sorted({r[by] for r in rows})] + [{'group':'all',**summarize(rows)}]
+    # The saved cluster distinguishes postseason week 1 from regular week 1,
+    # and keeps each season's weeks separate in a multi-season report.
+    field = 'cluster' if by == 'week' else by
+    def week_order(key):
+        season, season_type, week = key.split('-')
+        return int(season), season_type != 'regular', int(week)
+    keys = sorted({r[field] for r in rows}, key=week_order if by == 'week' else None)
+    return [{'group':key, **summarize([r for r in rows if r[field]==key])} for key in keys] + [{'group':'all',**summarize(rows)}]
 
 
 def public_report(report):
     fields=('group','n','model_mae','model_mae_se','clusters','model_bias','model_bias_se',
-            'error_median','error_lo80','error_hi80','error_lo95','error_hi95','error_histogram')
+            'error_median','error_lo80','error_hi80','error_lo95','error_hi95','error_histogram','within_points')
     return {**report, 'error_definition':'predicted_home_margin_minus_actual_home_margin',
             'evaluated_model':'V7LDe75', 'includes_quarterbacks':False, 'includes_team_scores':False,
             **{period:{by:[{k:r[k] for k in fields} for r in rows]
@@ -68,6 +77,6 @@ if __name__ == '__main__':
     source=json.loads((root/'_cfb_data/forecast_inputs/evaluation.json').read_text())
     path=root/'assets/data/cfb/projections/backtest.json'
     saved=json.loads(path.read_text())
-    report={**saved,**{p:{by:grouped(source[p],by) for by in ('phase','season','tier')}
+    report={**saved,**{p:{by:grouped(source[p],by) for by in ('week','phase','season','tier')}
                       for p in ('development','holdout')}}
     path.write_text(json.dumps(public_report(report),allow_nan=False,separators=(',',':'))+'\n')

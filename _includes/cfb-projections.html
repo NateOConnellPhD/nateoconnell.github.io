@@ -117,30 +117,39 @@
       <details><summary>Fit details</summary><p class="small-note" data-projection-diagnostics></p><p class="small-note" data-projection-qb-status></p><p class="small-note">Daily refreshes reuse saved data and passing fits. New training inputs trigger a fit; a starter-only change updates forecasts using the saved fit. If checks fail, the previous forecast stays available. New-season inputs are checked automatically from July.</p></details>
     </section>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-backtest-title">
-      <h3 id="cfb-forecast-backtest-title">How past predictions compared with results</h3>
+      <h3 id="cfb-forecast-backtest-title">How close were past predictions?</h3>
       <p>These saved checks cover the earlier power model, before the quarterback and individual-score extensions. They do not measure the current model’s accuracy.</p>
       <p data-projection-backtest-summary></p>
       <div class="cfb-forecast-controls">
-        <label>Period<select data-projection-eval-period><option value="development">2023–2025 · development</option><option value="holdout">2026 · through week 12</option></select></label>
-        <label>Break down by<select data-projection-eval-group><option value="phase">Season phase</option><option value="season">Season</option><option value="tier">Game type</option></select></label>
+        <label>Period<select data-projection-eval-period><option value="holdout">2026 season</option><option value="development">2023–2025 · development</option></select></label>
       </div>
-      <div data-projection-error-summary hidden>
+      <div data-projection-accuracy-summary hidden>
         <dl class="cfb-forecast-metrics" aria-live="polite">
-          <div><dt>Average signed error (bias)</dt><dd data-projection-error-bias></dd></div>
-          <div><dt data-projection-error-range-label>Range of past errors</dt><dd data-projection-error-range></dd></div>
+          <div><dt>Within 3 points</dt><dd><span data-projection-within-3></span><small data-projection-within-3-count></small></dd></div>
+          <div><dt>Within 7 points</dt><dd><span data-projection-within-7></span><small data-projection-within-7-count></small></dd></div>
+          <div><dt>Within 10 points</dt><dd><span data-projection-within-10></span><small data-projection-within-10-count></small></dd></div>
+          <div><dt>Within 14 points</dt><dd><span data-projection-within-14></span><small data-projection-within-14-count></small></dd></div>
         </dl>
-        <p>Error means predicted home-team margin minus actual home-team margin, in points. Zero is an exact margin prediction; positive values overestimate the home team’s margin and negative values underestimate it. An average near zero means overestimates and underestimates balance. The spread shows how far individual predictions were off.</p>
-        <div class="cfb-forecast-error-chart" data-projection-error-chart></div>
-        <p class="small-note" data-projection-error-bias-note></p>
-        <p class="small-note">The selected range contains the middle 80% or 95% of the observed errors in these past games. It is not a confidence interval for the average or a predictive interval for a particular future game.</p>
-        <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Signed forecast errors by period and group"></div>
+        <p>These percentages measure how close the predicted winning margin was to the actual margin. Predicting a team to win by 7 when it wins by 10 counts as within 3 points. Each wider threshold includes the narrower ones.</p>
+        <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Weekly percentage of margin predictions within 3, 7, 10 and 14 points"></div>
       </div>
       <details>
         <summary>Technical accuracy measures</summary>
-        <div class="cfb-forecast-table" data-projection-evaluation-technical tabindex="0" role="region" aria-label="Absolute margin error by period and group"></div>
+        <div data-projection-error-summary hidden>
+          <dl class="cfb-forecast-metrics" aria-live="polite">
+            <div><dt>Average signed error (bias)</dt><dd data-projection-error-bias></dd></div>
+            <div><dt data-projection-error-range-label>Range of past errors</dt><dd data-projection-error-range></dd></div>
+          </dl>
+          <p>Error means predicted home-team margin minus actual home-team margin, in points. Zero is an exact margin prediction; positive values overestimate the home team’s margin and negative values underestimate it. An average near zero means overestimates and underestimates balance. The spread shows how far individual predictions were off.</p>
+          <div class="cfb-forecast-error-chart" data-projection-error-chart></div>
+          <p class="small-note" data-projection-error-bias-note></p>
+          <p class="small-note">The selected range contains the middle 80% or 95% of the observed errors in these past games. It is not a confidence interval for the average or a predictive interval for a particular future game.</p>
+          <div class="cfb-forecast-table" data-projection-evaluation-signed tabindex="0" role="region" aria-label="Weekly signed forecast errors"></div>
+        </div>
+        <div class="cfb-forecast-table" data-projection-evaluation-technical tabindex="0" role="region" aria-label="Weekly absolute margin error"></div>
         <p class="small-note">Mean absolute error (MAE) averages the magnitude of each margin error, ignoring its sign. It measures error size, not directional bias, and is not an interval. Its approximate confidence interval uses your selected coverage and describes uncertainty about that average, clustering by season and week. A group with only one week has no estimable cluster-based interval.</p>
+        <p class="small-note">These saved checks evaluate the original power model before the QB extension. They use the handoff’s fixed regular-season and CFP evaluation sample; other bowls and games outside that sample are excluded. The 2023–2025 seasons were used for model development. Weekly windows use earlier games, but some preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions. Backtests used two chains × 250 draws, separately from production checks.</p>
       </details>
-      <p class="small-note">These saved checks evaluate the original power model before the QB extension. They use the handoff’s fixed regular-season and CFP evaluation sample; other bowls and games outside that sample are excluded. The 2023–2025 seasons were used for model development. Weekly windows use earlier games, but some preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions. Backtests used two chains × 250 draws, separately from production checks.</p>
     </section>
     </div>
   </div>

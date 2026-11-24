@@ -131,6 +131,7 @@
 .cfb-forecast-metrics div { border-top: 3px solid #245a82; padding: .8rem; background: #e7f1f8; }
 .cfb-forecast-metrics dt { font-size: .85rem; }
 .cfb-forecast-metrics dd { margin: .4rem 0 0; font-size: clamp(1.2rem,2vw,1.8rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cfb-forecast-metrics dd small { display: block; margin-top: .3rem; font-size: .8rem; font-weight: 400; }
 .cfb-forecast-charts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1.5rem; }
 .cfb-forecast-charts svg { display: block; width: 100%; height: auto; }
 .cfb-forecast-charts svg text { font: 13px sans-serif; fill: #385369; }

@@ -191,7 +191,13 @@ scraping and the repository-secret-backed refresh have **not** been verified
 against live responses here. The first deployed run's feed summary must confirm
 them; parse/coverage failures preserve saved inputs and are visible as warnings.
 
-Historical validation displays signed error (predicted home margin minus actual
+Historical validation leads with the percentage and count of predicted margins
+within 3, 7, 10 and 14 points of the actual result, both overall and week by week.
+The default is this season's saved 2026 evaluation. The research phase selector
+is removed; weeks are ordered numerically, with seasons and postseason separated.
+Counts use inclusive absolute-error thresholds on unrounded game-level errors;
+the cutoffs overlap and do not change with the 80%/95% interval selector.
+Technical details contain signed error (predicted home margin minus actual
 home margin): its average bias, full observed distribution, and central 80%/95%
 empirical error ranges. A near-zero mean describes directional balance; it does
 not mean individual predictions are exact. Observed ranges are distinct from

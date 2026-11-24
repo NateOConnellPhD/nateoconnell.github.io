@@ -175,7 +175,7 @@
       if(!/^[a-z0-9-]+\.json$/.test(file))return Promise.reject(new Error('Invalid forecast file'));
       if(!cache.has(file)) {
         const pending=(async()=>{const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),20000);
-          try {const r=await fetch(new URL(file,base),{signal:abort.signal,cache:['index.json','qb-status.json'].includes(file)?'no-cache':'default'});
+          try {const r=await fetch(new URL(file,base),{signal:abort.signal,cache:['index.json','qb-status.json','backtest.json'].includes(file)?'no-cache':'default'});
             if(!r.ok)throw new Error('The saved projections could not be loaded.');return await r.json();
           } finally {clearTimeout(timer);}})();
         cache.set(file,pending);pending.catch(()=>cache.delete(file));
@@ -357,10 +357,34 @@
     }
     function renderEvaluation() {
       if(!backtest)return;
-      const period=el('eval-period').value||'development',group=el('eval-group').value||'phase',level=coverage(),z=normalCritical();
-      const overall=backtest[period].phase.find(r=>r.group==='all');
+      const period=el('eval-period').value||'holdout',level=coverage(),z=normalCritical();
+      const weekly=backtest[period]?.week;
+      const overall=weekly?.find(r=>r.group==='all');
+      if(!overall) {
+        el('accuracy-summary').hidden=true;el('error-summary').hidden=true;
+        el('backtest-summary').textContent='The weekly accuracy report has not been published yet.';
+        el('evaluation-technical').replaceChildren();return;
+      }
+      const weekLabel=r=>{
+        if(r.group==='all')return 'All games';
+        const [season,type,week]=r.group.split('-');
+        return `${period==='development'?season+' · ':''}${type==='postseason'?'Postseason week':'Week'} ${week}`;
+      };
       const ci=r=>Number.isFinite(r.model_mae_se)?`${fmt(Math.max(0,r.model_mae-z*r.model_mae_se))} to ${fmt(r.model_mae+z*r.model_mae_se)}`:'Not estimable from one week';
       el('backtest-summary').textContent=`${period==='development'?'2023–2025 development sample':'2026 retrospective reconstruction, through week '+backtest.through_week}: ${overall.n.toLocaleString()} games.`;
+      const thresholds=[3,7,10,14];
+      const hasCounts=r=>r.n>0&&thresholds.every(limit=>Number.isInteger(r.within_points?.[limit])&&r.within_points[limit]>=0&&r.within_points[limit]<=r.n);
+      const accuracy=(r,limit)=>`${(100*r.within_points[limit]/r.n).toFixed(1)}%`;
+      const availableCounts=hasCounts(overall)&&weekly.every(hasCounts);
+      el('accuracy-summary').hidden=!availableCounts;
+      if(availableCounts) {
+        for(const limit of thresholds) {
+          el('within-'+limit).textContent=accuracy(overall,limit);
+          el('within-'+limit+'-count').textContent=`${overall.within_points[limit].toLocaleString()} of ${overall.n.toLocaleString()} games`;
+        }
+        table(el('evaluation'),['Week','Games',...thresholds.map(limit=>`Within ${limit} points`)],weekly.map(r=>[
+          weekLabel(r),r.n,...thresholds.map(limit=>accuracy(r,limit))]));
+      } else el('backtest-summary').textContent+=' The within-points counts have not been published for this report.';
       const available=Number.isFinite(overall.model_bias)&&overall.error_histogram;
       el('error-summary').hidden=!available;
       if(available) {
@@ -371,10 +395,10 @@
           ? `Approximate ${level}% confidence interval for the average signed error: ${interval([overall.model_bias-z*overall.model_bias_se,overall.model_bias+z*overall.model_bias_se])} points, using season-week clusters. This estimates uncertainty in the average, not variation between games.`
           : 'A cluster-based confidence interval for the average needs more than one season-week.';
         renderErrorDistribution(overall);
-        table(el('evaluation'),['Group','Games','Average signed error (pts)',`Middle ${level}% of errors (pts)`],backtest[period][group].map(r=>[
-          r.group||'Unclassified',r.n,sign(r.model_bias),interval([r['error_lo'+level],r['error_hi'+level]])]));
+        table(el('evaluation-signed'),['Week','Games','Average signed error (pts)',`Middle ${level}% of errors (pts)`],weekly.map(r=>[
+          weekLabel(r),r.n,sign(r.model_bias),interval([r['error_lo'+level],r['error_hi'+level]])]));
       } else el('backtest-summary').textContent+=' The signed-error summary has not been published for this report.';
-      table(el('evaluation-technical'),['Group','Games','Margin MAE (pts)',`${level}% confidence interval for MAE`,'Season-week clusters'],backtest[period][group].map(r=>[r.group||'Unclassified',r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
+      table(el('evaluation-technical'),['Week','Games','Margin MAE (pts)',`${level}% confidence interval for MAE`,'Season-week clusters'],weekly.map(r=>[weekLabel(r),r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
     }
     async function selectSnapshot(id) {
       const turn=++sequence;draws=null;positions=null;el('content').hidden=true;el('status').textContent='Loading saved projections…';
@@ -421,10 +445,10 @@
       return initializing;
     }
     el('snapshot').addEventListener('change',()=>selectSnapshot(el('snapshot').value));
-    el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');qbStatus=null;initializing=null;initialize();});
+    el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');cache.delete('backtest.json');qbStatus=null;initializing=null;initialize();});
     el('coverage').addEventListener('change',()=>{renderRatings();renderGames();renderMatchup();renderEvaluation();});
     for(const key of ['home','away','site','horizon'])el(key).addEventListener('change',renderMatchup);
-    for(const key of ['eval-period','eval-group'])el(key).addEventListener('change',renderEvaluation);
+    el('eval-period').addEventListener('change',renderEvaluation);
     el('swap').addEventListener('click',()=>{const h=el('home').value;el('home').value=el('away').value;el('away').value=h;renderMatchup();});
     for(const key of ['week','search'])el(key).addEventListener(key==='search'?'input':'change',renderGames);
     for(const key of ['conference','limit','power-search'])el(key).addEventListener(key==='power-search'?'input':'change',renderRatings);

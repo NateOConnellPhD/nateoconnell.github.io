@@ -100,8 +100,8 @@ def run(folder):
                 'model':float(r['V7LDe75']), 'opener':float(r['O']), 'close':float(r['L'])})
         return result
     development=scores('scoreboard_games.csv'); current=scores('score2026_games.csv',2026)
-    back={'schema':'cfb-forecast-evaluation-v7','development':{by:evaluation.grouped(development,by) for by in ('phase','season','tier')},
-        'holdout':{by:evaluation.grouped(current,by) for by in ('phase','season','tier')}, 'through_week':12,
+    back={'schema':'cfb-forecast-evaluation-v7','development':{by:evaluation.grouped(development,by) for by in ('week','phase','season','tier')},
+        'holdout':{by:evaluation.grouped(current,by) for by in ('week','phase','season','tier')}, 'through_week':12,
         'caveat':bundle['caveats']['2026']}
     # Verify every published historical group and clustered SE against the handoff.
     for by in ('phase','season','tier'):

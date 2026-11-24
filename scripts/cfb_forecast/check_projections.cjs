@@ -108,6 +108,19 @@ async function controller(hash='',overrides={}) {
   assert.equal(direct.get('snapshot').value,index.latest);assert.equal(direct.get('status').textContent,'');
   const headers=element=>element.children[0].children[0].children[0].children.map(n=>n.textContent);
   const rows=element=>element.children[0].children[1].children.map(r=>r.children.map(c=>c.children[0].textContent));
+  const report=JSON.parse(fs.readFileSync(path.join(dir,'backtest.json')));
+  const checkAccuracy=(view,period)=>{
+    const overall=report[period].week.find(r=>r.group==='all');
+    assert.equal(view.get('accuracy-summary').hidden,false);
+    for(const limit of [3,7,10,14]) {
+      assert.equal(view.get('within-'+limit).textContent,`${(100*overall.within_points[limit]/overall.n).toFixed(1)}%`);
+      assert.equal(view.get('within-'+limit+'-count').textContent,`${overall.within_points[limit].toLocaleString()} of ${overall.n.toLocaleString()} games`);
+    }
+    assert.deepEqual(headers(view.get('evaluation')),['Week','Games','Within 3 points','Within 7 points','Within 10 points','Within 14 points']);
+    if(period==='holdout')assert.deepEqual(rows(view.get('evaluation')).map(r=>r[0]),Array.from({length:12},(_,i)=>`Week ${i+1}`).concat('All games'));
+  };
+  assert.equal(direct.get('eval-period').value,'holdout');assert.equal(direct.get('eval-group'),null);
+  checkAccuracy(direct,'holdout');
   const originalRange=direct.get('range').textContent,originalLine=direct.get('line').textContent;
   const originalProbability=direct.get('home-chance').textContent,originalRequests=direct.requests.length;
   const originalPower=rows(direct.get('powers'))[0][5];
@@ -117,7 +130,8 @@ async function controller(hash='',overrides={}) {
   assert.equal(direct.get('line').textContent,originalLine);assert.equal(direct.get('home-chance').textContent,originalProbability);
   assert.ok(headers(direct.get('powers')).includes('80% interval'));assert.notEqual(rows(direct.get('powers'))[0][5],originalPower);
   assert.match(direct.get('error-range-label').textContent,/80%/);assert.match(direct.get('error-bias-note').textContent,/80% confidence/);
-  assert.ok(headers(direct.get('evaluation')).includes('Middle 80% of errors (pts)'));
+  checkAccuracy(direct,'holdout');
+  assert.ok(headers(direct.get('evaluation-signed')).includes('Middle 80% of errors (pts)'));
   assert.ok(headers(direct.get('evaluation-technical')).includes('80% confidence interval for MAE'));
   await direct.get('snapshot').handlers.change();await direct.settle();
   assert.equal(direct.get('coverage').value,'80');assert.match(direct.get('range-label').textContent,/80%/);
@@ -168,6 +182,8 @@ async function controller(hash='',overrides={}) {
   const reverseQB=api.matchup(qbDraws,game.away,game.home,true,1);
   assert.ok(Math.abs(starter.pHome+reverseQB.pHome-1)<1e-12);
   assert.throws(()=>api.matchup(qbDraws,game.home,game.away,true,1,{home:'unknown'}),/Unknown quarterback/);
+  modern.get('eval-period').value='development';modern.get('eval-period').handlers.change();checkAccuracy(modern,'development');
   modern.get('eval-period').value='holdout';modern.get('eval-period').handlers.change();assert.match(modern.get('backtest-summary').textContent,/2026/);
+  checkAccuracy(modern,'holdout');
   console.log(JSON.stringify({checks:'projection probabilities, venue, signs, payload integrity, tab isolation, charts, caching, 80/95 interval selection',games:data.games.length,maxProbabilityError,maxMarginError}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
