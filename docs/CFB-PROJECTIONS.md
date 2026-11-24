@@ -2,7 +2,9 @@
 
 `/blog/cfb/#projections` is independent of earned-merit rankings. The predictive
 specification is the frozen `V7LDe75` handoff, represented by `ForecastConfig`.
-The public interface calls this game projections, without development labels.
+The public interface separates power ratings, game projections, and merit rankings.
+The implementation audit is in [CFB-FORECAST-PORT-AUDIT.md](CFB-FORECAST-PORT-AUDIT.md);
+the supplied model and historical estimator are executed directly from unchanged source.
 
 ## Model and data
 
@@ -15,6 +17,8 @@ The public interface calls this game projections, without development labels.
 - Learned preseason spread, exchangeable conference effects, Student-t noise
   with the same eight-point scale floor, and the 75/25 margin/expectancy blend.
   Sparse windows (at most 30 usable probabilities) use the specified 4.5 slope.
+  Expectancy comes from the FBS schedule; FCS-only games use actual margins,
+  matching the supplied product instead of expanding the efficiency target.
 - Home-field joint covariance comes from exactly three previous seasons.
 - Week 1 uses the specified Gaussian prior approximation. Later windows use
   four sequential NUTS chains with 2,000 warmup/retained draws per chain and
@@ -96,11 +100,10 @@ latent representations after diagnostics; caches keep only the current fit.
 The task-storage guard remains in place. Snapshot archives preserve past forecasts;
 a historical reconstruction cannot replace the latest current-season forecast.
 
-Browser matchup probabilities, intervals, and scheduled games use the same 1,000
-aligned rounded draws. For horizon h, strength is `theta_last + sqrt(h) * innovation`.
+Scheduled win probabilities and all model lines use full-posterior summaries.
+Exploratory matchup probabilities and charts use 1,000 aligned rounded draws. For horizon h, strength is `theta_last + sqrt(h) * innovation`.
 This preserves the weekly random walk's marginal forecast variance; it is not a
-joint simulation of an entire future schedule. Full-draw power summaries remain
-separate. There is no inference, API call, or charged service when browsing.
+joint simulation of an entire future schedule. Power summaries retain the original uncentered model scale and use all draws. There is no inference, API call, or charged service when browsing.
 
 Team details show the regression inputs and prior contributions, posterior weekly
 paths, and retrospective game evidence. Game-implied strength is descriptive,

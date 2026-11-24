@@ -28,38 +28,18 @@ def efficiency_target(margin, expectancy, config=CONFIG):
 def forecast_model(n_teams, home, away, venue, margin, host, home_prior, structure,
                    has_prior, prior_mean, prior_sd, fcs_mean, fcs_prior=None, fcs_sd=5.,
                    week=None, n_weeks=1, config=CONFIG):
+    # Execute the supplied model. This adapter only maps the saved-data schema;
+    # priors, likelihood, latent structure and parameter names live in reference/.
     import jax.numpy as jnp
-    import numpyro as nr
-    import numpyro.distributions as d
-    division = jnp.asarray(structure['division'])
-    conf = jnp.asarray(structure['conference'])
-    z = nr.sample('theta_z', d.Normal(0., 1.).expand((n_teams,)).to_event(1))
-    mu = nr.sample('mu_fcs', d.Normal(fcs_mean, 5.))
-    tau = nr.sample('tau_division', d.HalfNormal(30.).expand((2,)).to_event(1))
-    tc = nr.sample('tau_conf', d.ImproperUniform(d.constraints.positive, (), ()))
-    cz = nr.sample('conference_z', d.Normal(0., 1.).expand((len(structure['conference_labels']),)).to_event(1))
-    gamma = nr.deterministic('conference_effect', tc * cz)
-    s = nr.sample('s_prev', d.LogNormal(jnp.log(prior_sd), config.prior_log_sd))
-    scale = jnp.where(has_prior, s, tau[division])
-    if fcs_prior is not None: scale = jnp.where(fcs_prior, fcs_sd, scale)
-    theta = nr.deterministic('theta', jnp.where(division == 0, 0., mu) + gamma[conf]
-        + has_prior * prior_mean + scale * z)
-    hm, hL = home_prior
-    hz = nr.sample('home_z', d.Normal(0., 1.).expand((len(hm),)).to_event(1))
-    hv = nr.deterministic('home_effect', hm + hL @ hz)
-    nr.deterministic('home_adv', hv[0])
-    sigma = nr.deterministic('sigma', 8. + jnp.exp(nr.sample('eta_sigma', d.Normal(jnp.log(6.), .75))))
-    nu = nr.deterministic('nu', 2. + jnp.exp(nr.sample('eta_nu', d.Normal(jnp.log(5.), .9))))
-    if n_weeks > 1:
-        q = nr.sample('q', d.HalfNormal(config.drift_sd))
-        zw = nr.sample('walk_z', d.Normal(0., 1.).expand((n_teams, n_weeks - 1)).to_event(2))
-        walk = nr.deterministic('walk', jnp.concatenate([jnp.zeros((n_teams, 1)), jnp.cumsum(q * zw, axis=1)], axis=1))
-        nr.deterministic('theta_last', theta + walk[:, -1])
-        loc = theta[home] + walk[home, week] - theta[away] - walk[away, week]
-    else:
-        loc = theta[home] - theta[away]
-    loc = loc + venue * (hv[0] + jnp.where(host > 0, hv[host], 0.))
-    with nr.plate('games', len(home)): nr.sample('margin', d.StudentT(nu, loc, sigma), obs=margin)
+    from .reference.forecast_model import forecast_model as supplied_model
+    return supplied_model(hi=home, ai=away, site=venue, host_idx=host,
+        grp=jnp.asarray(structure['division']), n_teams=n_teams, n_groups=2,
+        hmu=home_prior[0], hL=home_prior[1], cl=jnp.asarray(structure['conference']),
+        n_clusters=len(structure['conference_labels']), has_prev=has_prior,
+        prev_mean=prior_mean, s_prev=prior_sd, fcs_mu=fcs_mean, fcs_sd=5.,
+        w=jnp.ones(len(home)), y=margin, learn_s=True, wk=week, n_weeks=n_weeks,
+        dynamic=n_weeks > 1, q_scale=config.drift_sd, conf_scale=None,
+        fcs_prior=fcs_prior, fcs_s=fcs_sd)
 
 
 def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws, target_accept=None):
@@ -78,7 +58,7 @@ def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws, target_a
     if target_accept is None: target_accept = .99 if warmup > 2000 else .97
     if not 0 < target_accept < 1: raise ValueError('Target acceptance must be between zero and one')
     sampler = MCMC(NUTS(forecast_model, target_accept_prob=target_accept, max_tree_depth=10,
-        init_strategy=init_to_value(values={'mu_fcs': gap, 'tau_division': jnp.array([10., 10.]), 'tau_conf': 5.})),
+        init_strategy=init_to_value(values={'mu_free': jnp.array([gap]), 'tau': jnp.array([10., 10.]), 'tau_conf': 5.})),
         num_warmup=warmup, num_samples=draws, num_chains=4, chain_method='sequential', progress_bar=False)
     data = {k: jnp.asarray(v) for k, v in inputs['data'].items()}; data['margin'] = jnp.asarray(target)
     sampler.run(jax.random.PRNGKey(seed), len(inputs['teams']), **data,
@@ -112,7 +92,7 @@ def diagnose(sampler):
     d.update(transition_details(samples, extra))
     # Diagnostics include all stochastic parameters. Persist only arrays needed
     # for prediction; duplicated latent/deterministic paths waste task storage.
-    keep = ('theta', 'theta_last', 'walk', 'q', 'home_effect', 'sigma', 'nu', 's_prev')
+    keep = ('theta', 'theta_last', 'walk', 'q', 'home_values', 'sigma', 'nu', 's_prev')
     saved = {k: v for k, v in samples.items() if k in keep}
     import jax
     jax.clear_caches()
@@ -133,7 +113,7 @@ def transition_details(samples, extra):
     for key, field in [('acceptance_by_chain','accept_prob'), ('step_size_by_chain','adapt_state.step_size')]:
         if field in extra: report[key] = np.asarray(extra[field]).mean(axis=1).tolist()
     if flags.any():
-        for name in ('mu_fcs','tau_division','tau_conf','s_prev','q','eta_sigma','eta_nu'):
+        for name in ('mu_free','tau','tau_conf','s_prev','q','eta_sigma','eta_nu'):
             if name not in samples: continue
             a = np.asarray(samples[name]); flat = a.reshape((-1,)+a.shape[2:])
             report['divergence_context'][name] = {'all_q05_q50_q95': np.quantile(flat,[.05,.5,.95],axis=0).tolist(),
@@ -146,7 +126,7 @@ def prediction_arrays(samples, inputs, target):
     flat = {k: v.reshape((-1,) + v.shape[2:]) for k, v in samples.items()}
     data = inputs['data']; host = np.asarray(data['host'])
     weeks = np.array([max(g['week']-1, 0) for g in inputs['games']])
-    hv = flat['home_effect'].mean(0)
+    hv = flat.get('home_values', flat.get('home_effect')).mean(0)
     path = flat['theta'][:, :, None] + flat.get('walk', np.zeros((len(flat['theta']), len(inputs['teams']), 1)))
     trajectory = path.mean(0)
     loc = trajectory[data['home'], weeks] - trajectory[data['away'], weeks]
@@ -161,7 +141,7 @@ def prediction_arrays(samples, inputs, target):
     z = np.random.default_rng(CONFIG.seed).standard_normal(last.shape)
     return {'theta': last + q[:, None] * z, 'theta_last': last, 'drift': q[:, None] * z,
             'q': q, 'trajectory_mean': trajectory, 'trajectory_sd': path.std(0),
-            'home_values': flat['home_effect'], 'sigma': flat['sigma'] * factor, 'nu': flat['nu']}, float(factor)
+            'home_values': flat.get('home_values', flat.get('home_effect')), 'sigma': flat['sigma'] * factor, 'nu': flat['nu']}, float(factor)
 
 
 def prior_arrays(inputs, prior, home, n=4000):

@@ -43,7 +43,7 @@
         <p data-projection-matchup-note></p>
         <div class="cfb-forecast-table" data-projection-line-parts tabindex="0" role="region" aria-label="How the projected margin adds up"></div>
         <div class="cfb-forecast-charts">
-          <div><h4>Uncertainty about team strength</h4><div data-projection-strength-chart></div><p class="small-note">Points above or below the average FBS team on a neutral field. Overlap means the evidence does not cleanly separate the teams.</p></div>
+          <div><h4>Uncertainty about team strength</h4><div data-projection-strength-chart></div><p class="small-note">Points on the model’s FBS reference scale. Differences between teams estimate neutral-field margins. Overlap means the evidence does not cleanly separate the teams.</p></div>
           <div><h4>How the game could turn out</h4><div data-projection-margin-chart></div><p class="small-note">This wider distribution adds game-to-game variation. An 80% range contains the middle 80% of simulated outcomes, conditional on the model.</p></div>
         </div>
       </div>
@@ -57,7 +57,7 @@
     </section>
     <section class="cfb-forecast-card" aria-labelledby="cfb-power-title">
       <h3 id="cfb-power-title">Power estimates &amp; uncertainty</h3>
-      <p>Power measures expected performance in points against an average FBS team on a neutral field. A team at +10 is estimated to be ten points better. This ordering measures predicted strength, separately from what teams have earned.</p>
+      <p>Power measures predicted strength on the model’s FBS reference scale. If one team is rated 10 points above another, it is expected to win by about 10 on a neutral field. This ordering measures predicted strength, separately from what teams have earned.</p>
       <div class="cfb-forecast-controls">
         <label>Find a team<input type="search" data-projection-power-search placeholder="Team name"></label>
         <label>Conference<select data-projection-conference></select></label>

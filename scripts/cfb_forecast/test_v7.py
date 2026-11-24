@@ -18,6 +18,12 @@ class V7Tests(unittest.TestCase):
     def setUpClass(cls):
         cls.bundle=json.loads((ROOT/'_cfb_data/forecast_inputs/evidence.json').read_text())
 
+    def test_supplied_model_source_is_unchanged(self):
+        import hashlib
+        folder=Path(__file__).parent/'reference'
+        for name, expected in json.loads((folder/'provenance.json').read_text())['sha256'].items():
+            self.assertEqual(hashlib.sha256((folder/name).read_bytes()).hexdigest(),expected,name)
+
     def test_frozen_2026_prior_replay(self):
         p=priors.build(self.bundle,2026)
         self.assertEqual(p['training_games'],1005)
@@ -54,9 +60,9 @@ class V7Tests(unittest.TestCase):
         import jax.numpy as jnp
         from numpyro.infer.util import log_density
         jax.config.update('jax_enable_x64',True)
-        params={'theta_z':jnp.array([1.,0.,1.]),'mu_fcs':-20.,'tau_division':jnp.array([10.,10.]),
-            'tau_conf':1.,'conference_z':jnp.zeros(3),'s_prev':6.,'home_z':jnp.zeros(3),
-            'eta_sigma':np.log(6.),'eta_nu':np.log(5.),'q':2.,'walk_z':jnp.array([[1.,2.],[0.,0.],[-1.,-2.]])}
+        params={'z':jnp.array([1.,0.,1.]),'mu_free':jnp.array([-20.]),'tau':jnp.array([10.,10.]),
+            'tau_conf':1.,'w':jnp.zeros(3),'s_prev':6.,'home_z':jnp.zeros(3),
+            'eta_sigma':np.log(6.),'eta_nu':np.log(5.),'q':2.,'zw':jnp.array([[1.,2.],[0.,0.],[-1.,-2.]])}
         kw={'n_teams':3,'home':jnp.array([0,0,2]),'away':jnp.array([1,1,1]),'venue':jnp.array([1,0,1]),
             'margin':jnp.array([8.,10.,-5.]),'host':jnp.array([1,1,0]),
             'home_prior':(jnp.array([2.,1.,-1.]),jnp.eye(3)),
@@ -67,7 +73,8 @@ class V7Tests(unittest.TestCase):
         self.assertTrue(np.isfinite(density))
         np.testing.assert_allclose(trace['theta']['value'],[8.,0.,-10.])
         np.testing.assert_allclose(trace['theta_last']['value'],[14.,0.,-16.])
-        np.testing.assert_allclose(trace['margin']['fn'].loc,[11.,10.,-14.])
+        from scipy.stats import t
+        self.assertAlmostEqual(float(trace['lik']['fn'].log_factor), float(t.logpdf(np.array([8.,10.,-5.]),7.,loc=[11.,10.,-14.],scale=14.).sum()))
 
     def test_drift_horizon_and_shared_table_draws(self):
         n=1000; z=np.linspace(-2,2,n)
@@ -78,7 +85,7 @@ class V7Tests(unittest.TestCase):
         g={'home':'1','away':'2','neutral':False,'week':13,'id':1,'ahead':1}
         public,draws=export.build(arrays,teams,['national','1','2'],[g,{**g,'id':2,'ahead':4}],{}, {}, {})
         self.assertGreater(public['games'][1]['margin_hi80']-public['games'][1]['margin_lo80'],public['games'][0]['margin_hi80']-public['games'][0]['margin_lo80'])
-        # Persisted centered last + sqrt(ahead)*innovation must be the tabulated forecast.
+        # Persisted supplied-scale last + sqrt(ahead)*innovation must be the tabulated forecast.
         from scipy.stats import t
         for row in public['games']:
             loc=np.array(draws['last']['1'])-draws['last']['2']+np.sqrt(row['ahead'])*(np.array(draws['drift']['1'])-draws['drift']['2'])+np.array(draws['home']['national'])+draws['home']['1']

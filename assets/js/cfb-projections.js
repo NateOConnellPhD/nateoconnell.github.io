@@ -42,7 +42,7 @@
       if(!Array.isArray(v)||v.length!==n||v.some(x=>!Number.isFinite(x)))throw new Error('Forecast draws do not align');
     if(d.last&&Object.keys(d.teams).some(id=>!d.last[id]||!d.drift?.[id]))throw new Error('Missing weekly drift draws');
     if(d.sigma.some(x=>x<=0)||d.nu.some(x=>x<=2))throw new Error('Invalid predictive scale');
-    if(d.means)for(const key of ['teams','home'])for(const id of Object.keys(d[key]))
+    if(d.means)for(const key of d.last?['last','drift','home']:['teams','home'])for(const id of Object.keys(d[key]))
       if(!Number.isFinite(d.means[key]?.[id]))throw new Error('Missing full-draw means');
     return d;
   }
@@ -55,12 +55,13 @@
     const loc=strength.map((v,i)=>v+(neutral?0:d.home.national[i]+(d.home[home]?.[i]||0)));
     const pred=loc.flatMap((v,i)=>[v+d.noise[0][i],v+d.noise[1][i]]).sort((a,b)=>a-b);
     const p=mean(loc.map((v,i)=>tcdf(v/d.sigma[i],d.nu[i])));
-    const sorted=[...loc].sort((a,b)=>a-b),margin=d.means?d.means.teams[home]-d.means.teams[away]
+    const fullPower=(id,values)=>d.means?.last?d.means.last[id]+Math.sqrt(ahead)*d.means.drift[id]:(d.means?.teams?.[id]??mean(values));
+    const sorted=[...loc].sort((a,b)=>a-b),margin=d.means?fullPower(home,h)-fullPower(away,a)
       +(neutral?0:d.means.home.national+(d.means.home[home]||0)):mean(loc);
     const result={margin,homeLine:-margin,pHome:p,pAway:1-p,pBetter:mean(strength.map(v=>v>0?1:v===0?.5:0)),
       expectedMedian:quantile(sorted,.5),expected80:[quantile(sorted,.1),quantile(sorted,.9)],
       range80:[quantile(pred,.1),quantile(pred,.9)],range95:[quantile(pred,.025),quantile(pred,.975)],
-      homeDraws:h,awayDraws:a,pred,parts:{home:d.means?.teams[home]??mean(h),away:d.means?.teams[away]??mean(a),national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
+      homeDraws:h,awayDraws:a,pred,parts:{home:fullPower(home,h),away:fullPower(away,a),national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
     if(d.gaussian) {
       const g=d.gaussian,hg=g.teams[home],ag=g.teams[away],slot=Math.max(0,g.home_ids.indexOf(home));
       const national=neutral?0:g.home_mean[0],stadium=neutral||!slot?0:g.home_mean[slot];
@@ -138,7 +139,7 @@
         const h=el('home').value,a=el('away').value,r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1));
         // Retain the full-draw probabilities for a scheduled matchup.
         const official=data.games.find(g=>g.home===h&&g.away===a&&g.neutral===(el('site').value==='neutral'));
-        if(official&&!draws.last&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
+        if(official&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
         el('matchup-error').textContent='';el('matchup-result').hidden=false;
         el('line').textContent=line(r.margin);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
         el('home-label').textContent=`${team(h)} wins`;el('away-label').textContent=`${team(a)} wins`;
@@ -235,7 +236,7 @@
         el('diagnostics').textContent=`${m.source}. ${diag.scope||'All retained parameters were checked for convergence and effective sample size.'} ${m.prior_only?'':`Maximum ${diag.max_rhat_theta!=null?'theta ':''}R̂: ${(diag.max_rhat_theta??diag.max_rank_normalized_rhat).toFixed(4)}. Divergences: ${diag.divergences}.`} Home-field history: ${m.home_years.join(', ')}. Preseason coefficients trained on ${m.prior_training_seasons.join(', ')}.`;
         el('draw-note').textContent='Loading saved draws for the matchup tool…';el('matchup-result').hidden=true;
         const loaded=validateDraws(await read(data.draws_file));if(turn!==sequence)return;draws=loaded;el('horizon').disabled=!draws.last;
-        el('draw-note').textContent=draws.gaussian?'Preseason projections use the Gaussian approximation from the annual prior and home-field covariance. Charts use saved prior draws; no current-season sampler has run.':draws.last?`Matchup probabilities, model lines, and scheduled games use the same ${m.matchup_draws.toLocaleString()} aligned draws. Power summaries use all ${m.draws.toLocaleString()} draws. Future drift grows with the selected horizon. These are numerical approximations; no model runs while you browse.`:`Model lines and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities and charts use ${m.matchup_draws.toLocaleString()} aligned draws, with two simulated games per draw; these are numerical approximations. No model is run in your browser.`;
+        el('draw-note').textContent=draws.gaussian?'Preseason projections use the Gaussian approximation from the annual prior and home-field covariance. Charts use saved prior draws; no current-season sampler has run.':draws.last?`Power summaries, model lines, and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities and charts use ${m.matchup_draws.toLocaleString()} aligned draws. Future drift grows with the selected horizon. These are numerical approximations; no model runs while you browse.`:`Model lines and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities and charts use ${m.matchup_draws.toLocaleString()} aligned draws, with two simulated games per draw; these are numerical approximations. No model is run in your browser.`;
         renderMatchup();
       } catch(e){if(turn===sequence){el('status').textContent=`${e.message} Use Reload to try again.`;el('draw-note').textContent='Matchup draws unavailable.';}}
     }

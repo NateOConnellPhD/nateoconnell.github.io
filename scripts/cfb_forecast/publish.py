@@ -20,9 +20,10 @@ PUBLIC = ROOT / 'assets/data/cfb/projections'
 
 
 def source_identity():
-    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'config.py', 'priors.py', 'markets.py')] + [ROOT / 'scripts/cfb' / p for p in (
+    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'config.py', 'priors.py', 'markets.py', 'home.py')] + [ROOT / 'scripts/cfb' / p for p in (
         'historical_home.py', 'home_history_inputs.py', 'season_inputs.py', 'sync_data.py',
         'game_status_corrections.json', 'venue_corrections.json', 'full_fit_retry.py', 'requirements.txt')]
+    files += sorted(p for p in (Path(__file__).parent / 'reference').glob('*') if p.suffix in ('.py','.json'))
     return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
 
 
@@ -45,7 +46,7 @@ def prepare(season, week=None):
 def fit_window(inputs, prior, expectancy, training_key):
     """Shared fitting path for a live refresh or a historical forecast window."""
     from full_fit_retry import checked_full_fit
-    from historical_home import load_or_estimate
+    from cfb_forecast.home import load_or_estimate
     home = load_or_estimate(inputs, TASK / 'home')
     if not inputs['games']:
         return forecast.prior_arrays(inputs, prior, home), home, {
@@ -67,12 +68,8 @@ def fit_window(inputs, prior, expectancy, training_key):
         'prior_sd_posterior':float(samples['s_prev'].mean()), 'drift_sd_posterior':float(samples['q'].mean()) if 'q' in samples else 0.}
 
 
-def complete(season, week=None):
-    inputs, prior, expectancy, games, observed, training_key, key = request(season, week)
-    if (PUBLIC / 'index.json').exists():
-        index = json.loads((PUBLIC / 'index.json').read_text())
-        if any(r['input_key'] == key for r in index['snapshots']): return
-    arrays, home, fit_meta = fit_window(inputs, prior, expectancy, training_key)
+def make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home, fit_meta, week=None):
+    season = inputs['season']
     teams = [{'id': str(t['id']), 'name': t['name'], 'division': t['classification'], 'conference': t['conference']}
              for t in inputs['teams']]
     home_ids = ['national'] + [str(t) for t in home['fbs_ids']]
@@ -93,6 +90,16 @@ def complete(season, week=None):
     market = markets.read(season)
     public['meta']['market_observed_at'] = market['observed_at']
     for game in public['games']: game['market'] = market['games'].get(str(game['id']))
+    return public, draws
+
+
+def complete(season, week=None):
+    inputs, prior, expectancy, games, observed, training_key, key = request(season, week)
+    if (PUBLIC / 'index.json').exists():
+        index = json.loads((PUBLIC / 'index.json').read_text())
+        if any(r['input_key'] == key for r in index['snapshots']): return
+    arrays, home, fit_meta = fit_window(inputs, prior, expectancy, training_key)
+    public, draws = make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home, fit_meta, week)
     row = export.write(public, draws, PUBLIC)
     print(json.dumps({'published': row, 'fit_reused': fit_meta['fit_reused'], 'api_requests': 0}))
     # Only this isolated forecasting job's cache: keep the current passing fit.

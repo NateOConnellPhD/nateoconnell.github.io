@@ -77,7 +77,11 @@ def load(season, root=DATA, prior_directory=PRIORS, forecast_week=None):
         eligible = [{**g, 'completed': False} for g in candidates]
         upcoming = schedule_rows(eligible, inputs['teams'], first - dt.timedelta(microseconds=1))
         observed = first
-    expectancy = [by_id[g['id']].get('homePostgameWinProbability') for g in inputs['games']]
+    # make_forecasts.py obtains expectancy from the FBS schedule mirror.
+    # FCS-only games retain their actual margin, even if the broader API feed
+    # supplies a probability. Expanding that target is a model-input change.
+    expectancy = [by_id[g['id']].get('homePostgameWinProbability')
+                  if g['home_fbs'] or g['away_fbs'] else None for g in inputs['games']]
     through = max((g['week'] for g in inputs['games']), default=0)
     upcoming = [g for g in upcoming if g['season_type'] != 'regular' or g['week'] > through]
     inputs['forecast_week'] = forecast_week or through + 1

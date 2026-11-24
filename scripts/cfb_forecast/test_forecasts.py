@@ -32,7 +32,8 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(row['home_margin'], 11.)
         self.assertEqual(row['home_line'], -11.)
         self.assertAlmostEqual(row['p_home'], t.cdf(11 / 12, 7))
-        self.assertAlmostEqual(public['ratings'][0]['mean'], 4.)
+        self.assertAlmostEqual(public['ratings'][0]['mean'], 8.)
+        self.assertAlmostEqual(public['ratings'][0]['lo95'], float(np.quantile(arrays['theta'][:,0],.025)))
         self.assertEqual(len(draws['sigma']), 1000)
         self.assertTrue(np.allclose(np.array(draws['teams']['a']) - draws['teams']['b'], 8.))
 
@@ -56,8 +57,8 @@ class ForecastTests(unittest.TestCase):
         import jax.numpy as jnp
         from numpyro.infer.util import log_density
         jax.config.update('jax_enable_x64', True)
-        values = {'theta_z': jnp.array([1., 0., -1.]), 'mu_fcs': -15., 'tau_division': jnp.array([10., 10.]),
-                  'tau_conf': 5., 'conference_z': jnp.zeros(3), 's_prev': 6., 'home_z': jnp.zeros(3),
+        values = {'z': jnp.array([1., 0., -1.]), 'mu_free': jnp.array([-15.]), 'tau': jnp.array([10., 10.]),
+                  'tau_conf': 5., 'w': jnp.zeros(3), 's_prev': 6., 'home_z': jnp.zeros(3),
                   'eta_sigma': np.log(6.), 'eta_nu': np.log(5.)}
         kwargs = {'n_teams': 3, 'home': jnp.array([0, 1, 2]), 'away': jnp.array([1, 0, 0]),
             'venue': jnp.array([1, 0, 1]), 'margin': jnp.array([11., -8., -20.]), 'host': jnp.array([1, 2, 0]),
@@ -68,7 +69,7 @@ class ForecastTests(unittest.TestCase):
         density, trace = log_density(forecast.forecast_model, (), kwargs, values)
         self.assertTrue(np.isfinite(density))
         self.assertTrue(np.allclose(trace['theta']['value'], [8., 0., -25.]))
-        self.assertTrue(np.allclose(trace['margin']['fn'].loc, [11., -8., -31.]))
+        self.assertAlmostEqual(float(trace['lik']['fn'].log_factor), float(t.logpdf(np.array([11.,-8.,-20.]),7.,loc=[11.,-8.,-31.],scale=14.).sum()))
         self.assertEqual(float(trace['sigma']['value']), 14.)
 
     def test_efficiency_blend_training_only_missing_fallback(self):
@@ -120,7 +121,7 @@ class ForecastTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as tmp:
             with patch.object(publish, 'TASK', Path(tmp) / 'task'), patch.object(publish, 'PUBLIC', Path(tmp) / 'public'), \
                  patch.object(source, 'load', side_effect=load), \
-                 patch('historical_home.load_or_estimate', return_value=home), \
+                 patch('cfb_forecast.home.load_or_estimate', return_value=home), \
                  patch.object(forecast, 'fit', return_value=None) as fitter, \
                  patch.object(forecast, 'diagnose', return_value=(samples, {'sampling_checks_passed': True}, {})):
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)

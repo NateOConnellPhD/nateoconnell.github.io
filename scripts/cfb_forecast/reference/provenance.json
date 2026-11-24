@@ -1,0 +1,9 @@
+{
+  "source": "User-supplied mom_forecast_v7/code",
+  "sha256": {
+    "forecast_model.py": "3b157496082b15eb76e778341ad579229a1be78587a8c88c31025423f488911b",
+    "historical_home.py": "3a5d6402bbc471ed982d331f4ecae229c0b8157376d32f5ab46127e53246b0cb",
+    "priors_v7.py": "76ba3aa8c5cad0dbe613e457cb8bdc6f32bca1d89c1f070aaafc876e20bec067",
+    "make_forecasts.py": "3ce293c6c10aa92856c2d7863e11bf8d5c2de95ebd8687f940eb9e246f967e28"
+  }
+}

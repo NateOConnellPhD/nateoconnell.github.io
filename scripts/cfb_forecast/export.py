@@ -25,14 +25,13 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
     if len(ix) != nt or len(hn) != len(home_ids) or home_ids[0] != 'national': raise ValueError('Invalid forecast roster')
     fbs = [i for i, team in enumerate(teams) if team['division'] == 'fbs']
     if not fbs: raise ValueError('No FBS power estimates')
-    # The reported scale is points relative to the average FBS team in each draw.
-    # Centering cancels in every matchup; preserve the joint draws and covariance.
-    centered = th - th[:, fbs].mean(1)[:, None]
+    # Preserve the supplied model scale, including uncertainty in its level.
+    # Subtracting the realized FBS mean changes marginal rating intervals.
     ranks = (-th[:, fbs]).argsort(axis=1).argsort(axis=1) + 1
     ratings = []
     for j, col in enumerate(fbs):
         team = teams[col]; key = team['id']
-        ratings.append({**team, **summary(centered[:, col]), 'record': records.get(key),
+        ratings.append({**team, **summary(th[:, col]), 'record': records.get(key),
             'prior_mean': prior_means.get(key), 'rank_median': float(np.median(ranks[:, j])),
             'rank_lo80': float(np.quantile(ranks[:, j], .1)), 'rank_hi80': float(np.quantile(ranks[:, j], .9)),
             **{f'p_top{k}': float((ranks[:, j] <= k).mean()) for k in (1, 4, 12, 25)}})
@@ -43,7 +42,7 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
     rng = np.random.default_rng(20261122)
     noise = sigma[selected, None] * rng.standard_t(nu[selected, None], (len(selected), 2))
     rnd = lambda a: np.round(a, 5).tolist()
-    browser = {'schema': SCHEMA, 'teams': {team['id']: rnd(centered[selected, i]) for i, team in enumerate(teams)},
+    browser = {'schema': SCHEMA, 'teams': {team['id']: rnd(th[selected, i]) for i, team in enumerate(teams)},
                'home': {key: rnd(hv[selected, i]) for i, key in enumerate(home_ids)},
                'sigma': rnd(sigma[selected]), 'nu': rnd(nu[selected]), 'noise': rnd(noise.T)}
     dynamic = 'drift' in arrays
@@ -51,17 +50,18 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
         last = np.asarray(arrays['theta_last']); drift = np.asarray(arrays['drift'])
         if last.shape != th.shape or drift.shape != th.shape or not np.isfinite(last).all() or not np.isfinite(drift).all():
             raise ValueError('Invalid weekly drift arrays')
-        last = last - last[:, fbs].mean(1)[:, None]
-        drift = drift - drift[:, fbs].mean(1)[:, None]
         browser['last'] = {team['id']: rnd(last[selected,i]) for i,team in enumerate(teams)}
         browser['drift'] = {team['id']: rnd(drift[selected,i]) for i,team in enumerate(teams)}
+        browser['means'] = {'last':{team['id']:float(last[:,i].mean()) for i,team in enumerate(teams)},
+            'drift':{team['id']:float(drift[:,i].mean()) for i,team in enumerate(teams)},
+            'home':{key:float(hv[:,i].mean()) for i,key in enumerate(home_ids)}}
         del browser['teams']  # next-week draws are last + innovation, not another download
     else:
-        browser['means'] = {'teams': {team['id']: float(centered[:, i].mean()) for i, team in enumerate(teams)},
+        browser['means'] = {'teams': {team['id']: float(th[:, i].mean()) for i, team in enumerate(teams)},
                             'home': {key: float(hv[:, i].mean()) for i, key in enumerate(home_ids)}}
     if 'gaussian_mean' in arrays:
-        gm=np.asarray(arrays['gaussian_mean']); center=gm[fbs].mean()
-        browser['gaussian']={'teams':{team['id']:{'mean':float(gm[i]-center),'variance':float(arrays['gaussian_var'][i])} for i,team in enumerate(teams)},
+        gm=np.asarray(arrays['gaussian_mean'])
+        browser['gaussian']={'teams':{team['id']:{'mean':float(gm[i]),'variance':float(arrays['gaussian_var'][i])} for i,team in enumerate(teams)},
             'home_ids':home_ids,'home_mean':np.asarray(arrays['gaussian_home_mean']).tolist(),
             'home_cov':np.asarray(arrays['gaussian_home_cov']).tolist(), 'sigma':float(arrays['gaussian_sigma'])}
     rows = []
@@ -71,11 +71,13 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
         if dynamic:
             ahead = game.get('ahead',1)
             if type(ahead) is not int or not 1 <= ahead <= 52: raise ValueError('Invalid forecast horizon')
-            # Exactly the browser's rounded joint draws for tables and matchup probabilities.
-            loc = np.array(browser['last'][h]) - browser['last'][a] + np.sqrt(ahead) * (np.array(browser['drift'][h]) - browser['drift'][a])
-            if not game['neutral']: loc += np.array(browser['home']['national']) + np.array(browser['home'].get(h,0.))
-            p = float(t.cdf(loc / np.array(browser['sigma']), browser['nu']).mean())
-            simulated = (loc[:,None] + np.array(browser['noise']).T).ravel()
+            # Report full-posterior means and probabilities, as predict() does
+            # in the supplied code. Browser thinning is only for exploration.
+            strength = np.asarray(arrays['theta_last']) + np.sqrt(ahead) * np.asarray(arrays['drift'])
+            loc = strength[:, ix[h]] - strength[:, ix[a]]
+            if not game['neutral']: loc += hv[:, 0] + (hv[:, host] if host else 0.)
+            p = float(t.cdf(loc / sigma, nu).mean())
+            simulated = (loc[selected,None] + noise).ravel()
         else:
             loc = th[:, ix[h]] - th[:, ix[a]]
             if not game['neutral']: loc = loc + hv[:, 0] + (hv[:, host] if host else 0.)
@@ -92,7 +94,7 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
         rows.append({**game, 'home_margin':mean, 'home_line':-mean, 'p_home':p,
             'margin_lo80':float(np.quantile(simulated,.1)), 'margin_hi80':float(np.quantile(simulated,.9)),
             'margin_lo95':float(np.quantile(simulated,.025)), 'margin_hi95':float(np.quantile(simulated,.975)), **intervals})
-    public = {'schema': SCHEMA, 'meta': {**meta, 'draws':n, 'matchup_draws':len(selected)},
+    public = {'schema': SCHEMA, 'meta': {**meta, 'rating_scale':'supplied-model', 'draws':n, 'matchup_draws':len(selected)},
               'teams':teams, 'ratings':ratings, 'games':rows}
     return public, browser
 
@@ -103,7 +105,6 @@ def add_details(public, arrays, inputs, prior, home_ids, expectancy):
     from .model import efficiency_target
     teams=public['teams']; ix={t['id']:i for i,t in enumerate(teams)}
     fbs=[i for i,t in enumerate(teams) if t['division']=='fbs']
-    baseline=float(np.asarray(arrays['theta'])[:,fbs].mean())
     hm=np.asarray(arrays['home_values']).mean(0); hn={t:i for i,t in enumerate(home_ids)}
     trajectory=arrays.get('trajectory_mean'); spread=arrays.get('trajectory_sd')
     details={}
@@ -113,7 +114,7 @@ def add_details(public, arrays, inputs, prior, home_ids, expectancy):
         if t['division']=='fcs' and key in prior.get('fcs_mean_by_id',{}):
             row['fcs_prior']={'mean':prior['fcs_gap']+prior['fcs_mean_by_id'][key], 'deviation':prior['fcs_mean_by_id'][key], 'sd':prior['fcs_sd']}
         if trajectory is not None:
-            row['path']=[{'week':w+1,'mean':float(m-baseline),'sd':float(spread[ix[key],w])} for w,m in enumerate(trajectory[ix[key]])]
+            row['path']=[{'week':w+1,'mean':float(m),'sd':float(spread[ix[key],w])} for w,m in enumerate(trajectory[ix[key]])]
         details[key]=row
     if inputs['games']:
         target,_,_=efficiency_target(inputs['data']['margin'],expectancy)
@@ -122,7 +123,7 @@ def add_details(public, arrays, inputs, prior, home_ids, expectancy):
             edge=0. if g.get('neutral_site',False) else float(hm[0]+(hm[slot] if slot else 0.))
             for team,opp,sign in ((home,away,1),(away,home,-1)):
                 w=max(g['week']-1,0)
-                opp_strength=float(trajectory[ix[opp],w]-baseline) if trajectory is not None else None
+                opp_strength=float(trajectory[ix[opp],w]) if trajectory is not None else None
                 details[team]['games'].append({'id':g['id'],'week':g['week'],'date':g['start_date'],'opponent':opp,
                     'site':'neutral' if g.get('neutral_site',False) else ('home' if sign==1 else 'away'),
                     'margin':sign*inputs['data']['margin'][j], 'target':float(sign*target[j]), 'home_edge':sign*edge,
