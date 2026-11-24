@@ -11,7 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts/cfb'))
-from cfb_forecast import inputs as source, model as forecast, export, markets
+from cfb_forecast import inputs as source, model as forecast, export, qb, qb_data, scores
 from cfb_forecast.config import CONFIG
 from sync_data import digest
 
@@ -20,7 +20,7 @@ PUBLIC = ROOT / 'assets/data/cfb/projections'
 
 
 def source_identity():
-    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'config.py', 'priors.py', 'markets.py', 'home.py')] + [ROOT / 'scripts/cfb' / p for p in (
+    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'scores.py', 'config.py', 'priors.py', 'home.py', 'qb.py', 'qb_data.py', 'qb_extract.py')] + [ROOT / 'scripts/cfb' / p for p in (
         'historical_home.py', 'home_history_inputs.py', 'season_inputs.py', 'sync_data.py',
         'game_status_corrections.json', 'venue_corrections.json', 'full_fit_retry.py', 'requirements.txt')]
     files += sorted(p for p in (Path(__file__).parent / 'reference').glob('*') if p.suffix in ('.py','.json'))
@@ -29,8 +29,11 @@ def source_identity():
 
 def request(season, week=None):
     inputs, prior, expectancy, games, observed, training_key = source.load(season, forecast_week=week)
+    inputs['score_rows'] = scores.load_rows(inputs)
     # Observation timestamps alone do not trigger fitting or publication.
-    key = digest({'training_key': training_key, 'prior': prior, 'games': games, 'market': markets.read(season)['games'], 'source': source_identity()})
+    key = digest({'training_key': training_key, 'prior': prior, 'games': games,
+                  'scores': inputs['score_rows'],
+                  'qb': qb_data.identity(season, historical=week is not None), 'source': source_identity()})
     return inputs, prior, expectancy, games, observed, training_key, key
 
 
@@ -55,7 +58,7 @@ def fit_window(inputs, prior, expectancy, training_key):
             'noise_rescale': 1., 'efficiency_games': 0, 'efficiency_scale': None}
     target, scale, count = forecast.efficiency_target(inputs['data']['margin'], expectancy)
     identity = {'forecast': CONFIG.identity(), 'training_key': training_key,
-        'source': {k:v for k,v in source_identity().items() if not k.endswith(('/export.py','/publish.py','/markets.py'))},
+        'source': {k:v for k,v in source_identity().items() if not k.endswith(('/export.py','/publish.py','/scores.py'))},
         'home': digest(home), 'gap': prior['fcs_gap'],
         'packages': {p:version(p) for p in ('numpy','scipy','jax','jaxlib','numpyro','arviz')}, 'seed':CONFIG.seed, 'chains':4}
     samples, report, fit_key, reused = checked_full_fit(identity, TASK / 'forecast-fits',
@@ -86,11 +89,24 @@ def make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home,
         'prior_training_seasons': prior['training_seasons'], 'prior_caveat': prior['caveat'],
         'input_observations': prior.get('input_observations', {}),
         'forecast_week': inputs.get('forecast_week', week), 'historical_reconstruction': week is not None}
+    if 'qb' in inputs:
+        quarterbacks=inputs['qb']; qt=quarterbacks['teams']
+        meta.update(model='forecast-v7-qb', quarterbacks=quarterbacks['meta'])
+        games=[{**g,'qb_x_home':qt[g['home']]['x'],'qb_x_away':qt[g['away']]['x'],
+            'home_qb':qt[g['home']]['name'],'away_qb':qt[g['away']]['name']} for g in games]
     public, draws = export.build(arrays, teams, home_ids, games, meta, prior['mean_by_id'], records)
+    if 'qb' in inputs:
+        import numpy as np
+        lam=float(np.asarray(arrays['lam']).mean())
+        public['quarterbacks']=qt
+        public['qb_importance']=[{**r,'importance_pts':lam*r['importance_pts']} for r in quarterbacks['importance']]
+        public['meta']['qb_lambda']=lam
+        draws['quarterbacks']={key:{'x':v['x'],'starter':v['starter'],
+            'options':{p['id']:p['x'] for p in v['options']}} for key,v in qt.items()}
+        for r in public['ratings']:
+            r.update(qb_now=qt[r['id']]['name'],qb_adjustment=lam*qt[r['id']]['x'])
+            r['rating_qb_now']=r['mean']+r['qb_adjustment']
     export.add_details(public, arrays, inputs, prior, home_ids, expectancy)
-    market = markets.read(season)
-    public['meta']['market_observed_at'] = market['observed_at']
-    for game in public['games']: game['market'] = market['games'].get(str(game['id']))
     return public, draws
 
 
@@ -99,8 +115,18 @@ def complete(season, week=None):
     if (PUBLIC / 'index.json').exists():
         index = json.loads((PUBLIC / 'index.json').read_text())
         if any(r['input_key'] == key for r in index['snapshots']): return
+    quarterbacks=qb.load(inputs,games,observed,cache=TASK/'qb',historical=week is not None)
+    inputs.update(qbx=quarterbacks['training'],qb=quarterbacks)
+    training_key=digest({'base':training_key,'qb':quarterbacks['training_key']})
     arrays, home, fit_meta = fit_window(inputs, prior, expectancy, training_key)
+    if 'lam' not in arrays and fit_meta.get('prior_only'):
+        import numpy as np
+        arrays['lam']=np.random.default_rng(CONFIG.seed+1).normal(1.,.5,len(arrays['theta']))
     public, draws = make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home, fit_meta, week)
+    score_fit, score_key, score_reused = scores.load_or_fit(
+        inputs['score_rows'], season, [str(t['id']) for t in inputs['teams']], TASK / 'scores')
+    scores.attach(public, draws, score_fit)
+    public['meta']['score_model'].update(fit_key=score_key, fit_reused=score_reused)
     row = export.write(public, draws, PUBLIC)
     print(json.dumps({'published': row, 'fit_reused': fit_meta['fit_reused'], 'api_requests': 0}))
     # Only this isolated forecasting job's cache: keep the current passing fit.
@@ -112,7 +138,7 @@ def complete(season, week=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare', 'complete', 'sync-markets', 'build-prior'])
+    parser.add_argument('command', choices=['prepare', 'complete', 'build-prior'])
     parser.add_argument('--season', default='current')
     parser.add_argument('--week', type=int, help='Historical forecast week; 99 for CFP')
     args = parser.parse_args()
@@ -123,14 +149,7 @@ def main():
         from cfb_forecast.annual import build_live
         build_live(season)
         return
-    if args.command == 'sync-markets':
-        folder = ROOT / f'_cfb_data/seasons/{season}'
-        keys = [json.loads((folder / (name+'.json')).read_text())['payload_sha256'] for name in ('games','games-fcs')]
-        # Market lines can change even when the games payload does not.
-        try: print(json.dumps(markets.sync(season, digest([keys,now.date().isoformat()]), os.environ.get('CFBD_API_KEY',''))))
-        except ValueError as e: print(json.dumps({'status':str(e), 'saved_market_preserved':True}))
-    else:
-        (prepare if args.command == 'prepare' else complete)(season, args.week)
+    (prepare if args.command == 'prepare' else complete)(season, args.week)
 
 
 if __name__ == '__main__': main()

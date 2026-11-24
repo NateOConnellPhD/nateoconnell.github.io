@@ -117,10 +117,21 @@ class ForecastTests(unittest.TestCase):
         def load(_, **kwargs): return inputs, prior, [.8, .65, .2], future, state['observed'], state['key']
         shape = (4, 1000)
         samples = {'theta': np.tile([8., 0., -12.], shape + (1,)), 'home_effect': np.tile([2., 1., -1.], shape + (1,)),
-                   'sigma': np.full(shape, 12.), 'nu': np.full(shape, 7.), 's_prev': np.full(shape, 6.)}
+                   'sigma': np.full(shape, 12.), 'nu': np.full(shape, 7.), 's_prev': np.full(shape, 6.), 'lam': np.ones(shape)}
+        quarterbacks = {'training': [0., 0., 0.], 'training_key': 'fixture-qb', 'meta': {}, 'importance': [],
+                        'teams': {str(i): {'x': 0., 'name': 'Fixture QB', 'starter': 'fixture', 'options': []} for i in (1, 2, 3)}}
+        score_rows = [{'season': 2026, 'id': g['id'], 'home': str(g['home_id']), 'away': str(g['away_id']),
+                       'hp': g['home_points'], 'ap': g['away_points']} for g in inputs['games']]
+        score_fit = {'version': publish.scores.VERSION, 'teams': ['1', '2', '3'],
+                     'mean': [20., -3., np.log(10.), 0., 0., 0., 0.], 'covariance': (np.eye(7)*.01).tolist(),
+                     'report': {'checks_passed': True}}
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as tmp:
             with patch.object(publish, 'TASK', Path(tmp) / 'task'), patch.object(publish, 'PUBLIC', Path(tmp) / 'public'), \
                  patch.object(source, 'load', side_effect=load), \
+                 patch.object(publish.qb, 'load', return_value=quarterbacks), \
+                 patch.object(publish.qb_data, 'identity', return_value={}), \
+                 patch.object(publish.scores, 'load_rows', return_value=score_rows), \
+                 patch.object(publish.scores, 'fit', return_value=score_fit) as score_fitter, \
                  patch('cfb_forecast.home.load_or_estimate', return_value=home), \
                  patch.object(forecast, 'fit', return_value=None) as fitter, \
                  patch.object(forecast, 'diagnose', return_value=(samples, {'sampling_checks_passed': True}, {})):
@@ -130,6 +141,9 @@ class ForecastTests(unittest.TestCase):
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)
                 future[0]['neutral'] = True
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1, 'A schedule-only update must reuse the posterior')
+                score_rows[0]['hp'] += 7; score_rows[0]['ap'] += 7
+                publish.complete(2026); self.assertEqual(fitter.call_count, 1, 'A score-only correction must reuse the margin fit')
+                self.assertEqual(score_fitter.call_count, 2)
                 state['key'] = 'new results'
                 publish.complete(2026); self.assertEqual(fitter.call_count, 2)
                 self.assertEqual(len(list((publish.TASK / 'forecast-fits').iterdir())), 1)

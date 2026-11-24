@@ -87,7 +87,7 @@ def carryover(rating_list):
 # ----------------------------------------------------------------------------------------------------------------
 def forecast_model(hi, ai, site, host_idx, grp, n_teams, n_groups, hmu, hL, cl, n_clusters,
                    has_prev, prev_mean, s_prev, fcs_mu, fcs_sd, w, y=None, learn_s=False,
-                   wk=None, n_weeks=1, dynamic=False, q_scale=1.5, conf_scale=None, fcs_prior=None, fcs_s=5.):
+                   wk=None, n_weeks=1, dynamic=False, q_scale=1.5, conf_scale=None, fcs_prior=None, fcs_s=5., qbx=None):
     z = numpyro.sample('z', dist.Normal(0., 1.).expand([n_teams]).to_event(1))
     if fcs_sd > 0:                                            # V1: informative division gap from last season
         mu_free = numpyro.sample('mu_free', dist.Normal(fcs_mu, fcs_sd).expand([n_groups - 1]).to_event(1))
@@ -122,6 +122,8 @@ def forecast_model(hi, ai, site, host_idx, grp, n_teams, n_groups, hmu, hL, cl, 
         loc = theta[hi] + walk[hi, wk] - theta[ai] - walk[ai, wk] + site * (hh[0] + jnp.where(host_idx > 0, hh[host_idx], 0.))
     else:
         loc = theta[hi] - theta[ai] + site * (hh[0] + jnp.where(host_idx > 0, hh[host_idx], 0.))
+    if qbx is not None:                                       # QB term: points per unit of QB covariate (EPA per game)
+        loc = loc + numpyro.sample('lam', dist.Normal(1., .5)) * qbx
     numpyro.factor('lik', jnp.sum(w * dist.StudentT(nu, loc, sigma).log_prob(y)))
 
 
@@ -181,7 +183,7 @@ def preseason_regression_games(games, covariates, season, cols, max_week=5, sigm
 
 def fit_forecast(train, teams, division, conference, home_prior, prior=None, half_life=None,
                  asof_week=None, alpha=None, learn_s=False, warm=400, keep=500, chains=2, seed=1,
-                 dynamic=False, q_scale=1.5, steps_ahead=None, conf_scale=None):
+                 dynamic=False, q_scale=1.5, steps_ahead=None, conf_scale=None, qbx=None):
     """train: games before the forecast window (columns home_team, away_team, home_points, away_points,
     neutral_site, week). teams: team universe (training teams plus teams to forecast).
     prior: preseason prior {'mean': {team: m}, 's', 'mu_fcs'} for FBS teams (None = V0, the merit model).
@@ -226,7 +228,8 @@ def fit_forecast(train, teams, division, conference, home_prior, prior=None, hal
              fcs_sd=float(fcs_sd), w=jnp.asarray(w), y=jnp.asarray(y), learn_s=bool(learn_s and prior is not None),
              wk=jnp.asarray(wk), n_weeks=n_weeks, dynamic=dyn, q_scale=float(q_scale), conf_scale=conf_scale,
              fcs_prior=(jnp.asarray(fcs_mask) if prior is not None and fcs_mask.any() else None),
-             fcs_s=float(prior.get('fcs_s', 5.)) if prior is not None else 5.)
+             fcs_s=float(prior.get('fcs_s', 5.)) if prior is not None else 5.,
+             qbx=(jnp.asarray(np.asarray(qbx, float)) if qbx is not None else None))
     s = {k: np.asarray(v) for k, v in mcmc.get_samples().items()}
     from arviz_stats.base.array import array_stats as A
     th = np.asarray(mcmc.get_samples(group_by_chain=True)['theta_last' if dyn else 'theta'])
@@ -235,7 +238,7 @@ def fit_forecast(train, teams, division, conference, home_prior, prior=None, hal
         hv = s['home_values'].mean(0); hloc = site * (hv[0] + np.where(host > 0, hv[host], 0.))
         tg = s['theta'].mean(0)[:, None] + (s['walk'].mean(0) if dyn else 0.)
         tg = np.broadcast_to(tg, (len(teams), n_weeks)) if not dyn else tg
-        loc = tg[hi, wk] - tg[ai, wk] + hloc
+        loc = tg[hi, wk] - tg[ai, wk] + hloc + (s['lam'].mean() * np.asarray(qbx, float) if qbx is not None else 0.)
         sigma = sigma * np.sqrt(np.average((margin - loc) ** 2, weights=w) / np.average((y - loc) ** 2, weights=w))
     rhat = float(np.nanmax(A.rhat(np.moveaxis(th, -1, 0), method='rank'))) if chains > 1 else np.nan
     s_post = float(np.mean(s['s_prev'])) if 's_prev' in s else None
@@ -252,7 +255,7 @@ def fit_forecast(train, teams, division, conference, home_prior, prior=None, hal
     jax.clear_caches()                                         # compiled kernels pile up across refits otherwise
     return {'s_prev_post': s_post, 'q_post': q_post, 'teams': list(teams), 'theta': theta_out, 'home_values': s['home_values'], 'home_names': list(home_prior['names']),
             'sigma': sigma, 'nu': s['nu'], 'divergences': int(np.asarray(mcmc.get_extra_fields()['diverging']).sum()),
-            'max_rhat_theta': rhat, **extra}
+            'max_rhat_theta': rhat, 'lam': s.get('lam'), **extra}
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -266,11 +269,13 @@ def _home_draws(fit, games):
     return site[None] * (hv[:, :1] + np.where(host[None] > 0, hv[:, host], 0.))
 
 
-def predict(fit, games):
+def predict(fit, games, qbx=None):
     """Posterior predictive for each game (home perspective): spread, SD, P(home win), and, when scores are present,
     log predictive density of the observed margin, PIT, and 90% interval hit."""
     ix = {t: i for i, t in enumerate(fit['teams'])}
     loc = fit['theta'][:, games.home_team.map(ix)] - fit['theta'][:, games.away_team.map(ix)] + _home_draws(fit, games)
+    if qbx is not None and fit.get('lam') is not None:       # QB covariate for these games (home minus away)
+        loc = loc + fit['lam'][:, None] * np.asarray(qbx, float)[None, :]
     sig, nu = fit['sigma'][:, None], fit['nu'][:, None]
     out = pd.DataFrame({'spread': loc.mean(0), 'sd': np.sqrt(loc.var(0) + (sig ** 2 * nu / (nu - 2)).mean(0)),
                         'p_home': stats.t.sf(0, nu, loc, sig).mean(0)}, index=games.index)

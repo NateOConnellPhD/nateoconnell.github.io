@@ -45,6 +45,10 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
     browser = {'schema': SCHEMA, 'teams': {team['id']: rnd(th[selected, i]) for i, team in enumerate(teams)},
                'home': {key: rnd(hv[selected, i]) for i, key in enumerate(home_ids)},
                'sigma': rnd(sigma[selected]), 'nu': rnd(nu[selected]), 'noise': rnd(noise.T)}
+    lam=np.asarray(arrays.get('lam',np.zeros(n)),float)
+    if lam.shape != (n,) or not np.isfinite(lam).all(): raise ValueError('Invalid QB coefficient draws')
+    if 'lam' in arrays:
+        browser['lam']=rnd(lam[selected]); browser['lambda_mean']=float(lam.mean())
     dynamic = 'drift' in arrays
     if dynamic:
         last = np.asarray(arrays['theta_last']); drift = np.asarray(arrays['drift'])
@@ -76,11 +80,13 @@ def build(arrays, teams, home_ids, games, meta, prior_means, records, *, thin=10
             strength = np.asarray(arrays['theta_last']) + np.sqrt(ahead) * np.asarray(arrays['drift'])
             loc = strength[:, ix[h]] - strength[:, ix[a]]
             if not game['neutral']: loc += hv[:, 0] + (hv[:, host] if host else 0.)
+            loc += lam * (game.get('qb_x_home',0.) - game.get('qb_x_away',0.))
             p = float(t.cdf(loc / sigma, nu).mean())
             simulated = (loc[selected,None] + noise).ravel()
         else:
             loc = th[:, ix[h]] - th[:, ix[a]]
             if not game['neutral']: loc = loc + hv[:, 0] + (hv[:, host] if host else 0.)
+            loc += lam * (game.get('qb_x_home',0.) - game.get('qb_x_away',0.))
             p = float(t.cdf(loc / sigma, nu).mean())
             simulated = (loc[selected,None] + noise).ravel()
         mean = float(loc.mean())
@@ -121,13 +127,15 @@ def add_details(public, arrays, inputs, prior, home_ids, expectancy):
         for j,g in enumerate(inputs['games']):
             home,away=str(g['home_id']),str(g['away_id']); slot=hn.get(home,0)
             edge=0. if g.get('neutral_site',False) else float(hm[0]+(hm[slot] if slot else 0.))
+            qb_edge=float(np.asarray(arrays['lam']).mean()*inputs['qbx'][j]) if 'qbx' in inputs else 0.
             for team,opp,sign in ((home,away,1),(away,home,-1)):
                 w=max(g['week']-1,0)
                 opp_strength=float(trajectory[ix[opp],w]) if trajectory is not None else None
                 details[team]['games'].append({'id':g['id'],'week':g['week'],'date':g['start_date'],'opponent':opp,
                     'site':'neutral' if g.get('neutral_site',False) else ('home' if sign==1 else 'away'),
                     'margin':sign*inputs['data']['margin'][j], 'target':float(sign*target[j]), 'home_edge':sign*edge,
-                    'opponent_strength':opp_strength, 'game_implied_strength':float(sign*target[j]+opp_strength-sign*edge) if opp_strength is not None else None})
+                    'qb_edge':sign*qb_edge, 'opponent_strength':opp_strength,
+                    'game_implied_strength':float(sign*target[j]+opp_strength-sign*edge-sign*qb_edge) if opp_strength is not None else None})
     public['team_details']=details
     public['home_means']={k:float(hm[i]) for i,k in enumerate(home_ids)}
     public['prior_coefficients']=prior.get('coefficients',{})

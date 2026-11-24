@@ -54,7 +54,9 @@ async function controller(hash='',overrides={}) {
   const p=await controller();assert.equal(p.requests.length,0,'Merit view must not download projections');
   p.buttons[1].handlers.click();await p.settle();assert.equal(p.main.hidden,true);assert.equal(p.root.hidden,false);
   assert.equal(p.get('status').textContent,'');assert.equal(p.get('content').hidden,false);
-  assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/−|Pick/);
+  assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/by .* points|Evenly matched/);
+  assert.match(p.get('range95').textContent,/ to /);
+  assert.ok(p.get('games').children[0].children[0].children[0].children.every(h=>!(/market|line|opener/i.test(h.textContent))));
   assert.ok(p.get('strength-chart').children.length>0);assert.ok(p.get('margin-chart').children.length>0);
   assert.equal(p.get('powers').children[0].children[1].children.length,data.ratings.length);
   assert.deepEqual(p.viewPanels.map(x=>x.hidden),[false,true,true,true]);
@@ -79,10 +81,30 @@ async function controller(hash='',overrides={}) {
   const part=result.parts;assert.ok(Math.abs(part.home-part.away+part.national+part.stadium-result.margin)<1e-9);
   const fixture={...data,games:[game],draws_file:'draws-fixture.json',meta:{...data.meta,model:'forecast-v7'},
     team_details:Object.fromEntries([game.home,game.away].map(id=>[id,{path:[{week:1,mean:5,sd:2},{week:2,mean:6,sd:1.5}],games:[]}]))};
+  dynamic.scores={version:'conditional-scores-1',intercept:dynamic.sigma.map(()=>20),slope:dynamic.sigma.map(()=>-3),
+    scale:dynamic.sigma.map(()=>10),teams:Object.fromEntries(Object.keys(dynamic.teams).map(id=>[id,dynamic.sigma.map(()=>0)])),
+    uniform:[dynamic.sigma.map(()=>.2),dynamic.sigma.map(()=>.8)]};
+  game.scores=api.matchup(api.validateDraws(dynamic),game.home,game.away,game.neutral,4).scores;
   const modern=await controller('#projections',{'index.json':{...index,latest:'fixture',snapshots:[{...row,id:'fixture',file:'forecast-fixture.json'}]},'forecast-fixture.json':fixture,'draws-fixture.json':dynamic});
   assert.equal(modern.get('status').textContent,'');assert.equal(modern.get('details-card').hidden,false);
   assert.equal(modern.get('team-details').children.length,2);assert.equal(modern.get('horizon').value,'4');
-  assert.equal(modern.get('line-parts').children[0].children[1].children.length,5);
+  assert.equal(modern.get('line-parts').children[0].children[1].children.length,7);
+  assert.equal(modern.get('scores').hidden,false);assert.equal(modern.get('score-status').textContent,'');
+  assert.ok(modern.get('score-chart').children.length>0);
+  assert.equal(modern.get('score-summary').children[0].children[1].children.length,2);
+  assert.ok(Number.isFinite(Number(modern.get('home-score').textContent)));
+  assert.ok(modern.get('games').children[0].children[0].children[0].children.some(h=>/Home points/.test(h.textContent)));
+  const qbDraws={...dynamic,lam:dynamic.sigma.map((_,i)=>.5+i/dynamic.sigma.length),lambda_mean:1.,
+    quarterbacks:{[game.home]:{x:2,options:{backup:-4}},[game.away]:{x:-1,options:{backup:3}}}};
+  const base=api.matchup(qbDraws,game.home,game.away,true,1,{home:'mix',away:'mix'});
+  const starter=api.matchup(qbDraws,game.home,game.away,true,1);
+  const backup=api.matchup(qbDraws,game.home,game.away,true,1,{home:'backup'});
+  assert.ok(starter.margin>base.margin&&backup.margin<base.margin);
+  assert.ok(starter.pHome>base.pHome&&backup.pHome<base.pHome);
+  assert.ok(Math.abs(backup.parts.qbHome+4)<1e-12);
+  const reverseQB=api.matchup(qbDraws,game.away,game.home,true,1);
+  assert.ok(Math.abs(starter.pHome+reverseQB.pHome-1)<1e-12);
+  assert.throws(()=>api.matchup(qbDraws,game.home,game.away,true,1,{home:'unknown'}),/Unknown quarterback/);
   modern.get('eval-period').value='holdout';modern.get('eval-period').handlers.change();assert.match(modern.get('backtest-summary').textContent,/2026/);
   console.log(JSON.stringify({checks:'projection probabilities, venue, signs, payload integrity, tab isolation, charts, caching',games:data.games.length,maxProbabilityError,maxMarginError}));
 })().catch(e=>{console.error(e);process.exitCode=1;});

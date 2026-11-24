@@ -19,7 +19,18 @@ def run(args):
     if not output.is_relative_to(ROOT / '.codex-tmp'):
         raise ValueError('Diagnostic output must stay under the project .codex-tmp directory')
     output.mkdir(parents=True, exist_ok=True)
-    inputs, prior, expectancy, games, _, key = source.load(args.season)
+    inputs, prior, expectancy, games, _, key = source.load(args.season, forecast_week=args.week)
+    if args.qb_covariates:
+        # Reference-window validation when the handoff supplies frozen covariates.
+        # This is not the production data loader and never publishes a snapshot.
+        import csv
+        if args.week is None or args.export: raise ValueError('Frozen QB covariates require a historical week and no export')
+        names={str(t['id']):t['name'] for t in inputs['teams']}
+        with Path(args.qb_covariates).open() as stream:
+            rows=[r for r in csv.DictReader(stream) if int(r['window'])==args.week]
+        x={(int(r['game_id']),r['team']):float(r['x_start']) for r in rows}
+        if not x: raise ValueError('No supplied QB covariates for this window')
+        inputs['qbx']=[x.get((g['id'],names[str(g['home_id'])]),0.)-x.get((g['id'],names[str(g['away_id'])]),0.) for g in inputs['games']]
     home = load_or_estimate(inputs, output / 'home')
     target, _, _ = forecast.efficiency_target(inputs['data']['margin'], expectancy)
     label = f'accept-{args.target_accept}-seed-{args.seed}-warm-{args.warmup}-draws-{args.draws}'
@@ -72,6 +83,8 @@ def run(args):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--season',type=int,default=2026)
+    p.add_argument('--week',type=int)
+    p.add_argument('--qb-covariates',help='Supplied x_start CSV for one historical validation window only')
     p.add_argument('--target-accept',type=float,required=True)
     p.add_argument('--warmup',type=int,default=1000)
     p.add_argument('--draws',type=int,default=1000)

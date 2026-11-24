@@ -154,6 +154,14 @@ class V7Tests(unittest.TestCase):
         self.assertEqual(hold['n'],822);self.assertAlmostEqual(hold['difference'],.4806764756670714)
         self.assertIsNone(evaluation.summarize([r for r in evidence['holdout'] if r['week']==1])['se'])
 
+    def test_model_error_uncertainty_is_not_paired_comparison_uncertainty(self):
+        rows=[{'actual':0.,'model':v,'opener':v,'close':v,'cluster':i//2} for i,v in enumerate([1.,3.,5.,7.])]
+        result=evaluation.summarize(rows)
+        self.assertEqual(result['model_mae'],4.)
+        self.assertEqual(result['model_mae_se'],2.)
+        self.assertEqual(result['se'],0.)
+        self.assertIsNone(evaluation.summarize(rows[:2])['model_mae_se'])
+
     def test_non_playoff_bowls_excluded(self):
         g={'homeClassification':'fbs','awayClassification':'fbs','notes':'College Football Playoff Quarterfinal'}
         self.assertTrue(source.is_playoff(g));self.assertFalse(source.is_playoff({**g,'notes':'Las Vegas Bowl'}))

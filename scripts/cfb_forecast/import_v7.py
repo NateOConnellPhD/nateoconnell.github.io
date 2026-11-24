@@ -112,7 +112,7 @@ def run(folder):
             for key,old in [('model_mae','MAE_V7LDe75'),('opener_mae','MAE_opener'),('close_mae','MAE_close'),('difference','V7LDe75_minus_opener'),('se','V7LDe75_minus_opener_se')]:
                 if abs(a[key]-float(e[old]))>1e-8: raise ValueError('Backtest scoreboard replay differs')
     public=ROOT/'assets/data/cfb/projections'
-    (public/'backtest.json').write_text(json.dumps(back,allow_nan=False,separators=(',',':'))+'\n')
+    (public/'backtest.json').write_text(json.dumps(evaluation.public_report(back),allow_nan=False,separators=(',',':'))+'\n')
     # Numeric, auditable evaluation records; no embedded dashboard scripts or binaries.
     (directory/'evaluation.json').write_text(json.dumps({'development':development,'holdout':current},allow_nan=False,separators=(',',':'))+'\n')
     print(json.dumps({'prior_replay_absolute_errors':checks,'forecast_seasons':list(documents),'sampler_run':False}))

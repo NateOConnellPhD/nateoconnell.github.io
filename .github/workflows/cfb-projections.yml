@@ -60,11 +60,16 @@ jobs:
         env:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
         run: python3 -B scripts/cfb_forecast/refresh.py --season "$CFB_FORECAST_SEASON"
-      - name: Refresh optional market comparison once per day
-        if: inputs.week == '' || github.event_name != 'workflow_dispatch'
-        env:
-          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
-        run: python3 -B scripts/cfb_forecast/publish.py sync-markets --season "$CFB_FORECAST_SEASON"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install bounded play-by-play reader
+        run: |
+          mkdir -p "$TMPDIR"
+          python3 -m venv .codex-tmp/cfb-refit/venv
+          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --no-cache-dir -r scripts/cfb_forecast/qb-requirements.txt
+      - name: Refresh quarterback play-by-play daily (conditional downloads)
+        run: python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/qb_data.py --season "$CFB_FORECAST_SEASON"
       - name: Check saved inputs before installing or sampling
         id: prepare
         run: |
@@ -88,17 +93,14 @@ jobs:
           path: |
             .codex-tmp/cfb-refit/forecast-fits
             .codex-tmp/cfb-refit/home
+            .codex-tmp/cfb-refit/qb
+            .codex-tmp/cfb-refit/scores
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: forecast-${{ runner.os }}-
-      - uses: actions/setup-python@v7
-        if: steps.prepare.outputs.needs_update == 'true'
-        with:
-          python-version: '3.12'
       - name: Install pinned numerical packages
         if: steps.prepare.outputs.needs_update == 'true'
         run: |
           mkdir -p "$TMPDIR"
-          python3 -m venv .codex-tmp/cfb-refit/venv
           python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --no-cache-dir -r scripts/cfb/requirements.txt
       - name: Check projections without sampling
         if: steps.prepare.outputs.needs_update == 'true'
@@ -106,6 +108,8 @@ jobs:
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_forecasts.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_v7.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_refresh.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_qb.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_scores.py
           node scripts/cfb_forecast/check_projections.cjs
       - name: Build changed or new-season prior with the supplied estimators
         if: steps.prepare.outputs.needs_update == 'true' && steps.refresh.outputs.needs_prior == 'true'
@@ -123,15 +127,18 @@ jobs:
           path: |
             .codex-tmp/cfb-refit/forecast-fits
             .codex-tmp/cfb-refit/home
+            .codex-tmp/cfb-refit/qb
+            .codex-tmp/cfb-refit/scores
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Commit checked inputs and any passing forecast
+        id: commit
         if: always() && !cancelled()
         run: |
           git add -- assets/data/cfb/projections
           git add -- _cfb_data/seasons _cfb_data/forecast_inputs _cfb_data/forecast_priors
-          if [ -d _cfb_data/forecast_markets ]; then git add -- _cfb_data/forecast_markets; fi
           if git diff --cached --quiet; then exit 0; fi
           git diff --cached --check
+          if ! git diff --cached --quiet -- assets/data/cfb/projections; then echo 'public_changed=true' >> "$GITHUB_OUTPUT"; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Update power projections from saved games'
@@ -141,7 +148,7 @@ jobs:
           done
           exit 1
       - name: Rebuild public website
-        if: success() && steps.prepare.outputs.needs_update == 'true'
+        if: always() && steps.commit.outcome == 'success' && steps.commit.outputs.public_changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
