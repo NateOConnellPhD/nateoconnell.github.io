@@ -104,7 +104,7 @@
     const sorted=[...loc].sort((a,b)=>a-b),margin=d.means?fullPower(home,baseH)-fullPower(away,baseA)+lm*(hx-ax)
       +(neutral?0:d.means.home.national+(d.means.home[home]||0)):mean(loc);
     const result={margin,homeLine:-margin,pHome:p,pAway:1-p,pBetter:mean(strength.map(v=>v>0?1:v===0?.5:0)),
-      expectedMedian:quantile(sorted,.5),expected80:[quantile(sorted,.1),quantile(sorted,.9)],
+      expectedMedian:quantile(sorted,.5),expected80:[quantile(sorted,.1),quantile(sorted,.9)],expected95:[quantile(sorted,.025),quantile(sorted,.975)],
       range80:[quantile(pred,.1),quantile(pred,.9)],range95:[quantile(pred,.025),quantile(pred,.975)],
       homeDraws:h,awayDraws:a,pred,parts:{home:fullPower(home,baseH),away:fullPower(away,baseA),qbHome:lm*hx,qbAway:lm*ax,national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
     if(d.gaussian) {
@@ -114,11 +114,23 @@
       const sd=Math.sqrt(v+g.sigma*g.sigma),p=tcdf(m/sd,1e7);
       Object.assign(result,{margin:m,homeLine:-m,pHome:p,pAway:1-p,pBetter:tcdf((hg.mean-ag.mean)/Math.sqrt(hg.variance+ag.variance),1e7),
         expectedMedian:m,expected80:[m-1.2815515655446004*Math.sqrt(v),m+1.2815515655446004*Math.sqrt(v)],
+        expected95:[m-1.959963984540054*Math.sqrt(v),m+1.959963984540054*Math.sqrt(v)],
         range80:[m-1.2815515655446004*sd,m+1.2815515655446004*sd],range95:[m-1.959963984540054*sd,m+1.959963984540054*sd],
         parts:{home:hg.mean,away:ag.mean,national,stadium}});
     }
     if(d.scores)result.scores=scoreOutcomes(d.scores,home,away,paired);
     return result;
+  }
+  function strengthPositions(draws,ids) {
+    const positions=Object.fromEntries(ids.map(id=>[id,[]]));
+    for(let i=0;i<draws.sigma.length;i++) {
+      const order=[...ids].sort((a,b)=>draws.teams[b][i]-draws.teams[a][i]||a.localeCompare(b));
+      order.forEach((id,rank)=>positions[id].push(rank+1));
+    }
+    return Object.fromEntries(ids.map(id=>{
+      const sorted=positions[id].sort((a,b)=>a-b);
+      return [id,{80:[quantile(sorted,.1),quantile(sorted,.9)],95:[quantile(sorted,.025),quantile(sorted,.975)]}];
+    }));
   }
   function mount(doc) {
     const root=doc.querySelector('[data-cfb-projections]');if(!root)return;
@@ -150,7 +162,9 @@
     const date=v=>new Date(v).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'America/New_York'});
     const interval=v=>`${sign(v[0])} to ${sign(v[1])}`;
     const scoreRange=(s,coverage)=>`${fmt(s['lo'+coverage])}–${fmt(s['hi'+coverage])}`;
-    const cache=new Map();let index,data,draws,backtest,qbStatus,sequence=0,initializing=null;
+    const coverage=()=>el('coverage').value==='80'?80:95;
+    const normalCritical=()=>coverage()===80?1.2815515655446004:1.959963984540054;
+    const cache=new Map();let index,data,draws,positions,backtest,qbStatus,sequence=0,initializing=null;
     const base=new URL('./',new URL(root.dataset.index,location.href));
     function read(file) {
       if(!/^[a-z0-9-]+\.json$/.test(file))return Promise.reject(new Error('Invalid forecast file'));
@@ -198,14 +212,20 @@
       const plot=svg('svg',{viewBox:`0 0 ${width} ${height}`,role:'img','aria-label':label});plot.append(svg('title',{},label));
       for(let i=0;i<=4;i++){const yy=y(max*i/4);plot.append(svg('line',{x1:left,x2:right,y1:yy,y2:yy,stroke:'#d2dfe8'}));plot.append(svg('text',{x:left-8,y:yy+4,'text-anchor':'end'},`${(100*max*i/4).toFixed(0)}%`));}
       counts.forEach((c,j)=>c.forEach((v,i)=>plot.append(svg('rect',{x:x(lo+i*step),y:y(v),width:(right-left)/bins,height:bottom-y(v),fill:series[j].color,opacity:.55}))));
+      const tail=(1-coverage()/100)/2;
+      series.forEach(s=>{
+        const values=[...s.values].sort((a,b)=>a-b);
+        for(const p of [tail,1-tail])plot.append(svg('line',{x1:x(quantile(values,p)),x2:x(quantile(values,p)),y1:top,y2:bottom,stroke:s.color,'stroke-width':2}));
+      });
       if(lo<0&&hi>0)plot.append(svg('line',{x1:x(0),x2:x(0),y1:top,y2:bottom,stroke:'#142f43','stroke-dasharray':'4 4'}));
       for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4;plot.append(svg('text',{x:x(v),y:bottom+23,'text-anchor':'middle'},v.toFixed(0)));}
-      target.replaceChildren(plot,node('p',series.map(s=>s.name).join(' / ')+' · share of draws per bin; plot shows the central 99%.',{class:'small-note'}));
+      target.replaceChildren(plot,node('p',series.map(s=>s.name).join(' / ')+` · colored vertical lines mark each ${coverage()}% range. Bars show the share of draws per bin; plot shows the central 99%.`,{class:'small-note'}));
     }
     function renderMatchup() {
       if(!draws)return;
       try {
         const h=el('home').value,a=el('away').value;
+        const level=coverage();
         const r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1));
         // Retain the full-draw probabilities for a scheduled matchup.
         const official=data.games.find(g=>g.home===h&&g.away===a&&g.neutral===(el('site').value==='neutral'));
@@ -213,21 +233,19 @@
         el('matchup-error').textContent='';el('matchup-result').hidden=false;
         el('line').textContent=predictedMargin(r.margin,h,a);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
         el('home-label').textContent=`${team(h)} wins`;el('away-label').textContent=`${team(a)} wins`;
-        el('range').textContent=interval(r.range80);
-        el('range-label').textContent=`80% range · ${team(h)}’s final margin`;
-        el('range95').textContent=interval(r.range95);
-        el('range95-label').textContent=`95% range · ${team(h)}’s final margin`;
+        el('range').textContent=interval(r['range'+level]);
+        el('range-label').textContent=`${level}% range · ${team(h)}’s final margin`;
         el('scores').hidden=!r.scores;
         el('score-status').textContent=r.scores?'':scoreAvailability();
         if(r.scores) {
           el('home-score-label').textContent=team(h);el('away-score-label').textContent=team(a);
           el('home-score').textContent=Math.round(r.scores.home.mean);el('away-score').textContent=Math.round(r.scores.away.mean);
-          table(el('score-summary'),['Team','Mean points','Median points','80% predictive range','95% predictive range'],
-            [[h,r.scores.home],[a,r.scores.away]].map(([id,s])=>[team(id),fmt(s.mean),fmt(s.median),scoreRange(s,80),scoreRange(s,95)]));
+          table(el('score-summary'),['Team','Mean points','Median points',`${level}% predictive range`],
+            [[h,r.scores.home],[a,r.scores.away]].map(([id,s])=>[team(id),fmt(s.mean),fmt(s.median),scoreRange(s,level)]));
           histogram(el('score-chart'),[{name:team(h)+' (blue)',values:r.scores.homeDraws,color:'#245a82'},
             {name:team(a)+' (gold)',values:r.scores.awayDraws,color:'#b67d25'}],'Predictive distributions of each team’s final points');
         }
-        el('matchup-note').textContent=`${team(h)}’s expected margin: ${sign(r.margin)} points (posterior median ${sign(r.expectedMedian)}; 80% interval ${interval(r.expected80)}). Its chance of being the stronger team on a neutral field is ${pct(r.pBetter)}. The 95% range for an actual game is ${interval(r.range95)} points. Positive margins favor ${team(h)}; negative margins favor ${team(a)}.`;
+        el('matchup-note').textContent=`${team(h)}’s expected margin: ${sign(r.margin)} points (posterior median ${sign(r.expectedMedian)}; ${level}% interval ${interval(r['expected'+level])}). Its chance of being the stronger team on a neutral field is ${pct(r.pBetter)}. The ${level}% range for an actual game is ${interval(r['range'+level])} points. Positive margins favor ${team(h)}; negative margins favor ${team(a)}.`;
         const parts=r.parts;
         table(el('line-parts'),['Component','Points toward home margin'],[[`${team(h)} usual-mix power`,sign(parts.home)],[`${team(a)} usual-mix power (subtracted)`,sign(-parts.away)],[`${team(h)} QB adjustment`,sign(parts.qbHome||0)],[`${team(a)} QB adjustment (subtracted)`,sign(-(parts.qbAway||0))],['National home advantage',sign(parts.national)],['Host’s additional advantage',sign(parts.stadium)],['Expected home margin',sign(r.margin)]]);
         renderDetails(h,a);
@@ -236,32 +254,33 @@
       } catch(e){el('matchup-result').hidden=true;el('matchup-error').textContent=e.message;}
     }
     function renderGames() {
-      if(!data)return;const week=el('week').value,q=el('search').value.trim().toLowerCase();
+      if(!data)return;const week=el('week').value,q=el('search').value.trim().toLowerCase(),level=coverage();
       const rows=data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q)));
       const hasScores=data.games.length>0&&data.games.every(g=>g.scores?.home&&g.scores?.away);
-      const columns=hasScores?['Home points · mean (80% range)','Away points · mean (80% range)']:['Predicted margin'];
+      const columns=hasScores?[`Home points · mean (${level}% range)`,`Away points · mean (${level}% range)`]:['Predicted margin'];
       table(el('games'),['Date','Matchup',...columns,'Home win','Away win'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
         b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
-        const score=s=>`${fmt(s.mean)} (${scoreRange(s,80)})`;
+        const score=s=>`${fmt(s.mean)} (${scoreRange(s,level)})`;
         const prediction=hasScores?[score(g.scores.home),score(g.scores.away)]:[predictedMargin(g.home_margin,g.home,g.away)];
         return [date(g.date),b,...prediction,pct(g.p_home),pct(1-g.p_home)];
       }));
       el('games-note').textContent=rows.length
-        ? (hasScores?'':scoreAvailability()+' ')+`${rows.length} scheduled games match your selection. `+(hasScores?'Point ranges include game-to-game variation. Select a game for score distributions, medians, and 95% ranges.':'Select a game to explore the predicted margin and its uncertainty.')
+        ? (hasScores?'':scoreAvailability()+' ')+`${rows.length} scheduled games match your selection. `+(hasScores?`Point ranges include game-to-game variation. Select a game for score distributions, medians, and ${level}% ranges.`:'Select a game to explore the predicted margin and its uncertainty.')
         : 'No upcoming games match your selection.';
     }
     function renderRatings() {
-      if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value;
+      if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value,level=coverage();
       const rows=data.ratings.filter(r=>(!conf||r.conference===conf)&&(!q||r.name.toLowerCase().includes(q)));
       const shown=el('limit').value==='all'?rows:rows.slice(0,25);
-      table(el('powers'),['Rank','Team','Record','Mean power','Median','95% interval','80% rank range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
+      table(el('powers'),['Strength order','Team','Record','Mean power','Median',`${level}% interval`,`${level}% range of positions`,'P(strongest)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
         const name=node('button',r.name,{type:'button',class:'cfb-forecast-game','aria-label':`View details for ${r.name}`});
         name.addEventListener('click',()=>{el('home').value=r.id;
           if(el('away').value===r.id)el('away').value=data.ratings.find(t=>t.id!==r.id).id;
           el('site').value='neutral';el('horizon').value='1';selectView('compare',true);renderMatchup();
           if(draws&&!el('details-card').hidden){el('details-card').scrollIntoView({behavior:'smooth',block:'start'});el('detail-title').focus({preventScroll:true});}});
-        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
+        const bounds=positions?.[r.id]?.[level];
+        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),sign(r.median),interval([r['lo'+level],r['hi'+level]]),bounds?`${Math.floor(bounds[0])}–${Math.ceil(bounds[1])}`:'Loading…',pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
       }));
       el('power-count').textContent=`Showing ${shown.length} of ${rows.length} matching FBS teams. Order is by posterior mean power; probabilities describe strength, not playoff qualification.`;
       const qm=data.meta.quarterbacks;
@@ -333,27 +352,27 @@
     }
     function renderEvaluation() {
       if(!backtest)return;
-      const period=el('eval-period').value||'development',group=el('eval-group').value||'phase';
+      const period=el('eval-period').value||'development',group=el('eval-group').value||'phase',level=coverage(),z=normalCritical();
       const overall=backtest[period].phase.find(r=>r.group==='all');
-      const ci=r=>Number.isFinite(r.model_mae_se)?`${fmt(Math.max(0,r.model_mae-1.96*r.model_mae_se))} to ${fmt(r.model_mae+1.96*r.model_mae_se)}`:'Not estimable from one week';
+      const ci=r=>Number.isFinite(r.model_mae_se)?`${fmt(Math.max(0,r.model_mae-z*r.model_mae_se))} to ${fmt(r.model_mae+z*r.model_mae_se)}`:'Not estimable from one week';
       el('backtest-summary').textContent=`${period==='development'?'2023–2025 development sample':'2026 retrospective reconstruction, through week '+backtest.through_week}: ${overall.n.toLocaleString()} games.`;
       const available=Number.isFinite(overall.model_bias)&&overall.error_histogram;
       el('error-summary').hidden=!available;
       if(available) {
         el('error-bias').textContent=`${sign(overall.model_bias)} points`;
-        el('error-range80').textContent=interval([overall.error_lo80,overall.error_hi80]);
-        el('error-range95').textContent=interval([overall.error_lo95,overall.error_hi95]);
+        el('error-range-label').textContent=`Middle ${level}% of past errors`;
+        el('error-range').textContent=interval([overall['error_lo'+level],overall['error_hi'+level]]);
         el('error-bias-note').textContent=Number.isFinite(overall.model_bias_se)
-          ? `Approximate 95% confidence interval for the average signed error: ${interval([overall.model_bias-1.96*overall.model_bias_se,overall.model_bias+1.96*overall.model_bias_se])} points, using season-week clusters. This estimates uncertainty in the average, not variation between games.`
+          ? `Approximate ${level}% confidence interval for the average signed error: ${interval([overall.model_bias-z*overall.model_bias_se,overall.model_bias+z*overall.model_bias_se])} points, using season-week clusters. This estimates uncertainty in the average, not variation between games.`
           : 'A cluster-based confidence interval for the average needs more than one season-week.';
         renderErrorDistribution(overall);
-        table(el('evaluation'),['Group','Games','Average signed error (pts)','Middle 80% of errors (pts)','Middle 95% of errors (pts)'],backtest[period][group].map(r=>[
-          r.group||'Unclassified',r.n,sign(r.model_bias),interval([r.error_lo80,r.error_hi80]),interval([r.error_lo95,r.error_hi95])]));
+        table(el('evaluation'),['Group','Games','Average signed error (pts)',`Middle ${level}% of errors (pts)`],backtest[period][group].map(r=>[
+          r.group||'Unclassified',r.n,sign(r.model_bias),interval([r['error_lo'+level],r['error_hi'+level]])]));
       } else el('backtest-summary').textContent+=' The signed-error summary has not been published for this report.';
-      table(el('evaluation-technical'),['Group','Games','Margin MAE (pts)','95% confidence interval for MAE','Season-week clusters'],backtest[period][group].map(r=>[r.group||'Unclassified',r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
+      table(el('evaluation-technical'),['Group','Games','Margin MAE (pts)',`${level}% confidence interval for MAE`,'Season-week clusters'],backtest[period][group].map(r=>[r.group||'Unclassified',r.n,fmt(r.model_mae),ci(r),r.clusters??'—']));
     }
     async function selectSnapshot(id) {
-      const turn=++sequence;draws=null;el('content').hidden=true;el('status').textContent='Loading saved projections…';
+      const turn=++sequence;draws=null;positions=null;el('content').hidden=true;el('status').textContent='Loading saved projections…';
       try {
         const row=index.snapshots.find(r=>r.id===id);if(!row)throw new Error('Unknown forecast snapshot');
         const value=await read(row.file);if(turn!==sequence)return;
@@ -379,7 +398,9 @@
         el('diagnostics').textContent=`${m.source}. ${diag.scope||'All retained parameters were checked for convergence and effective sample size.'} ${m.prior_only?'':`Maximum ${diag.max_rhat_theta!=null?'theta ':''}R̂: ${(diag.max_rhat_theta??diag.max_rank_normalized_rhat).toFixed(4)}. Divergences: ${diag.divergences}.`} Home-field history: ${m.home_years.join(', ')}. Preseason coefficients trained on ${m.prior_training_seasons.join(', ')}.`;
         el('draw-note').textContent='Loading saved draws for the matchup tool…';el('matchup-result').hidden=true;
         const loaded=validateDraws(await read(data.draws_file));if(turn!==sequence)return;draws=loaded;el('horizon').disabled=!draws.last;
+        positions=strengthPositions(draws,data.ratings.map(r=>r.id));renderRatings();
         el('draw-note').textContent=draws.gaussian?'Preseason projections use the Gaussian approximation from the annual prior and home-field covariance. Charts use saved prior draws; no current-season sampler has run.':draws.last?`Power summaries, mean margins, and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities, predictive ranges and charts use ${m.matchup_draws.toLocaleString()} aligned draws. Future drift grows with the selected horizon. These are numerical approximations; no model runs while you browse.`:`Mean margins and scheduled-game probabilities use all ${m.draws.toLocaleString()} draws. Other matchup probabilities, predictive ranges and charts use ${m.matchup_draws.toLocaleString()} aligned draws, with two simulated games per draw; these are numerical approximations. No model is run in your browser.`;
+        el('draw-note').textContent+=' Ranges of strength positions use the aligned saved draws.';
         renderMatchup();
       } catch(e){if(turn===sequence){el('status').textContent=`${e.message} Use Reload to try again.`;el('draw-note').textContent='Matchup draws unavailable.';}}
     }
@@ -396,6 +417,7 @@
     }
     el('snapshot').addEventListener('change',()=>selectSnapshot(el('snapshot').value));
     el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');qbStatus=null;initializing=null;initialize();});
+    el('coverage').addEventListener('change',()=>{renderRatings();renderGames();renderMatchup();renderEvaluation();});
     for(const key of ['home','away','site','horizon'])el(key).addEventListener('change',renderMatchup);
     for(const key of ['eval-period','eval-group'])el(key).addEventListener('change',renderEvaluation);
     el('swap').addEventListener('click',()=>{const h=el('home').value;el('home').value=el('away').value;el('away').value=h;renderMatchup();});
@@ -403,5 +425,5 @@
     for(const key of ['conference','limit','power-search'])el(key).addEventListener(key==='power-search'?'input':'change',renderRatings);
     activate(location.hash==='#projections'?'projections':'merit');
   }
-  return {tcdf,matchup,validateDraws,scoreOutcomes,mount};
+  return {tcdf,matchup,validateDraws,scoreOutcomes,strengthPositions,mount};
 });

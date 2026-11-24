@@ -7,6 +7,7 @@
   </header>
   <div class="cfb-forecast-controls">
     <label>Saved forecast<select data-projection-snapshot aria-label="Saved forecast"></select></label>
+    <label>Interval<select data-projection-coverage aria-label="Interval coverage"><option value="95">95%</option><option value="80">80%</option></select></label>
     <button type="button" class="button button-outline" data-projection-reload>Reload</button>
   </div>
   <p data-projection-status role="status" aria-live="polite"></p>
@@ -32,14 +33,14 @@
       <div class="cfb-forecast-table" data-projection-powers tabindex="0" role="region" aria-label="Power estimates and probabilities"></div>
       <details><summary>How to read the estimates</summary>
         <p>The table orders teams by estimated strength. That order does not assign playoff seeds or credit for results.</p>
-        <p>Mean is the average estimate across posterior draws; median is the middle estimate. A 95% interval contains the middle 95% of plausible strengths. “P(top 12)” is the share of draws in which a team is among the twelve strongest; it is not its chance of making the playoff.</p>
+        <p>Mean is the average estimate across posterior draws; median is the middle estimate. Use the interval selector to show the middle 80% or 95% of plausible strengths. Ranges of positions come from ordering all FBS teams within each saved strength draw. “P(top 12)” is the share of draws in which a team is among the twelve strongest; it is not its chance of making the playoff.</p>
       </details>
     </section>
     </div>
     <div role="tabpanel" id="cfb-forecast-panel-games" aria-labelledby="cfb-forecast-tab-games" data-projection-panel="games" hidden>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-games-title">
       <h3 id="cfb-forecast-games-title">Upcoming games</h3>
-      <p>Browse game predictions and each team’s chance of winning. Where team scores are available, the table shows mean points and 80% predictive ranges. These describe possible outcomes, not exact-score promises. Select a game to explore its prediction and uncertainty.</p>
+      <p>Browse game predictions and each team’s chance of winning. Where team scores are available, the table shows mean points and the predictive range you select above. Select a game to explore its prediction and uncertainty.</p>
       <div class="cfb-forecast-controls">
         <label>Games<select data-projection-week></select></label>
         <label>Find a team<input type="search" data-projection-search placeholder="Team name"></label>
@@ -71,19 +72,18 @@
           <p class="small-note">Rounded mean points. The table retains decimals and shows how much the actual scores could vary.</p>
           <div class="cfb-forecast-table" data-projection-score-summary tabindex="0" role="region" aria-label="Each team’s predicted score and uncertainty"></div>
           <div data-projection-score-chart></div>
-          <p class="small-note">An 80% predictive range contains the middle 80% of simulated scores for that team; a 95% range is wider. These include uncertainty about scoring tendencies and the variation in a single game. The two teams’ scores are connected: subtracting endpoints from their separate ranges does not give a range for the margin.</p>
+          <p class="small-note">The predictive range contains the selected middle portion of simulated scores for that team; 95% is wider than 80%. These include uncertainty about scoring tendencies and the variation in a single game. The two teams’ scores are connected: subtracting endpoints from their separate ranges does not give a range for the margin.</p>
         </section>
         <dl class="cfb-forecast-metrics" aria-live="polite">
           <div><dt>Predicted margin</dt><dd data-projection-line></dd></div>
           <div><dt data-projection-home-label>Home win chance</dt><dd data-projection-home-chance></dd></div>
           <div><dt data-projection-away-label>Away win chance</dt><dd data-projection-away-chance></dd></div>
-          <div><dt data-projection-range-label>80% final-margin range</dt><dd data-projection-range></dd></div>
-          <div><dt data-projection-range95-label>95% final-margin range</dt><dd data-projection-range95></dd></div>
+          <div><dt data-projection-range-label>Final-margin range</dt><dd data-projection-range></dd></div>
         </dl>
         <p data-projection-matchup-note></p>
         <div class="cfb-forecast-charts">
           <div><h4>Uncertainty about team strength</h4><div data-projection-strength-chart></div><p class="small-note">Points on the model’s FBS reference scale. Differences between teams estimate neutral-field margins. Overlap means the evidence does not cleanly separate the teams.</p></div>
-          <div><h4>How the game could turn out</h4><div data-projection-margin-chart></div><p class="small-note">This wider distribution adds game-to-game variation. An 80% range contains the middle 80% of simulated outcomes, conditional on the model.</p></div>
+          <div><h4>How the game could turn out</h4><div data-projection-margin-chart></div><p class="small-note">This wider distribution adds game-to-game variation. The selected range contains the middle 80% or 95% of simulated outcomes, conditional on the model.</p></div>
         </div>
       </div>
       <p class="small-note" data-projection-draw-note></p>
@@ -126,19 +126,18 @@
       <div data-projection-error-summary hidden>
         <dl class="cfb-forecast-metrics" aria-live="polite">
           <div><dt>Average signed error (bias)</dt><dd data-projection-error-bias></dd></div>
-          <div><dt>Middle 80% of past errors</dt><dd data-projection-error-range80></dd></div>
-          <div><dt>Middle 95% of past errors</dt><dd data-projection-error-range95></dd></div>
+          <div><dt data-projection-error-range-label>Range of past errors</dt><dd data-projection-error-range></dd></div>
         </dl>
         <p>Error means predicted home-team margin minus actual home-team margin, in points. Zero is an exact margin prediction; positive values overestimate the home team’s margin and negative values underestimate it. An average near zero means overestimates and underestimates balance. The spread shows how far individual predictions were off.</p>
         <div class="cfb-forecast-error-chart" data-projection-error-chart></div>
         <p class="small-note" data-projection-error-bias-note></p>
-        <p class="small-note">The 80% and 95% ranges contain the middle portions of the observed errors in these past games. They are not confidence intervals for the average or a predictive interval for a particular future game.</p>
+        <p class="small-note">The selected range contains the middle 80% or 95% of the observed errors in these past games. It is not a confidence interval for the average or a predictive interval for a particular future game.</p>
         <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Signed forecast errors by period and group"></div>
       </div>
       <details>
         <summary>Technical accuracy measures</summary>
         <div class="cfb-forecast-table" data-projection-evaluation-technical tabindex="0" role="region" aria-label="Absolute margin error by period and group"></div>
-        <p class="small-note">Mean absolute error (MAE) averages the magnitude of each margin error, ignoring its sign. It measures error size, not directional bias, and is not an interval. Its approximate 95% confidence interval describes uncertainty about that average, clustering by season and week. A group with only one week has no estimable cluster-based interval.</p>
+        <p class="small-note">Mean absolute error (MAE) averages the magnitude of each margin error, ignoring its sign. It measures error size, not directional bias, and is not an interval. Its approximate confidence interval uses your selected coverage and describes uncertainty about that average, clustering by season and week. A group with only one week has no estimable cluster-based interval.</p>
       </details>
       <p class="small-note">These saved checks evaluate the original power model before the QB extension. They use the handoff’s fixed regular-season and CFP evaluation sample; other bowls and games outside that sample are excluded. The 2023–2025 seasons were used for model development. Weekly windows use earlier games, but some preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions. Backtests used two chains × 250 draws, separately from production checks.</p>
     </section>

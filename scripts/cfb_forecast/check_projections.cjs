@@ -12,6 +12,10 @@ for(const nu of [2.01,3,7,30,1000])for(const x of [-100,-10,-1,0,1,10,100]) {
 }
 const a=data.ratings[0].id,b=data.ratings[1].id;
 const neutral=api.matchup(draws,a,b,true),reverse=api.matchup(draws,b,a,true),home=api.matchup(draws,a,b,false);
+assert.ok(neutral.expected95[0]<=neutral.expected80[0]&&neutral.expected95[1]>=neutral.expected80[1]);
+const positions=api.strengthPositions({sigma:Array(100).fill(1),teams:{a:Array(95).fill(2).concat(Array(5).fill(0)),b:Array(100).fill(1),fcs:Array(100).fill(100)}},['a','b']);
+assert.deepEqual(positions.a[80],[1,1]);assert.deepEqual(positions.a[95],[1,2]);
+assert.deepEqual(positions.b[80],[2,2]);assert.deepEqual(positions.b[95],[1,2]);
 assert.ok(Math.abs(neutral.pHome+reverse.pHome-1)<1e-12);
 assert.ok(Math.abs(neutral.margin+reverse.margin)<1e-12);
 assert.ok(Math.abs(home.homeLine+home.margin)<1e-12);
@@ -42,6 +46,13 @@ async function controller(hash='',overrides={}) {
     }
   }
   const get=k=>nodes.get(k)||null;
+  for(const [,attrs,content] of template.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/g)) {
+    const key=attrs.match(/\bdata-projection-([\w-]+)/)?.[1];if(!key)continue;
+    const options=[...content.matchAll(/<option\b([^>]*)>([^<]*)<\/option>/g)].map(([,a,text])=>{
+      const option=new Element('option');option.textContent=text;option.setAttribute('value',a.match(/value="([^"]*)"/)?.[1]??text);return option;
+    });
+    get(key).replaceChildren(...options);
+  }
   get('limit').value='all';const root=new Element(),main=new Element();root.dataset.index='/assets/data/cfb/projections/index.json';
   root.querySelector=s=>get(s.match(/data-projection-([^\]]+)/)[1]);
   const buttons=['merit','projections'].map(name=>{const b=new Element('button');b.dataset.cfbProductTab=name;return b;});
@@ -64,7 +75,8 @@ async function controller(hash='',overrides={}) {
   p.buttons[1].handlers.click();await p.settle();assert.equal(p.main.hidden,true);assert.equal(p.root.hidden,false);
   assert.equal(p.get('status').textContent,'');assert.equal(p.get('content').hidden,false);
   assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/by .* points|Evenly matched/);
-  assert.match(p.get('range95').textContent,/ to /);
+  assert.equal(p.get('coverage').value,'95');assert.match(p.get('range').textContent,/ to /);
+  assert.match(p.get('range-label').textContent,/95%/);
   assert.ok(p.get('games').children[0].children[0].children[0].children.every(h=>!(/market|line|opener/i.test(h.textContent))));
   assert.ok(p.get('strength-chart').children.length>0);assert.ok(p.get('margin-chart').children.length>0);
   assert.equal(p.get('powers').children[0].children[1].children.length,data.ratings.length);
@@ -94,6 +106,25 @@ async function controller(hash='',overrides={}) {
   }
   direct.get('reload').handlers.click();await direct.settle();
   assert.equal(direct.get('snapshot').value,index.latest);assert.equal(direct.get('status').textContent,'');
+  const headers=element=>element.children[0].children[0].children[0].children.map(n=>n.textContent);
+  const rows=element=>element.children[0].children[1].children.map(r=>r.children.map(c=>c.children[0].textContent));
+  const originalRange=direct.get('range').textContent,originalLine=direct.get('line').textContent;
+  const originalProbability=direct.get('home-chance').textContent,originalRequests=direct.requests.length;
+  const originalPower=rows(direct.get('powers'))[0][5];
+  direct.get('coverage').value='80';direct.get('coverage').handlers.change();
+  assert.equal(direct.requests.length,originalRequests,'Changing interval coverage must not fetch or fit');
+  assert.match(direct.get('range-label').textContent,/80%/);assert.notEqual(direct.get('range').textContent,originalRange);
+  assert.equal(direct.get('line').textContent,originalLine);assert.equal(direct.get('home-chance').textContent,originalProbability);
+  assert.ok(headers(direct.get('powers')).includes('80% interval'));assert.notEqual(rows(direct.get('powers'))[0][5],originalPower);
+  assert.match(direct.get('error-range-label').textContent,/80%/);assert.match(direct.get('error-bias-note').textContent,/80% confidence/);
+  assert.ok(headers(direct.get('evaluation')).includes('Middle 80% of errors (pts)'));
+  assert.ok(headers(direct.get('evaluation-technical')).includes('80% confidence interval for MAE'));
+  await direct.get('snapshot').handlers.change();await direct.settle();
+  assert.equal(direct.get('coverage').value,'80');assert.match(direct.get('range-label').textContent,/80%/);
+  direct.get('reload').handlers.click();await direct.settle();
+  assert.equal(direct.get('coverage').value,'80');assert.equal(direct.get('status').textContent,'');
+  direct.get('coverage').value='95';direct.get('coverage').handlers.change();
+  assert.equal(direct.get('range').textContent,originalRange);assert.equal(rows(direct.get('powers'))[0][5],originalPower);
   // Exercise the new drift/details controller using in-memory data, not a browser.
   const dynamic={...draws,last:draws.teams,drift:Object.fromEntries(Object.entries(draws.teams).map(([id,x],j)=>[id,x.map((_,i)=>(j%2?1:-1)*(i/x.length-.5)*2)]))};
   delete dynamic.teams;delete dynamic.means;api.validateDraws(dynamic);
@@ -115,6 +146,17 @@ async function controller(hash='',overrides={}) {
   assert.equal(modern.get('score-summary').children[0].children[1].children.length,2);
   assert.ok(Number.isFinite(Number(modern.get('home-score').textContent)));
   assert.ok(modern.get('games').children[0].children[0].children[0].children.some(h=>/Home points/.test(h.textContent)));
+  const scoreBefore=modern.get('home-score').textContent,scoreRangeBefore=rows(modern.get('score-summary'))[0][3];
+  const gameRangeBefore=rows(modern.get('games'))[0][2],requestsBefore=modern.requests.length;
+  modern.get('coverage').value='80';modern.get('coverage').handlers.change();
+  assert.ok(headers(modern.get('score-summary')).includes('80% predictive range'));
+  assert.ok(headers(modern.get('games')).includes('Home points · mean (80% range)'));
+  assert.equal(modern.get('home-score').textContent,scoreBefore);
+  assert.notEqual(rows(modern.get('score-summary'))[0][3],scoreRangeBefore);assert.notEqual(rows(modern.get('games'))[0][2],gameRangeBefore);
+  assert.match(modern.get('score-chart').children[1].textContent,/80% range/);
+  assert.equal(modern.requests.length,requestsBefore);
+  modern.get('coverage').value='95';modern.get('coverage').handlers.change();
+  assert.equal(rows(modern.get('score-summary'))[0][3],scoreRangeBefore);assert.equal(rows(modern.get('games'))[0][2],gameRangeBefore);
   const qbDraws={...dynamic,lam:dynamic.sigma.map((_,i)=>.5+i/dynamic.sigma.length),lambda_mean:1.,
     quarterbacks:{[game.home]:{x:2,options:{backup:-4}},[game.away]:{x:-1,options:{backup:3}}}};
   const base=api.matchup(qbDraws,game.home,game.away,true,1,{home:'mix',away:'mix'});
@@ -127,5 +169,5 @@ async function controller(hash='',overrides={}) {
   assert.ok(Math.abs(starter.pHome+reverseQB.pHome-1)<1e-12);
   assert.throws(()=>api.matchup(qbDraws,game.home,game.away,true,1,{home:'unknown'}),/Unknown quarterback/);
   modern.get('eval-period').value='holdout';modern.get('eval-period').handlers.change();assert.match(modern.get('backtest-summary').textContent,/2026/);
-  console.log(JSON.stringify({checks:'projection probabilities, venue, signs, payload integrity, tab isolation, charts, caching',games:data.games.length,maxProbabilityError,maxMarginError}));
+  console.log(JSON.stringify({checks:'projection probabilities, venue, signs, payload integrity, tab isolation, charts, caching, 80/95 interval selection',games:data.games.length,maxProbabilityError,maxMarginError}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
