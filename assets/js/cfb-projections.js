@@ -132,6 +132,11 @@
       return [id,{80:[quantile(sorted,.1),quantile(sorted,.9)],95:[quantile(sorted,.025),quantile(sorted,.975)]}];
     }));
   }
+  function orderGames(games,ratings) {
+    const positions=new Map(ratings.filter(r=>Number.isFinite(r.position)&&r.position>0).map(r=>[r.id,r.position]));
+    const average=g=>((positions.get(g.home)??Infinity)+(positions.get(g.away)??Infinity))/2;
+    return [...games].sort((a,b)=>average(a)-average(b)||Date.parse(a.date)-Date.parse(b.date)||String(a.id).localeCompare(String(b.id)));
+  }
   function mount(doc) {
     const root=doc.querySelector('[data-cfb-projections]');if(!root)return;
     const el=k=>root.querySelector(`[data-projection-${k}]`);
@@ -255,7 +260,7 @@
     }
     function renderGames() {
       if(!data)return;const week=el('week').value,q=el('search').value.trim().toLowerCase(),level=coverage();
-      const rows=data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q)));
+      const rows=orderGames(data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q))),data.ratings);
       const hasScores=data.games.length>0&&data.games.every(g=>g.scores?.home&&g.scores?.away);
       const columns=hasScores?[`Home points · mean (${level}% range)`,`Away points · mean (${level}% range)`]:['Predicted margin'];
       table(el('games'),['Date','Matchup',...columns,'Home win','Away win'],rows.map(g=>{
@@ -425,5 +430,5 @@
     for(const key of ['conference','limit','power-search'])el(key).addEventListener(key==='power-search'?'input':'change',renderRatings);
     activate(location.hash==='#projections'?'projections':'merit');
   }
-  return {tcdf,matchup,validateDraws,scoreOutcomes,strengthPositions,mount};
+  return {tcdf,matchup,validateDraws,scoreOutcomes,strengthPositions,orderGames,mount};
 });
