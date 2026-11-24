@@ -75,8 +75,8 @@ async function controller(hash='',overrides={}) {
   p.buttons[1].handlers.click();await p.settle();assert.equal(p.main.hidden,true);assert.equal(p.root.hidden,false);
   assert.equal(p.get('status').textContent,'');assert.equal(p.get('content').hidden,false);
   assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/by .* points|Evenly matched/);
-  assert.equal(p.get('coverage').value,'95');assert.match(p.get('range').textContent,/ to /);
-  assert.match(p.get('range-label').textContent,/95%/);
+  assert.equal(p.get('coverage').value,'80');assert.match(p.get('range').textContent,/ to /);
+  assert.match(p.get('range-label').textContent,/80%/);
   assert.ok(p.get('games').children[0].children[0].children[0].children.every(h=>!(/market|line|opener/i.test(h.textContent))));
   assert.ok(p.get('strength-chart').children.length>0);assert.ok(p.get('margin-chart').children.length>0);
   assert.equal(p.get('powers').children[0].children[1].children.length,data.ratings.length);
@@ -124,20 +124,20 @@ async function controller(hash='',overrides={}) {
   const originalRange=direct.get('range').textContent,originalLine=direct.get('line').textContent;
   const originalProbability=direct.get('home-chance').textContent,originalRequests=direct.requests.length;
   const originalPower=rows(direct.get('powers'))[0][5];
-  direct.get('coverage').value='80';direct.get('coverage').handlers.change();
-  assert.equal(direct.requests.length,originalRequests,'Changing interval coverage must not fetch or fit');
-  assert.match(direct.get('range-label').textContent,/80%/);assert.notEqual(direct.get('range').textContent,originalRange);
-  assert.equal(direct.get('line').textContent,originalLine);assert.equal(direct.get('home-chance').textContent,originalProbability);
-  assert.ok(headers(direct.get('powers')).includes('80% interval'));assert.notEqual(rows(direct.get('powers'))[0][5],originalPower);
-  assert.match(direct.get('error-range-label').textContent,/80%/);assert.match(direct.get('error-bias-note').textContent,/80% confidence/);
-  checkAccuracy(direct,'holdout');
-  assert.ok(headers(direct.get('evaluation-signed')).includes('Middle 80% of errors (pts)'));
-  assert.ok(headers(direct.get('evaluation-technical')).includes('80% confidence interval for MAE'));
-  await direct.get('snapshot').handlers.change();await direct.settle();
-  assert.equal(direct.get('coverage').value,'80');assert.match(direct.get('range-label').textContent,/80%/);
-  direct.get('reload').handlers.click();await direct.settle();
-  assert.equal(direct.get('coverage').value,'80');assert.equal(direct.get('status').textContent,'');
   direct.get('coverage').value='95';direct.get('coverage').handlers.change();
+  assert.equal(direct.requests.length,originalRequests,'Changing interval coverage must not fetch or fit');
+  assert.match(direct.get('range-label').textContent,/95%/);assert.notEqual(direct.get('range').textContent,originalRange);
+  assert.equal(direct.get('line').textContent,originalLine);assert.equal(direct.get('home-chance').textContent,originalProbability);
+  assert.ok(headers(direct.get('powers')).includes('95% interval'));assert.notEqual(rows(direct.get('powers'))[0][5],originalPower);
+  assert.match(direct.get('error-range-label').textContent,/95%/);assert.match(direct.get('error-bias-note').textContent,/95% confidence/);
+  checkAccuracy(direct,'holdout');
+  assert.ok(headers(direct.get('evaluation-signed')).includes('Middle 95% of errors (pts)'));
+  assert.ok(headers(direct.get('evaluation-technical')).includes('95% confidence interval for MAE'));
+  await direct.get('snapshot').handlers.change();await direct.settle();
+  assert.equal(direct.get('coverage').value,'95');assert.match(direct.get('range-label').textContent,/95%/);
+  direct.get('reload').handlers.click();await direct.settle();
+  assert.equal(direct.get('coverage').value,'95');assert.equal(direct.get('status').textContent,'');
+  direct.get('coverage').value='80';direct.get('coverage').handlers.change();
   assert.equal(direct.get('range').textContent,originalRange);assert.equal(rows(direct.get('powers'))[0][5],originalPower);
   // Exercise the new drift/details controller using in-memory data, not a browser.
   const dynamic={...draws,last:draws.teams,drift:Object.fromEntries(Object.entries(draws.teams).map(([id,x],j)=>[id,x.map((_,i)=>(j%2?1:-1)*(i/x.length-.5)*2)]))};
@@ -160,19 +160,19 @@ async function controller(hash='',overrides={}) {
   assert.equal(modern.get('score-summary').children[0].children[1].children.length,2);
   assert.ok(Number.isFinite(Number(modern.get('home-score').textContent)));
   assert.ok(modern.get('games').children[0].children[0].children[0].children.some(h=>/Home points/.test(h.textContent)));
-  assert.deepEqual(headers(modern.get('games')),['Date','Matchup','Home points · mean (95% range)',
-    'Away points · mean (95% range)','Predicted margin','Home win','Away win']);
+  assert.deepEqual(headers(modern.get('games')),['Date','Matchup','Home points · mean (80% range)',
+    'Away points · mean (80% range)','Predicted margin','Home win','Away win']);
   assert.equal(rows(modern.get('games'))[0][4],modern.get('line').textContent);
   const scoreBefore=modern.get('home-score').textContent,scoreRangeBefore=rows(modern.get('score-summary'))[0][3];
   const gameRangeBefore=rows(modern.get('games'))[0][2],requestsBefore=modern.requests.length;
-  modern.get('coverage').value='80';modern.get('coverage').handlers.change();
-  assert.ok(headers(modern.get('score-summary')).includes('80% predictive range'));
-  assert.ok(headers(modern.get('games')).includes('Home points · mean (80% range)'));
+  modern.get('coverage').value='95';modern.get('coverage').handlers.change();
+  assert.ok(headers(modern.get('score-summary')).includes('95% predictive range'));
+  assert.ok(headers(modern.get('games')).includes('Home points · mean (95% range)'));
   assert.equal(modern.get('home-score').textContent,scoreBefore);
   assert.notEqual(rows(modern.get('score-summary'))[0][3],scoreRangeBefore);assert.notEqual(rows(modern.get('games'))[0][2],gameRangeBefore);
-  assert.match(modern.get('score-chart').children[1].textContent,/80% range/);
+  assert.match(modern.get('score-chart').children[1].textContent,/95% range/);
   assert.equal(modern.requests.length,requestsBefore);
-  modern.get('coverage').value='95';modern.get('coverage').handlers.change();
+  modern.get('coverage').value='80';modern.get('coverage').handlers.change();
   assert.equal(rows(modern.get('score-summary'))[0][3],scoreRangeBefore);assert.equal(rows(modern.get('games'))[0][2],gameRangeBefore);
   const qbDraws={...dynamic,lam:dynamic.sigma.map((_,i)=>.5+i/dynamic.sigma.length),lambda_mean:1.,
     quarterbacks:{[game.home]:{x:2,options:{backup:-4}},[game.away]:{x:-1,options:{backup:3}}}};

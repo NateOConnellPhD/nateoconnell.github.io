@@ -9,7 +9,7 @@ the supplied model and historical estimator are executed directly from unchanged
 The public explanation distinguishes prospective team strength from earned-merit
 seeding rankings and explains both the rating's FBS reference level and a concrete
 two-team comparison. Statistical explanations are expandable. An 80%/95% interval
-selector starts at 95% and changes rating intervals, ranges of strength positions,
+selector starts at 80% and changes rating intervals, ranges of strength positions,
 game scores/margins, and historical-error displays without changing point estimates,
 probabilities or model inputs. Strength-position ranges use the aligned saved draws
 across all FBS teams; other rating summaries retain their full-draw exports. The

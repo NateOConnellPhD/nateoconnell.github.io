@@ -167,7 +167,7 @@
     const date=v=>new Date(v).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'America/New_York'});
     const interval=v=>`${sign(v[0])} to ${sign(v[1])}`;
     const scoreRange=(s,coverage)=>`${fmt(s['lo'+coverage])}–${fmt(s['hi'+coverage])}`;
-    const coverage=()=>el('coverage').value==='80'?80:95;
+    const coverage=()=>el('coverage').value==='95'?95:80;
     const normalCritical=()=>coverage()===80?1.2815515655446004:1.959963984540054;
     const cache=new Map();let index,data,draws,positions,backtest,qbStatus,sequence=0,initializing=null;
     const base=new URL('./',new URL(root.dataset.index,location.href));
