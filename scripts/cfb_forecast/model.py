@@ -6,6 +6,8 @@ from exactly three preceding seasons. No ranking policy or reference team enters
 import math
 from .config import CONFIG
 
+SAMPLING_ATTEMPTS = ((2000, 2000), (4000, 4000))
+
 
 def efficiency_target(margin, expectancy, config=CONFIG):
     import numpy as np
@@ -60,7 +62,7 @@ def forecast_model(n_teams, home, away, venue, margin, host, home_prior, structu
     with nr.plate('games', len(home)): nr.sample('margin', d.StudentT(nu, loc, sigma), obs=margin)
 
 
-def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws):
+def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws, target_accept=None):
     import jax
     import jax.numpy as jnp
     from numpyro.infer import MCMC, NUTS, init_to_value
@@ -73,7 +75,8 @@ def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws):
     n_weeks = max(g['week'] for g in inputs['games'])
     # A longer recovery attempt also takes smaller steps; the posterior model
     # and publication thresholds are unchanged.
-    target_accept = .97 if warmup > 1000 else .9
+    if target_accept is None: target_accept = .99 if warmup > 2000 else .97
+    if not 0 < target_accept < 1: raise ValueError('Target acceptance must be between zero and one')
     sampler = MCMC(NUTS(forecast_model, target_accept_prob=target_accept, max_tree_depth=10,
         init_strategy=init_to_value(values={'mu_fcs': gap, 'tau_division': jnp.array([10., 10.]), 'tau_conf': 5.})),
         num_warmup=warmup, num_samples=draws, num_chains=4, chain_method='sequential', progress_bar=False)
@@ -82,7 +85,8 @@ def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws):
         home_prior=(jnp.asarray(home_prior['mean']), jnp.asarray(home_prior['chol'])),
         structure=inputs['strength_structure'], has_prior=jnp.asarray(has), prior_mean=jnp.asarray(pm),
         prior_sd=prior['sd'], fcs_mean=gap, fcs_prior=jnp.asarray(fcs), fcs_sd=prior['fcs_sd'],
-        week=jnp.asarray([max(g['week']-1, 0) for g in inputs['games']]), n_weeks=n_weeks, extra_fields=('energy', 'num_steps'))
+        week=jnp.asarray([max(g['week']-1, 0) for g in inputs['games']]), n_weeks=n_weeks,
+        extra_fields=('energy', 'num_steps', 'accept_prob', 'potential_energy', 'adapt_state.step_size'))
     sampler.forecast_target_accept = target_accept
     return sampler
 
@@ -105,6 +109,7 @@ def diagnose(sampler):
     d['sampling_checks_passed'] = bool(all(np.isfinite(v).all() for v in (rhat, bulk, tail, bfmi))
         and rhat.max() <= 1.01 and min(bulk.min(), tail.min()) >= 400 and bfmi.min() >= .3
         and d['divergences'] == d['tree_depth_limit_hits'] == 0)
+    d.update(transition_details(samples, extra))
     # Diagnostics include all stochastic parameters. Persist only arrays needed
     # for prediction; duplicated latent/deterministic paths waste task storage.
     keep = ('theta', 'theta_last', 'walk', 'q', 'home_effect', 'sigma', 'nu', 's_prev')
@@ -112,6 +117,28 @@ def diagnose(sampler):
     import jax
     jax.clear_caches()
     return saved, d, {}
+
+
+def transition_details(samples, extra):
+    """Small diagnostic record, including failed fits; never discard divergence flags.
+
+    NumPyro's retained state can precede a rejected divergent proposal. These
+    contexts locate warning transitions; they are not the exploding trajectory.
+    """
+    import numpy as np
+    flags = np.asarray(extra['diverging'], bool)
+    report = {'divergences_by_chain': flags.sum(axis=1).tolist(),
+        'divergent_transitions': [{'chain': int(c)+1, 'draw': int(i)+1} for c,i in np.argwhere(flags)[:50]],
+        'divergence_context': {}}
+    for key, field in [('acceptance_by_chain','accept_prob'), ('step_size_by_chain','adapt_state.step_size')]:
+        if field in extra: report[key] = np.asarray(extra[field]).mean(axis=1).tolist()
+    if flags.any():
+        for name in ('mu_fcs','tau_division','tau_conf','s_prev','q','eta_sigma','eta_nu'):
+            if name not in samples: continue
+            a = np.asarray(samples[name]); flat = a.reshape((-1,)+a.shape[2:])
+            report['divergence_context'][name] = {'all_q05_q50_q95': np.quantile(flat,[.05,.5,.95],axis=0).tolist(),
+                'flagged_states': a[flags][:50].tolist()}
+    return report
 
 
 def prediction_arrays(samples, inputs, target):

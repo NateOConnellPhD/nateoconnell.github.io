@@ -17,8 +17,8 @@ The public interface calls this game projections, without development labels.
   Sparse windows (at most 30 usable probabilities) use the specified 4.5 slope.
 - Home-field joint covariance comes from exactly three previous seasons.
 - Week 1 uses the specified Gaussian prior approximation. Later windows use
-  four sequential NUTS chains with 1,000 warmup/retained draws per chain,
-  then a 2,000/2,000 attempt with target acceptance 0.97 (initially 0.90) if
+  four sequential NUTS chains with 2,000 warmup/retained draws per chain and
+  target acceptance 0.97, then a 4,000/4,000 attempt at 0.99 if
   diagnostics fail. The model and publication thresholds are unchanged.
   The identically-zero first-week walk coordinate is excluded from R-hat;
   every stochastic parameter is checked. JAX caches clear after each attempt.
@@ -62,6 +62,16 @@ Known limits:
   diagnostics. It is **not imported as a validated production fit**. The next
   workflow must produce a passing fit; the old saved forecast is visibly labeled
   as an earlier-model archive until then.
+  A local 2026 refit on November 23 passed all checks with 8,000 retained draws:
+  zero divergences/tree-depth hits, maximum R-hat 1.00552, minimum bulk ESS 482.81,
+  minimum tail ESS 525.50, and minimum BFMI 0.85069. Sampling took 91 seconds on
+  the local machine, excluding diagnostics. The original 4,000-draw settings
+  had zero divergences in the local reproduction but poor drift-scale mixing
+  (q R-hat 1.02334, ESS 197.91); increasing target acceptance alone did not fix it.
+  The supplied file lacks transition-level flags, so its two original divergent
+  trajectories cannot be located retrospectively. New reports retain chain/draw
+  positions, scale contexts, acceptance and step-size summaries, including on
+  failure. The model and diagnostic thresholds were not changed.
 - Current saved feeds support forecasting for 2025–2026. Fresh historical refits
   for 2023–2024 need their missing saved FCS feeds (and 2023 also needs 2020 home
   history). The supplied 2023–2025 evaluation is available without those refits.

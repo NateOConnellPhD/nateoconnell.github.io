@@ -59,7 +59,8 @@ def fit_window(inputs, prior, expectancy, training_key):
         'packages': {p:version(p) for p in ('numpy','scipy','jax','jaxlib','numpyro','arviz')}, 'seed':CONFIG.seed, 'chains':4}
     samples, report, fit_key, reused = checked_full_fit(identity, TASK / 'forecast-fits',
         {'season':inputs['season'], 'week':inputs.get('last_training_week',max(g['week'] for g in inputs['games']))},
-        lambda **settings: forecast.fit(inputs, prior, home, prior['fcs_gap'], target, **settings), forecast.diagnose, lambda _: {})
+        lambda **settings: forecast.fit(inputs, prior, home, prior['fcs_gap'], target, **settings), forecast.diagnose, lambda _: {},
+        attempt_settings=forecast.SAMPLING_ATTEMPTS)
     arrays, rescale = forecast.prediction_arrays(samples, inputs, target)
     return arrays, home, {'fit_key':fit_key, 'fit_reused':reused, 'prior_only':False,
         'diagnostics':report['diagnostics'], 'noise_rescale':rescale, 'efficiency_games':count,'efficiency_scale':scale,

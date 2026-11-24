@@ -120,6 +120,16 @@ class V7Tests(unittest.TestCase):
         self.assertAlmostEqual(row['p_home'],norm.cdf(28./sd))
         self.assertAlmostEqual(row['margin_hi80'],28.+norm.ppf(.9)*sd)
 
+    def test_divergence_context_keeps_chain_positions_and_scale_values(self):
+        flags=np.array([[False,True,False],[True,False,False]])
+        q=np.arange(6,dtype=float).reshape(2,3)
+        result=forecast.transition_details({'q':q}, {'diverging':flags,
+            'accept_prob':np.full((2,3),.97),'adapt_state.step_size':np.full((2,3),.04)})
+        self.assertEqual(result['divergences_by_chain'],[1,1])
+        self.assertEqual(result['divergent_transitions'],[{'chain':1,'draw':2},{'chain':2,'draw':1}])
+        self.assertEqual(result['divergence_context']['q']['flagged_states'],[1.,3.])
+        np.testing.assert_allclose(result['step_size_by_chain'],[.04,.04])
+
     def test_line_sign_median_missing_and_cache(self):
         payload=[{'id':1,'lines':[{'provider':'a','spreadOpen':-3.,'spread':-4.},{'provider':'b','spreadOpen':-5.,'spread':None}]}]
         c=markets.consensus(payload)['1'];self.assertEqual(c['open'],-4.);self.assertEqual(c['latest'],-4.)

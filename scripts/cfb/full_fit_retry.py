@@ -20,7 +20,8 @@ def array_hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def checked_full_fit(base_identity, cache, context, fit_attempt, describe, predictive, emit=log_event):
+def checked_full_fit(base_identity, cache, context, fit_attempt, describe, predictive, emit=log_event,
+                     attempt_settings=FULL_ATTEMPTS):
     """Reuse a passing initial or longer fit before doing any more sampling.
 
     The seed, model and diagnostics remain fixed. Failed draws are never saved
@@ -28,7 +29,7 @@ def checked_full_fit(base_identity, cache, context, fit_attempt, describe, predi
     """
     import numpy as np
 
-    identities = [{**base_identity, 'warmup': warmup, 'draws': draws} for warmup, draws in FULL_ATTEMPTS]
+    identities = [{**base_identity, 'warmup': warmup, 'draws': draws} for warmup, draws in attempt_settings]
     prior_failures = {}
     for number, identity in enumerate(identities, 1):
         key = digest(identity)
