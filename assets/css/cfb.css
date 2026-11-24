@@ -120,6 +120,10 @@
 .cfb-projections:target { display: block !important; }
 .cfb-forecast-card { background: rgba(255,255,255,.55); border: 1px solid #bfd2e1; border-radius: 12px; padding: clamp(1rem,2.5vw,2rem); margin: 1.5rem 0; }
 .cfb-forecast-card h3 { margin-top: 0; }
+.cfb-forecast-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1.25rem 0; border-bottom: 1px solid #bfd2e1; }
+.cfb-forecast-tabs button { flex: 1 1 150px; min-height: 44px; padding: .75rem 1rem; border: 0; border-bottom: 3px solid transparent; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.cfb-forecast-tabs button[aria-selected="true"] { border-color: #245a82; background: #dfedf7; font-weight: 700; }
+.cfb-forecast-tabs button:focus-visible { outline: 2px solid #245a82; outline-offset: 2px; }
 .cfb-forecast-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin: 1rem 0; }
 .cfb-forecast-controls label { display: flex; flex: 1 1 170px; flex-direction: column; gap: .35rem; font-size: .9rem; font-weight: 600; }
 .cfb-forecast-controls select, .cfb-forecast-controls input { min-width: 0; max-width: 100%; width: 100%; min-height: 44px; padding: .65rem; border: 1px solid #b7cddd; border-radius: 5px; background: #fff; color: inherit; font: inherit; }

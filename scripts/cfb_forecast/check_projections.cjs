@@ -33,11 +33,13 @@ class Element {
 }
 async function controller(hash='',overrides={}) {
   const nodes=new Map(),get=k=>{if(!nodes.has(k))nodes.set(k,new Element(['snapshot','home','away','site','week','conference','limit'].includes(k)?'select':'div'));return nodes.get(k);};
-  get('limit').value='25';const root=new Element(),main=new Element();root.dataset.index='/assets/data/cfb/projections/index.json';
+  get('limit').value='all';const root=new Element(),main=new Element();root.dataset.index='/assets/data/cfb/projections/index.json';
   root.querySelector=s=>get(s.match(/data-projection-([^\]]+)/)[1]);
   const buttons=['merit','projections'].map(name=>{const b=new Element('button');b.dataset.cfbProductTab=name;return b;});
+  const viewButtons=['power','games','compare','method'].map(name=>{const b=new Element('button');b.dataset.projectionView=name;return b;});
+  const viewPanels=['power','games','compare','method'].map(name=>{const p=new Element();p.dataset.projectionPanel=name;return p;});
   const requests=[],events=[];
-  const doc={querySelector:s=>s.includes('product-panel')?main:root,querySelectorAll:s=>s.includes('product-tab')?buttons:[],
+  const doc={querySelector:s=>s.includes('product-panel')?main:root,querySelectorAll:s=>s.includes('product-tab')?buttons:s.includes('projection-view')?viewButtons:s.includes('projection-panel')?viewPanels:[],
     createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),createTextNode:text=>({textContent:text}),dispatchEvent:e=>events.push(e.type)};
   const location={href:`https://example.test/blog/cfb/${hash}`,hash,pathname:'/blog/cfb/',search:''};
   const context={document:doc,location,URL,Event,AbortController,setTimeout,clearTimeout,console,
@@ -46,7 +48,7 @@ async function controller(hash='',overrides={}) {
   context.window=context;context.addEventListener=()=>{};
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../assets/js/cfb-projections.js'),'utf8'),context);
   const settle=async()=>{for(let i=0;i<5;i++)await new Promise(setImmediate);};await settle();
-  return {get,main,root,buttons,requests,events,settle};
+  return {get,main,root,buttons,viewButtons,viewPanels,requests,events,settle};
 }
 (async()=>{
   const p=await controller();assert.equal(p.requests.length,0,'Merit view must not download projections');
@@ -54,7 +56,17 @@ async function controller(hash='',overrides={}) {
   assert.equal(p.get('status').textContent,'');assert.equal(p.get('content').hidden,false);
   assert.equal(p.get('matchup-result').hidden,false);assert.match(p.get('line').textContent,/−|Pick/);
   assert.ok(p.get('strength-chart').children.length>0);assert.ok(p.get('margin-chart').children.length>0);
-  assert.equal(p.get('powers').children[0].children[1].children.length,25);
+  assert.equal(p.get('powers').children[0].children[1].children.length,data.ratings.length);
+  assert.deepEqual(p.viewPanels.map(x=>x.hidden),[false,true,true,true]);
+  p.viewButtons[1].handlers.click();assert.deepEqual(p.viewPanels.map(x=>x.hidden),[true,false,true,true]);
+  p.get('games').children[0].children[1].children[0].children[1].children[0].handlers.click();
+  assert.deepEqual(p.viewPanels.map(x=>x.hidden),[true,true,false,true]);
+  p.viewButtons[0].handlers.click();
+  p.get('powers').children[0].children[1].children[0].children[1].children[0].handlers.click();
+  assert.equal(p.get('home').value,data.ratings[0].id);assert.equal(p.get('site').value,'neutral');
+  assert.deepEqual(p.viewPanels.map(x=>x.hidden),[true,true,false,true]);
+  p.viewButtons[2].handlers.keydown({key:'Home',preventDefault(){}});
+  assert.equal(p.viewButtons[0].attrs['aria-selected'],'true');
   const before=p.requests.length;p.get('swap').handlers.click();p.get('site').value='neutral';p.get('site').handlers.change();
   p.buttons[0].handlers.click();p.buttons[1].handlers.click();await p.settle();assert.equal(p.requests.length,before,'Changing teams/tabs must reuse static data');
   p.get('away').value=p.get('home').value;p.get('away').handlers.change();assert.match(p.get('matchup-error').textContent,/different/);

@@ -1,8 +1,8 @@
 <section id="projections" class="cfb-projections" role="tabpanel" aria-labelledby="cfb-product-projections" data-cfb-projections data-index="{{ '/assets/data/cfb/projections/index.json' | relative_url }}" hidden>
   <header class="cfb-forecast-heading">
     <p class="eyebrow">Looking ahead</p>
-    <h2>Game projections</h2>
-    <p class="page-deck">Who would win, how often, and by how much? These forecasts use a separate power model. They do not determine the merit rankings.</p>
+    <h2>Power ratings &amp; projections</h2>
+    <p class="page-deck">Browse every team’s predicted strength, compare teams, or explore upcoming games. These forecasts use a separate power model. They do not determine the merit rankings.</p>
     <p class="small-note" data-projection-asof></p>
   </header>
   <div class="cfb-forecast-controls">
@@ -12,6 +12,27 @@
   <p data-projection-status role="status" aria-live="polite"></p>
   <div data-projection-content hidden>
     <p class="small-note" data-projection-snapshot-note></p>
+    <div class="cfb-forecast-tabs" role="tablist" aria-label="Power ratings and forecasting views">
+      <button type="button" role="tab" id="cfb-forecast-tab-power" aria-controls="cfb-forecast-panel-power" aria-selected="true" tabindex="0" data-projection-view="power">Power ratings</button>
+      <button type="button" role="tab" id="cfb-forecast-tab-games" aria-controls="cfb-forecast-panel-games" aria-selected="false" tabindex="-1" data-projection-view="games">Games &amp; lines</button>
+      <button type="button" role="tab" id="cfb-forecast-tab-compare" aria-controls="cfb-forecast-panel-compare" aria-selected="false" tabindex="-1" data-projection-view="compare">Compare teams</button>
+      <button type="button" role="tab" id="cfb-forecast-tab-method" aria-controls="cfb-forecast-panel-method" aria-selected="false" tabindex="-1" data-projection-view="method">Method &amp; accuracy</button>
+    </div>
+    <div role="tabpanel" id="cfb-forecast-panel-power" aria-labelledby="cfb-forecast-tab-power" data-projection-panel="power">
+    <section class="cfb-forecast-card" aria-labelledby="cfb-power-title">
+      <h3 id="cfb-power-title">Power ratings</h3>
+      <p>Power measures predicted strength on the model’s FBS reference scale. If one team is rated 10 points above another, it is expected to win by about 10 on a neutral field. This ordering measures predicted strength, separately from what teams have earned.</p>
+      <div class="cfb-forecast-controls">
+        <label>Find a team<input type="search" data-projection-power-search placeholder="Team name"></label>
+        <label>Conference<select data-projection-conference></select></label>
+        <label>Show<select data-projection-limit><option value="all">All matching teams</option><option value="25">Top 25 matching teams</option></select></label>
+      </div>
+      <p class="small-note" data-projection-power-count aria-live="polite"></p>
+      <div class="cfb-forecast-table" data-projection-powers tabindex="0" role="region" aria-label="Power estimates and probabilities"></div>
+      <p class="small-note">Mean is the average estimate across posterior draws; median is the middle estimate. A 95% interval contains the middle 95% of plausible strengths. “P(top 12)” is the share of draws in which a team is among the twelve strongest; it is not its chance of making the playoff.</p>
+    </section>
+    </div>
+    <div role="tabpanel" id="cfb-forecast-panel-games" aria-labelledby="cfb-forecast-tab-games" data-projection-panel="games" hidden>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-games-title">
       <h3 id="cfb-forecast-games-title">Upcoming games</h3>
       <p>A model line of <strong>Georgia −6.5</strong> means Georgia is favored by about 6½ points. Opening and latest available sportsbook lines are shown alongside the model when available. Each market line is the median across books, from a dated saved feed.</p>
@@ -22,6 +43,8 @@
       <p class="small-note" data-projection-games-note aria-live="polite"></p>
       <div class="cfb-forecast-table" data-projection-games tabindex="0" role="region" aria-label="Upcoming game projections"></div>
     </section>
+    </div>
+    <div role="tabpanel" id="cfb-forecast-panel-compare" aria-labelledby="cfb-forecast-tab-compare" data-projection-panel="compare" hidden>
     <section class="cfb-forecast-card" data-projection-matchup aria-labelledby="cfb-forecast-matchup-title">
       <h3 id="cfb-forecast-matchup-title">Build a matchup</h3>
       <p>Choose two teams and a venue. The probability accounts for uncertainty about both teams, the host’s home advantage, and the unpredictability of a single game.</p>
@@ -55,18 +78,8 @@
       <div class="cfb-forecast-charts" data-projection-team-details></div>
       <p class="small-note">Weekly paths are retrospective estimates using every game available at this snapshot, not predictions made during those weeks. Game-implied strength is the blended game margin plus the opponent’s estimated strength, minus venue advantage. It is a descriptive comparison, not an additive share of the posterior rating.</p>
     </section>
-    <section class="cfb-forecast-card" aria-labelledby="cfb-power-title">
-      <h3 id="cfb-power-title">Power estimates &amp; uncertainty</h3>
-      <p>Power measures predicted strength on the model’s FBS reference scale. If one team is rated 10 points above another, it is expected to win by about 10 on a neutral field. This ordering measures predicted strength, separately from what teams have earned.</p>
-      <div class="cfb-forecast-controls">
-        <label>Find a team<input type="search" data-projection-power-search placeholder="Team name"></label>
-        <label>Conference<select data-projection-conference></select></label>
-        <label>Show<select data-projection-limit><option value="25">Top 25 matching teams</option><option value="all">All matching teams</option></select></label>
-      </div>
-      <p class="small-note" data-projection-power-count aria-live="polite"></p>
-      <div class="cfb-forecast-table" data-projection-powers tabindex="0" role="region" aria-label="Power estimates and probabilities"></div>
-      <p class="small-note">Mean is the average estimate across posterior draws; median is the middle estimate. A 95% interval contains the middle 95% of plausible strengths. “P(top 12)” is the share of draws in which a team is among the twelve strongest; it is not its chance of making the playoff.</p>
-    </section>
+    </div>
+    <div role="tabpanel" id="cfb-forecast-panel-method" aria-labelledby="cfb-forecast-tab-method" data-projection-panel="method" hidden>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-method-title">
       <h3 id="cfb-forecast-method-title">How these forecasts work</h3>
       <p>A <strong>posterior</strong> is the model’s updated picture after seeing the games. Each draw is one plausible set of team strengths, home advantages, and game variability. Comparing teams within the same draw keeps their uncertainty connected.</p>
@@ -87,5 +100,6 @@
       <p class="small-note">Scoring includes regular-season and CFP games with both opening and closing lines. Other bowls are excluded because opt-outs are outside the model. Lower average absolute error is better; a negative difference favors the model. SE measures uncertainty in the paired difference, clustered by season and week. It is unavailable for a group containing only one week.</p>
       <p class="small-note">The 2023–2025 seasons were used to develop this model. The frozen-model 2026 check performed worse than the opener; the earlier side-picking advantage did not persist. Weekly windows use earlier games, but some supplied preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions, not a fully archived prospective betting record. Backtests used two chains × 250 draws; they are separate from the stricter production checks.</p>
     </section>
+    </div>
   </div>
 </section>

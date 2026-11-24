@@ -79,6 +79,23 @@
     const el=k=>root.querySelector(`[data-projection-${k}]`);
     const main=doc.querySelector('[data-cfb-product-panel="merit"]');
     const buttons=[...doc.querySelectorAll('[data-cfb-product-tab]')];
+    const viewButtons=[...doc.querySelectorAll('[data-projection-view]')];
+    const viewPanels=[...doc.querySelectorAll('[data-projection-panel]')];
+    function selectView(name,focus=false) {
+      viewPanels.forEach(p=>{p.hidden=p.dataset.projectionPanel!==name;});
+      viewButtons.forEach(b=>{const chosen=b.dataset.projectionView===name;
+        b.setAttribute('aria-selected',String(chosen));b.tabIndex=chosen?0:-1;
+        if(chosen&&focus)b.focus();});
+    }
+    viewButtons.forEach((b,i)=>{
+      b.addEventListener('click',()=>selectView(b.dataset.projectionView));
+      b.addEventListener('keydown',e=>{
+        if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
+        const j=e.key==='Home'?0:e.key==='End'?viewButtons.length-1:(i+(e.key==='ArrowRight'?1:-1)+viewButtons.length)%viewButtons.length;
+        selectView(viewButtons[j].dataset.projectionView,true);
+      });
+    });
+    selectView('power');
     const node=(tag,text,attrs={})=>{const n=doc.createElement(tag);if(text!=null)n.textContent=text;for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;};
     const svg=(tag,attrs,text)=>{const n=doc.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!=null)n.textContent=text;return n;};
     const fmt=v=>Number.isFinite(v)?v.toFixed(1):'—';
@@ -158,18 +175,24 @@
       const rows=data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q)));
       table(el('games'),['Date','Matchup','Model line','Market opener','Market latest','Home win','Away win','80% final-margin range (home)'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
-        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
+        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
         const by=Math.round(Math.abs(g.home_margin)*2)/2;
         const marketLine=v=>Number.isFinite(v)?(v===0?'Pick’em':`${team(v<0?g.home:g.away)} −${Math.abs(v).toFixed(1)}`):'Unavailable';
         return [date(g.date),b,by?`${team(g.home_margin>0?g.home:g.away)} −${by.toFixed(1)}`:'Pick’em',marketLine(g.market?.open),marketLine(g.market?.latest),pct(g.p_home),pct(1-g.p_home),interval([g.margin_lo80,g.margin_hi80])];
       }));
-      el('games-note').textContent=rows.length?`${rows.length} scheduled games in this saved forecast. Select a game to explore it below. ${data.meta.market_observed_at?'Market feed saved '+date(data.meta.market_observed_at)+'.':'No saved market feed is available.'}`:'No upcoming games match this selection in this saved snapshot.';
+      el('games-note').textContent=rows.length?`${rows.length} scheduled games in this saved forecast. Select a game to open Compare teams. ${data.meta.market_observed_at?'Market feed saved '+date(data.meta.market_observed_at)+'.':'No saved market feed is available.'}`:'No upcoming games match this selection in this saved snapshot.';
     }
     function renderRatings() {
       if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value;
       const rows=data.ratings.filter(r=>(!conf||r.conference===conf)&&(!q||r.name.toLowerCase().includes(q)));
       const shown=el('limit').value==='all'?rows:rows.slice(0,25);
-      table(el('powers'),['Power order','Team','Mean (pts)','Median','95% interval','80% order range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>[r.position,r.name,sign(r.mean),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)]));
+      table(el('powers'),['Rank','Team','Record','Mean (pts)','Median','95% interval','80% rank range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
+        const name=node('button',r.name,{type:'button',class:'cfb-forecast-game'});
+        name.addEventListener('click',()=>{el('home').value=r.id;
+          if(el('away').value===r.id)el('away').value=data.ratings.find(t=>t.id!==r.id).id;
+          el('site').value='neutral';el('horizon').value='1';selectView('compare',true);renderMatchup();});
+        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
+      }));
       el('power-count').textContent=`Showing ${shown.length} of ${rows.length} matching FBS teams. Order is by posterior mean power; probabilities describe strength, not playoff qualification.`;
     }
     function trajectory(target,path,label) {
