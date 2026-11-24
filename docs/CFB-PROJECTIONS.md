@@ -140,8 +140,10 @@ Team details show the regression inputs and prior contributions, posterior weekl
 paths, and retrospective game evidence. Game-implied strength is descriptive,
 not an additive attribution of the posterior. Game predictions show the expected
 margin in points, both win probabilities and 80%/95% predictive intervals.
-The supplied model predicts score differences, not separate team totals; these
-intervals must not be presented as intervals for a team's final score.
+The supplied model predicts score differences. A separate
+[conditional scoring extension](CFB-SCORE-PREDICTIONS.md) now adds each team's
+mean/median final points, predictive ranges and distributions using saved final
+scores. Margin ranges and team-score ranges remain distinctly labeled.
 
 ## Commands and validation
 

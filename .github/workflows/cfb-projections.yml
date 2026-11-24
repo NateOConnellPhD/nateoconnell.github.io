@@ -94,6 +94,7 @@ jobs:
             .codex-tmp/cfb-refit/forecast-fits
             .codex-tmp/cfb-refit/home
             .codex-tmp/cfb-refit/qb
+            .codex-tmp/cfb-refit/scores
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: forecast-${{ runner.os }}-
       - name: Install pinned numerical packages
@@ -108,6 +109,7 @@ jobs:
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_v7.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_refresh.py
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_qb.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_scores.py
           node scripts/cfb_forecast/check_projections.cjs
       - name: Build changed or new-season prior with the supplied estimators
         if: steps.prepare.outputs.needs_update == 'true' && steps.refresh.outputs.needs_prior == 'true'
@@ -126,6 +128,7 @@ jobs:
             .codex-tmp/cfb-refit/forecast-fits
             .codex-tmp/cfb-refit/home
             .codex-tmp/cfb-refit/qb
+            .codex-tmp/cfb-refit/scores
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Commit checked inputs and any passing forecast
         id: commit

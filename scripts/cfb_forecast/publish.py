@@ -11,7 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts/cfb'))
-from cfb_forecast import inputs as source, model as forecast, export, qb, qb_data
+from cfb_forecast import inputs as source, model as forecast, export, qb, qb_data, scores
 from cfb_forecast.config import CONFIG
 from sync_data import digest
 
@@ -20,7 +20,7 @@ PUBLIC = ROOT / 'assets/data/cfb/projections'
 
 
 def source_identity():
-    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'config.py', 'priors.py', 'home.py', 'qb.py', 'qb_data.py', 'qb_extract.py')] + [ROOT / 'scripts/cfb' / p for p in (
+    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'scores.py', 'config.py', 'priors.py', 'home.py', 'qb.py', 'qb_data.py', 'qb_extract.py')] + [ROOT / 'scripts/cfb' / p for p in (
         'historical_home.py', 'home_history_inputs.py', 'season_inputs.py', 'sync_data.py',
         'game_status_corrections.json', 'venue_corrections.json', 'full_fit_retry.py', 'requirements.txt')]
     files += sorted(p for p in (Path(__file__).parent / 'reference').glob('*') if p.suffix in ('.py','.json'))
@@ -29,8 +29,10 @@ def source_identity():
 
 def request(season, week=None):
     inputs, prior, expectancy, games, observed, training_key = source.load(season, forecast_week=week)
+    inputs['score_rows'] = scores.load_rows(inputs)
     # Observation timestamps alone do not trigger fitting or publication.
     key = digest({'training_key': training_key, 'prior': prior, 'games': games,
+                  'scores': inputs['score_rows'],
                   'qb': qb_data.identity(season, historical=week is not None), 'source': source_identity()})
     return inputs, prior, expectancy, games, observed, training_key, key
 
@@ -56,7 +58,7 @@ def fit_window(inputs, prior, expectancy, training_key):
             'noise_rescale': 1., 'efficiency_games': 0, 'efficiency_scale': None}
     target, scale, count = forecast.efficiency_target(inputs['data']['margin'], expectancy)
     identity = {'forecast': CONFIG.identity(), 'training_key': training_key,
-        'source': {k:v for k,v in source_identity().items() if not k.endswith(('/export.py','/publish.py'))},
+        'source': {k:v for k,v in source_identity().items() if not k.endswith(('/export.py','/publish.py','/scores.py'))},
         'home': digest(home), 'gap': prior['fcs_gap'],
         'packages': {p:version(p) for p in ('numpy','scipy','jax','jaxlib','numpyro','arviz')}, 'seed':CONFIG.seed, 'chains':4}
     samples, report, fit_key, reused = checked_full_fit(identity, TASK / 'forecast-fits',
@@ -121,6 +123,10 @@ def complete(season, week=None):
         import numpy as np
         arrays['lam']=np.random.default_rng(CONFIG.seed+1).normal(1.,.5,len(arrays['theta']))
     public, draws = make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home, fit_meta, week)
+    score_fit, score_key, score_reused = scores.load_or_fit(
+        inputs['score_rows'], season, [str(t['id']) for t in inputs['teams']], TASK / 'scores')
+    scores.attach(public, draws, score_fit)
+    public['meta']['score_model'].update(fit_key=score_key, fit_reused=score_reused)
     row = export.write(public, draws, PUBLIC)
     print(json.dumps({'published': row, 'fit_reused': fit_meta['fit_reused'], 'api_requests': 0}))
     # Only this isolated forecasting job's cache: keep the current passing fit.

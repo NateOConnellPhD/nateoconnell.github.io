@@ -81,10 +81,19 @@ async function controller(hash='',overrides={}) {
   const part=result.parts;assert.ok(Math.abs(part.home-part.away+part.national+part.stadium-result.margin)<1e-9);
   const fixture={...data,games:[game],draws_file:'draws-fixture.json',meta:{...data.meta,model:'forecast-v7'},
     team_details:Object.fromEntries([game.home,game.away].map(id=>[id,{path:[{week:1,mean:5,sd:2},{week:2,mean:6,sd:1.5}],games:[]}]))};
+  dynamic.scores={version:'conditional-scores-1',intercept:dynamic.sigma.map(()=>20),slope:dynamic.sigma.map(()=>-3),
+    scale:dynamic.sigma.map(()=>10),teams:Object.fromEntries(Object.keys(dynamic.teams).map(id=>[id,dynamic.sigma.map(()=>0)])),
+    uniform:[dynamic.sigma.map(()=>.2),dynamic.sigma.map(()=>.8)]};
+  game.scores=api.matchup(api.validateDraws(dynamic),game.home,game.away,game.neutral,4).scores;
   const modern=await controller('#projections',{'index.json':{...index,latest:'fixture',snapshots:[{...row,id:'fixture',file:'forecast-fixture.json'}]},'forecast-fixture.json':fixture,'draws-fixture.json':dynamic});
   assert.equal(modern.get('status').textContent,'');assert.equal(modern.get('details-card').hidden,false);
   assert.equal(modern.get('team-details').children.length,2);assert.equal(modern.get('horizon').value,'4');
   assert.equal(modern.get('line-parts').children[0].children[1].children.length,7);
+  assert.equal(modern.get('scores').hidden,false);assert.equal(modern.get('score-status').textContent,'');
+  assert.ok(modern.get('score-chart').children.length>0);
+  assert.equal(modern.get('score-summary').children[0].children[1].children.length,2);
+  assert.ok(Number.isFinite(Number(modern.get('home-score').textContent)));
+  assert.ok(modern.get('games').children[0].children[0].children[0].children.some(h=>/Home points/.test(h.textContent)));
   const qbDraws={...dynamic,lam:dynamic.sigma.map((_,i)=>.5+i/dynamic.sigma.length),lambda_mean:1.,
     quarterbacks:{[game.home]:{x:2,options:{backup:-4}},[game.away]:{x:-1,options:{backup:3}}}};
   const base=api.matchup(qbDraws,game.home,game.away,true,1,{home:'mix',away:'mix'});
