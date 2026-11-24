@@ -7,6 +7,10 @@ on:
         description: 'Forecast season (requires its reviewed preseason prior)'
         default: current
         type: string
+      week:
+        description: 'Optional historical forecast week (1–16; 99 for CFP). Blank updates current.'
+        default: ''
+        type: string
   workflow_run:
     workflows: ['Update and publish CFB rankings']
     types: [completed]
@@ -16,6 +20,7 @@ on:
     paths:
       - 'scripts/cfb_forecast/**'
       - '_cfb_data/forecast_priors/**'
+      - '_cfb_data/forecast_inputs/**'
       - '.github/workflows/cfb-projections.yml'
 
 permissions:
@@ -42,19 +47,27 @@ jobs:
       JAX_COMPILATION_CACHE_DIR: ${{ github.workspace }}/.codex-tmp/cfb-refit/jax-cache
       TMPDIR: ${{ github.workspace }}/.codex-tmp/cfb-refit/tmp
       CFB_FORECAST_SEASON: ${{ inputs.season || 'current' }}
+      CFB_FORECAST_WEEK: ${{ inputs.week || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: main
+      - name: Refresh optional market comparison once per changed game feed
+        if: inputs.week == '' || github.event_name != 'workflow_dispatch'
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+        run: python3 -B scripts/cfb_forecast/publish.py sync-markets --season "$CFB_FORECAST_SEASON"
       - name: Check saved inputs before installing or sampling
         id: prepare
-        run: python3 -B scripts/cfb_forecast/publish.py prepare --season "$CFB_FORECAST_SEASON"
+        run: |
+          args=(--season "$CFB_FORECAST_SEASON")
+          if [ -n "$CFB_FORECAST_WEEK" ]; then args+=(--week "$CFB_FORECAST_WEEK"); fi
+          python3 -B scripts/cfb_forecast/publish.py prepare "${args[@]}"
       - uses: actions/cache/restore@v6
         if: steps.prepare.outputs.needs_update == 'true'
         with:
           path: |
             .codex-tmp/cfb-refit/forecast-fits
-            .codex-tmp/cfb-refit/forecast-gap
             .codex-tmp/cfb-refit/home
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: forecast-${{ runner.os }}-
@@ -72,23 +85,27 @@ jobs:
         if: steps.prepare.outputs.needs_update == 'true'
         run: |
           .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_forecasts.py
+          .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/test_v7.py
           node scripts/cfb_forecast/check_projections.cjs
       - name: Fit independently and publish checked forecasts
         if: steps.prepare.outputs.needs_update == 'true'
-        run: python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/publish.py complete --season "$CFB_FORECAST_SEASON"
+        run: |
+          args=(--season "$CFB_FORECAST_SEASON")
+          if [ -n "$CFB_FORECAST_WEEK" ]; then args+=(--week "$CFB_FORECAST_WEEK"); fi
+          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/publish.py complete "${args[@]}"
       - name: Save passing fit caches
         if: always() && !cancelled() && steps.prepare.outputs.needs_update == 'true'
         uses: actions/cache/save@v6
         with:
           path: |
             .codex-tmp/cfb-refit/forecast-fits
-            .codex-tmp/cfb-refit/forecast-gap
             .codex-tmp/cfb-refit/home
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Commit only projections
-        if: success() && steps.prepare.outputs.needs_update == 'true'
+      - name: Commit projections and cache the optional market feed
+        if: always() && !cancelled() && steps.prepare.outcome == 'success'
         run: |
           git add -- assets/data/cfb/projections
+          if [ -d _cfb_data/forecast_markets ]; then git add -- _cfb_data/forecast_markets; fi
           if git diff --cached --quiet; then exit 0; fi
           git diff --cached --check
           git config user.name 'github-actions[bot]'

@@ -144,3 +144,6 @@
   .cfb-forecast-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .cfb-forecast-charts { grid-template-columns: minmax(0,1fr); }
 }
+.cfb-forecast-charts > section { min-width: 0; }
+.cfb-forecast-charts > section > h4 { margin-top: .5rem; }
+.cfb-projections select:disabled { opacity: .65; }

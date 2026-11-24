@@ -18,7 +18,7 @@ assert.ok(Math.abs(home.homeLine+home.margin)<1e-12);
 assert.throws(()=>api.matchup(draws,a,a,true),/different teams/);
 assert.throws(()=>api.validateDraws({...draws,sigma:[1]}),/Invalid|align/);
 let maxProbabilityError=0,maxMarginError=0;
-for(const g of data.games){const m=api.matchup(draws,g.home,g.away,g.neutral);maxProbabilityError=Math.max(maxProbabilityError,Math.abs(m.pHome-g.p_home));maxMarginError=Math.max(maxMarginError,Math.abs(m.margin-g.home_margin));}
+for(const g of data.games){const m=api.matchup(draws,g.home,g.away,g.neutral,g.ahead||1);maxProbabilityError=Math.max(maxProbabilityError,Math.abs(m.pHome-g.p_home));maxMarginError=Math.max(maxMarginError,Math.abs(m.margin-g.home_margin));}
 assert.ok(Number.isFinite(maxProbabilityError),'Thinned probabilities must be finite');
 assert.ok(maxMarginError<1e-8,`Full-draw means must preserve lines: ${maxMarginError}`);
 
@@ -31,7 +31,7 @@ class Element {
   addEventListener(k,fn){this.handlers[k]=fn;}
   focus(){}scrollIntoView(){}
 }
-async function controller(hash='') {
+async function controller(hash='',overrides={}) {
   const nodes=new Map(),get=k=>{if(!nodes.has(k))nodes.set(k,new Element(['snapshot','home','away','site','week','conference','limit'].includes(k)?'select':'div'));return nodes.get(k);};
   get('limit').value='25';const root=new Element(),main=new Element();root.dataset.index='/assets/data/cfb/projections/index.json';
   root.querySelector=s=>get(s.match(/data-projection-([^\]]+)/)[1]);
@@ -42,7 +42,7 @@ async function controller(hash='') {
   const location={href:`https://example.test/blog/cfb/${hash}`,hash,pathname:'/blog/cfb/',search:''};
   const context={document:doc,location,URL,Event,AbortController,setTimeout,clearTimeout,console,
     history:{replaceState:(_,__,url)=>{location.hash=new URL(url,location.href).hash;}},
-    fetch:async url=>{const file=path.basename(String(url));requests.push(file);return {ok:true,json:async()=>JSON.parse(fs.readFileSync(path.join(dir,file)))};}};
+    fetch:async url=>{const file=path.basename(String(url));requests.push(file);return {ok:true,json:async()=>overrides[file]||JSON.parse(fs.readFileSync(path.join(dir,file)))};}};
   context.window=context;context.addEventListener=()=>{};
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../assets/js/cfb-projections.js'),'utf8'),context);
   const settle=async()=>{for(let i=0;i<5;i++)await new Promise(setImmediate);};await settle();
@@ -59,5 +59,18 @@ async function controller(hash='') {
   p.buttons[0].handlers.click();p.buttons[1].handlers.click();await p.settle();assert.equal(p.requests.length,before,'Changing teams/tabs must reuse static data');
   p.get('away').value=p.get('home').value;p.get('away').handlers.change();assert.match(p.get('matchup-error').textContent,/different/);
   const direct=await controller('#projections');assert.equal(direct.main.hidden,true);assert.ok(direct.requests.length>0);
+  // Exercise the new drift/details controller using in-memory data, not a browser.
+  const dynamic={...draws,last:draws.teams,drift:Object.fromEntries(Object.entries(draws.teams).map(([id,x],j)=>[id,x.map((_,i)=>(j%2?1:-1)*(i/x.length-.5)*2)]))};
+  delete dynamic.teams;delete dynamic.means;api.validateDraws(dynamic);
+  const game={...data.games[0],ahead:4}, result=api.matchup(dynamic,game.home,game.away,game.neutral,4);
+  Object.assign(game,{home_margin:result.margin,home_line:result.homeLine,p_home:result.pHome,margin_lo80:result.range80[0],margin_hi80:result.range80[1]});
+  const part=result.parts;assert.ok(Math.abs(part.home-part.away+part.national+part.stadium-result.margin)<1e-9);
+  const fixture={...data,games:[game],draws_file:'draws-fixture.json',meta:{...data.meta,model:'forecast-v7'},
+    team_details:Object.fromEntries([game.home,game.away].map(id=>[id,{path:[{week:1,mean:5,sd:2},{week:2,mean:6,sd:1.5}],games:[]}]))};
+  const modern=await controller('#projections',{'index.json':{...index,latest:'fixture',snapshots:[{...row,id:'fixture',file:'forecast-fixture.json'}]},'forecast-fixture.json':fixture,'draws-fixture.json':dynamic});
+  assert.equal(modern.get('status').textContent,'');assert.equal(modern.get('details-card').hidden,false);
+  assert.equal(modern.get('team-details').children.length,2);assert.equal(modern.get('horizon').value,'4');
+  assert.equal(modern.get('line-parts').children[0].children[1].children.length,5);
+  modern.get('eval-period').value='holdout';modern.get('eval-period').handlers.change();assert.match(modern.get('backtest-summary').textContent,/2026/);
   console.log(JSON.stringify({checks:'projection probabilities, venue, signs, payload integrity, tab isolation, charts, caching',games:data.games.length,maxProbabilityError,maxMarginError}));
 })().catch(e=>{console.error(e);process.exitCode=1;});

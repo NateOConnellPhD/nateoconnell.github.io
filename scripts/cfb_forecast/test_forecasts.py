@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1] / 'cfb'))
 from publish import ROOT, source, forecast, export
 import publish
 import numpy as np
@@ -75,7 +76,7 @@ class ForecastTests(unittest.TestCase):
         target, scale, count = forecast.efficiency_target(y, p)
         logit = np.log(np.array(p[:3], float) / (1 - np.array(p[:3], float)))
         self.assertEqual(count, 3)
-        self.assertAlmostEqual(scale, np.polyfit(logit, y[:3], 1)[0])
+        self.assertEqual(scale, 4.5)  # frozen sparse-window fallback
         self.assertTrue(np.allclose(target[:3], .75 * np.array(y[:3]) + .25 * scale * logit))
         self.assertEqual(target[3], y[3])
 
@@ -97,7 +98,7 @@ class ForecastTests(unittest.TestCase):
         draws = json.loads((folder / doc['draws_file']).read_text())
         self.assertEqual(len(doc['ratings']), sum(t['division'] == 'fbs' for t in doc['teams']))
         self.assertGreaterEqual(doc['meta']['draws'], 4000)
-        self.assertTrue(all(len(x) == 1000 for x in draws['teams'].values()))
+        self.assertTrue(all(len(x) == 1000 for x in draws.get('teams',draws.get('last')).values()))
         self.assertNotIn('meta', draws)
         self.assertTrue(all(0 <= r['p_home'] <= 1 for r in doc['games']))
         self.assertTrue(all(r['home_line'] == -r['home_margin'] for r in doc['games']))
@@ -108,18 +109,18 @@ class ForecastTests(unittest.TestCase):
             'venue': [1, 0, 1], 'host': [1, 2, 0], 'margin': [8., 3., -4.]},
             'games': [{'id': i, 'week': 1, 'home_id': h, 'away_id': a, 'home_points': hp, 'away_points': ap,
                        'start_date': '2026-09-01T00:00:00Z'} for i, h, a, hp, ap in [(1, 1, 2, 18, 10), (2, 2, 1, 13, 10), (3, 3, 1, 6, 10)]]}
-        prior = {'mean_by_id': {'1': 3., '2': 0.}, 'sd': 6., 'training_seasons': [2025], 'caveat': ''}
+        prior = {'mean_by_id': {'1': 3., '2': 0.}, 'sd': 6., 'training_seasons': [2025], 'caveat': '', 'fcs_mean_by_id': {'3':0.}, 'fcs_gap':-20., 'fcs_sd':7.3}
         home = {'mean': [2., 1., -1.], 'chol': np.eye(3).tolist(), 'fbs_ids': [1, 2], 'years': [2023, 2024, 2025]}
         future = [{'id': 4, 'week': 2, 'season_type': 'regular', 'date': '2026-09-08T00:00:00Z', 'home': '1', 'away': '2', 'neutral': False}]
         state = {'key': 'initial', 'observed': '2026-09-02T00:00:00Z'}
-        def load(_): return inputs, prior, [.8, .65, .2], future, state['observed'], state['key']
+        def load(_, **kwargs): return inputs, prior, [.8, .65, .2], future, state['observed'], state['key']
         shape = (4, 1000)
         samples = {'theta': np.tile([8., 0., -12.], shape + (1,)), 'home_effect': np.tile([2., 1., -1.], shape + (1,)),
                    'sigma': np.full(shape, 12.), 'nu': np.full(shape, 7.), 's_prev': np.full(shape, 6.)}
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as tmp:
             with patch.object(publish, 'TASK', Path(tmp) / 'task'), patch.object(publish, 'PUBLIC', Path(tmp) / 'public'), \
-                 patch.object(source, 'load', side_effect=load), patch.object(source, 'previous_games', return_value=([{}], {1, 2})), \
-                 patch('historical_home.load_or_estimate', return_value=home), patch.object(forecast, 'previous_division_gap', return_value=-20.), \
+                 patch.object(source, 'load', side_effect=load), \
+                 patch('historical_home.load_or_estimate', return_value=home), \
                  patch.object(forecast, 'fit', return_value=None) as fitter, \
                  patch.object(forecast, 'diagnose', return_value=(samples, {'sampling_checks_passed': True}, {})):
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)

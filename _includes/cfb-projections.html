@@ -14,7 +14,7 @@
     <p class="small-note" data-projection-snapshot-note></p>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-games-title">
       <h3 id="cfb-forecast-games-title">Upcoming games</h3>
-      <p>A model line of <strong>Georgia −6.5</strong> means Georgia is favored by about 6½ points. These are model estimates; current sportsbook lines are not included.</p>
+      <p>A model line of <strong>Georgia −6.5</strong> means Georgia is favored by about 6½ points. Opening and latest available sportsbook lines are shown alongside the model when available. Each market line is the median across books, from a dated saved feed.</p>
       <div class="cfb-forecast-controls">
         <label>Games<select data-projection-week></select></label>
         <label>Find a team<input type="search" data-projection-search placeholder="Team name"></label>
@@ -30,6 +30,7 @@
         <button type="button" class="button button-outline" data-projection-swap aria-label="Swap home and away teams">Swap</button>
         <label>Away team<select data-projection-away></select></label>
         <label>Venue<select data-projection-site><option value="home">Home team’s stadium</option><option value="neutral">Neutral field</option></select></label>
+        <label>Weeks ahead<select data-projection-horizon><option value="1">Next week</option></select></label>
       </div>
       <p data-projection-matchup-error role="status" aria-live="polite"></p>
       <div data-projection-matchup-result hidden>
@@ -40,12 +41,19 @@
           <div><dt data-projection-range-label>80% final-margin range</dt><dd data-projection-range></dd></div>
         </dl>
         <p data-projection-matchup-note></p>
+        <div class="cfb-forecast-table" data-projection-line-parts tabindex="0" role="region" aria-label="How the projected margin adds up"></div>
         <div class="cfb-forecast-charts">
           <div><h4>Uncertainty about team strength</h4><div data-projection-strength-chart></div><p class="small-note">Points above or below the average FBS team on a neutral field. Overlap means the evidence does not cleanly separate the teams.</p></div>
           <div><h4>How the game could turn out</h4><div data-projection-margin-chart></div><p class="small-note">This wider distribution adds game-to-game variation. An 80% range contains the middle 80% of simulated outcomes, conditional on the model.</p></div>
         </div>
       </div>
       <p class="small-note" data-projection-draw-note></p>
+    </section>
+    <section class="cfb-forecast-card" data-projection-details-card hidden aria-labelledby="cfb-forecast-detail-title">
+      <h3 id="cfb-forecast-detail-title">Where do these estimates come from?</h3>
+      <p>Details for the two teams selected above. The preseason inputs establish a starting expectation; game results then update it and allow strength to move from week to week.</p>
+      <div class="cfb-forecast-charts" data-projection-team-details></div>
+      <p class="small-note">Weekly paths are retrospective estimates using every game available at this snapshot, not predictions made during those weeks. Game-implied strength is the blended game margin plus the opponent’s estimated strength, minus venue advantage. It is a descriptive comparison, not an additive share of the posterior rating.</p>
     </section>
     <section class="cfb-forecast-card" aria-labelledby="cfb-power-title">
       <h3 id="cfb-power-title">Power estimates &amp; uncertainty</h3>
@@ -62,7 +70,7 @@
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-method-title">
       <h3 id="cfb-forecast-method-title">How these forecasts work</h3>
       <p>A <strong>posterior</strong> is the model’s updated picture after seeing the games. Each draw is one plausible set of team strengths, home advantages, and game variability. Comparing teams within the same draw keeps their uncertainty connected.</p>
-      <p>This forecasting model starts with prior expectations based on last season’s strength, roster talent, and preseason AP points. The coefficients are estimated from earlier seasons only. As games accumulate, the model learns how far teams have moved from those expectations. This information is used for predictions, not the merit rankings.</p>
+      <p>This forecasting model starts with prior expectations based on last season’s strength, roster talent, preseason AP points, returning offensive production, recruiting, coaching changes, transfer-portal points, and conference-era indicators. The coefficients are fitted to early-season game margins from earlier seasons only. FCS teams get their own prior from last season’s Division I results. As games accumulate, the model learns how far teams have moved from those expectations. Team strength follows a weekly random walk: more weeks ahead means more uncertainty about where a team will be. This information is used for predictions, not the merit rankings.</p>
       <p>The fit blends 75% final scoring margin with 25% efficiency margin, derived from postgame win expectancy. When efficiency information is missing, that game uses its actual margin. The residual variability is rescaled afterward to forecast real score margins. Home advantage includes both a national effect and a school offset, informed by the preceding three seasons; neutral games get neither.</p>
       <p>Win probabilities average a Student-t predictive distribution over the posterior. This allows unusually large margins and includes game noise. “Stronger team” probability only compares underlying strength, so it need not equal the chance of winning one game.</p>
       <p class="small-note" data-projection-prior-caveat></p>
@@ -71,8 +79,13 @@
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-backtest-title">
       <h3 id="cfb-forecast-backtest-title">Historical forecast accuracy</h3>
       <p data-projection-backtest-summary></p>
-      <div class="cfb-forecast-table" data-projection-backtest tabindex="0" role="region" aria-label="Retrospective forecast accuracy by season phase"></div>
-      <p class="small-note">Weekly forecasts were reconstructed using earlier games, with bowls and playoffs forecast from the regular season. Comparisons use the same games with available closing lines. The supplied backtest used two chains with 250 retained draws per chain; its reported strength R̂ ranged from 1.01 to 1.05. Model selection used these seasons, so this is not an independent final evaluation. The 2022 forecasts use the last-season prior because earlier talent and poll training data were unavailable.</p>
+      <div class="cfb-forecast-controls">
+        <label>Period<select data-projection-eval-period><option value="development">2023–2025 · development</option><option value="holdout">2026 · through week 12</option></select></label>
+        <label>Break down by<select data-projection-eval-group><option value="phase">Season phase</option><option value="season">Season</option><option value="tier">Game type</option></select></label>
+      </div>
+      <div class="cfb-forecast-table" data-projection-evaluation tabindex="0" role="region" aria-label="Forecast accuracy by period and group"></div>
+      <p class="small-note">Scoring includes regular-season and CFP games with both opening and closing lines. Other bowls are excluded because opt-outs are outside the model. Lower average absolute error is better; a negative difference favors the model. SE measures uncertainty in the paired difference, clustered by season and week. It is unavailable for a group containing only one week.</p>
+      <p class="small-note">The 2023–2025 seasons were used to develop this model. The frozen-model 2026 check performed worse than the opener; the earlier side-picking advantage did not persist. Weekly windows use earlier games, but some supplied preseason covariates were collected later, including November 2026 talent. These are retrospective reconstructions, not a fully archived prospective betting record. Backtests used two chains × 250 draws; they are separate from the stricter production checks.</p>
     </section>
   </div>
 </section>
