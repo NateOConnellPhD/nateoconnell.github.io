@@ -21,13 +21,14 @@
     <div role="tabpanel" id="cfb-forecast-panel-power" aria-labelledby="cfb-forecast-tab-power" data-projection-panel="power">
     <section class="cfb-forecast-card" aria-labelledby="cfb-power-title">
       <h3 id="cfb-power-title">Power ratings</h3>
-      <p>Power measures predicted strength on the model’s FBS reference scale. If one team is rated 10 points above another, it is expected to win by about 10 on a neutral field. This ordering measures predicted strength, separately from what teams have earned.</p>
+      <p>Power measures predicted strength with each team’s usual quarterback mix. A 10-point difference means about a 10-point neutral-field advantage before a starter adjustment. The current-starter column adds that adjustment; the main ranking and its intervals retain the usual-mix definition.</p>
       <div class="cfb-forecast-controls">
         <label>Find a team<input type="search" data-projection-power-search placeholder="Team name"></label>
         <label>Conference<select data-projection-conference></select></label>
         <label>Show<select data-projection-limit><option value="all">All matching teams</option><option value="25">Top 25 matching teams</option></select></label>
       </div>
       <p class="small-note" data-projection-power-count aria-live="polite"></p>
+      <p class="small-note" data-projection-qb-status></p>
       <div class="cfb-forecast-table" data-projection-powers tabindex="0" role="region" aria-label="Power estimates and probabilities"></div>
       <p class="small-note">Mean is the average estimate across posterior draws; median is the middle estimate. A 95% interval contains the middle 95% of plausible strengths. “P(top 12)” is the share of draws in which a team is among the twelve strongest; it is not its chance of making the playoff.</p>
     </section>
@@ -52,10 +53,13 @@
         <label>Home team<select data-projection-home></select></label>
         <button type="button" class="button button-outline" data-projection-swap aria-label="Swap home and away teams">Swap</button>
         <label>Away team<select data-projection-away></select></label>
+        <label>Home quarterback<select data-projection-home-qb></select></label>
+        <label>Away quarterback<select data-projection-away-qb></select></label>
         <label>Venue<select data-projection-site><option value="home">Home team’s stadium</option><option value="neutral">Neutral field</option></select></label>
         <label>Weeks ahead<select data-projection-horizon><option value="1">Next week</option></select></label>
       </div>
       <p data-projection-matchup-error role="status" aria-live="polite"></p>
+      <p class="small-note" data-projection-qb-note></p>
       <div data-projection-matchup-result hidden>
         <dl class="cfb-forecast-metrics" aria-live="polite">
           <div><dt>Model line</dt><dd data-projection-line></dd></div>
@@ -76,7 +80,7 @@
       <h3 id="cfb-forecast-detail-title">Where do these estimates come from?</h3>
       <p>Details for the two teams selected above. The preseason inputs establish a starting expectation; game results then update it and allow strength to move from week to week.</p>
       <div class="cfb-forecast-charts" data-projection-team-details></div>
-      <p class="small-note">Weekly paths are retrospective estimates using every game available at this snapshot, not predictions made during those weeks. Game-implied strength is the blended game margin plus the opponent’s estimated strength, minus venue advantage. It is a descriptive comparison, not an additive share of the posterior rating.</p>
+      <p class="small-note">Weekly paths are retrospective estimates using every game available at this snapshot, not predictions made during those weeks. Game-implied strength is the blended game margin plus the opponent’s estimated strength, minus venue and quarterback advantages. It is a descriptive comparison, not an additive share of the posterior rating.</p>
     </section>
     </div>
     <div role="tabpanel" id="cfb-forecast-panel-method" aria-labelledby="cfb-forecast-tab-method" data-projection-panel="method" hidden>
@@ -86,8 +90,10 @@
       <p>This forecasting model starts with prior expectations based on last season’s strength, roster talent, preseason AP points, returning offensive production, recruiting, coaching changes, transfer-portal points, and conference-era indicators. The coefficients are fitted to early-season game margins from earlier seasons only. FCS teams get their own prior from last season’s Division I results. As games accumulate, the model learns how far teams have moved from those expectations. Team strength follows a weekly random walk: more weeks ahead means more uncertainty about where a team will be. This information is used for predictions, not the merit rankings.</p>
       <p>The fit blends 75% final scoring margin with 25% efficiency margin, derived from postgame win expectancy. When efficiency information is missing, that game uses its actual margin. The residual variability is rescaled afterward to forecast real score margins. Home advantage includes both a national effect and a school offset, informed by the preceding three seasons; neutral games get neither.</p>
       <p>Win probabilities average a Student-t predictive distribution over the posterior. This allows unusually large margins and includes game noise. “Stronger team” probability only compares underlying strength, so it need not equal the chance of winning one game.</p>
+      <p>The quarterback model learns passer value per dropback while separating offense, defense, experience, and season effects. A starter’s adjustment compares his value with his team’s usual passer mix, multiplied by its expected dropbacks. The power model learns how strongly that adjustment translates into points. Both teams’ QB adjustments enter the line and win probability. QB values are conditional estimates; the forecast draws include uncertainty in their learned points multiplier, not a second simulation of QB values.</p>
+      <p>Play-by-play is checked daily. The expected starter is the last game’s first passer unless an explicit status update names another player. This is an assumption, not an injury report. Changing a quarterback here explores a scenario and does not change the published starter. With no current-season dropbacks the supplied rule gives zero adjustment.</p>
       <p class="small-note" data-projection-prior-caveat></p>
-      <details><summary>Fit details</summary><p class="small-note" data-projection-diagnostics></p><p class="small-note">Weekly refreshes reuse the saved game feeds. A changed set of forecasting inputs triggers one separate fit, with no leave-one-game-out refits. If checks fail, the previous forecast stays available. The preseason prior must be reviewed for each new season.</p></details>
+      <details><summary>Fit details</summary><p class="small-note" data-projection-diagnostics></p><p class="small-note">Daily refreshes reuse saved data and passing fits. New training inputs trigger a fit; a starter-only change updates forecasts using the saved fit. If checks fail, the previous forecast stays available. New-season inputs are checked automatically from July.</p></details>
     </section>
     <section class="cfb-forecast-card" aria-labelledby="cfb-forecast-backtest-title">
       <h3 id="cfb-forecast-backtest-title">Historical forecast accuracy</h3>

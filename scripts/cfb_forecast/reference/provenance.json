@@ -1,9 +1,11 @@
 {
-  "source": "User-supplied mom_forecast_v7/code",
+  "source": "User-supplied mom_forecast_v7 2/code",
   "sha256": {
-    "forecast_model.py": "3b157496082b15eb76e778341ad579229a1be78587a8c88c31025423f488911b",
+    "forecast_model.py": "4085710287e1ddeebbc15442234e0122eb886d2fc293efff45c8dc1a33c895a6",
     "historical_home.py": "3a5d6402bbc471ed982d331f4ecae229c0b8157376d32f5ab46127e53246b0cb",
     "priors_v7.py": "76ba3aa8c5cad0dbe613e457cb8bdc6f32bca1d89c1f070aaafc876e20bec067",
-    "make_forecasts.py": "3ce293c6c10aa92856c2d7863e11bf8d5c2de95ebd8687f940eb9e246f967e28"
+    "make_forecasts.py": "ad3fc2c19656e76b31cc756d9cc797f00bdf0829800c31b86824726f3caca068",
+    "qb_model.py": "b86bbc6e4b7ffc17f2d6468f88ddd6da2e5eb639aaed46555bd89c040e1fb343",
+    "qb_term.py": "909b7e18fcad3463afc2e0eae21fbb6eb82ce50db9eef365e344be552867dda9"
   }
 }

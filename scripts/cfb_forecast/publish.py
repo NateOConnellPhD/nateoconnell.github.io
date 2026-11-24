@@ -11,7 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts/cfb'))
-from cfb_forecast import inputs as source, model as forecast, export, markets
+from cfb_forecast import inputs as source, model as forecast, export, markets, qb, qb_data
 from cfb_forecast.config import CONFIG
 from sync_data import digest
 
@@ -20,7 +20,7 @@ PUBLIC = ROOT / 'assets/data/cfb/projections'
 
 
 def source_identity():
-    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'config.py', 'priors.py', 'markets.py', 'home.py')] + [ROOT / 'scripts/cfb' / p for p in (
+    files = [Path(__file__).parent / p for p in ('inputs.py', 'model.py', 'export.py', 'publish.py', 'config.py', 'priors.py', 'markets.py', 'home.py', 'qb.py', 'qb_data.py', 'qb_extract.py')] + [ROOT / 'scripts/cfb' / p for p in (
         'historical_home.py', 'home_history_inputs.py', 'season_inputs.py', 'sync_data.py',
         'game_status_corrections.json', 'venue_corrections.json', 'full_fit_retry.py', 'requirements.txt')]
     files += sorted(p for p in (Path(__file__).parent / 'reference').glob('*') if p.suffix in ('.py','.json'))
@@ -30,7 +30,8 @@ def source_identity():
 def request(season, week=None):
     inputs, prior, expectancy, games, observed, training_key = source.load(season, forecast_week=week)
     # Observation timestamps alone do not trigger fitting or publication.
-    key = digest({'training_key': training_key, 'prior': prior, 'games': games, 'market': markets.read(season)['games'], 'source': source_identity()})
+    key = digest({'training_key': training_key, 'prior': prior, 'games': games, 'market': markets.read(season)['games'],
+                  'qb': qb_data.identity(season, historical=week is not None), 'source': source_identity()})
     return inputs, prior, expectancy, games, observed, training_key, key
 
 
@@ -86,7 +87,23 @@ def make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home,
         'prior_training_seasons': prior['training_seasons'], 'prior_caveat': prior['caveat'],
         'input_observations': prior.get('input_observations', {}),
         'forecast_week': inputs.get('forecast_week', week), 'historical_reconstruction': week is not None}
+    if 'qb' in inputs:
+        quarterbacks=inputs['qb']; qt=quarterbacks['teams']
+        meta.update(model='forecast-v7-qb', quarterbacks=quarterbacks['meta'])
+        games=[{**g,'qb_x_home':qt[g['home']]['x'],'qb_x_away':qt[g['away']]['x'],
+            'home_qb':qt[g['home']]['name'],'away_qb':qt[g['away']]['name']} for g in games]
     public, draws = export.build(arrays, teams, home_ids, games, meta, prior['mean_by_id'], records)
+    if 'qb' in inputs:
+        import numpy as np
+        lam=float(np.asarray(arrays['lam']).mean())
+        public['quarterbacks']=qt
+        public['qb_importance']=[{**r,'importance_pts':lam*r['importance_pts']} for r in quarterbacks['importance']]
+        public['meta']['qb_lambda']=lam
+        draws['quarterbacks']={key:{'x':v['x'],'starter':v['starter'],
+            'options':{p['id']:p['x'] for p in v['options']}} for key,v in qt.items()}
+        for r in public['ratings']:
+            r.update(qb_now=qt[r['id']]['name'],qb_adjustment=lam*qt[r['id']]['x'])
+            r['rating_qb_now']=r['mean']+r['qb_adjustment']
     export.add_details(public, arrays, inputs, prior, home_ids, expectancy)
     market = markets.read(season)
     public['meta']['market_observed_at'] = market['observed_at']
@@ -99,7 +116,13 @@ def complete(season, week=None):
     if (PUBLIC / 'index.json').exists():
         index = json.loads((PUBLIC / 'index.json').read_text())
         if any(r['input_key'] == key for r in index['snapshots']): return
+    quarterbacks=qb.load(inputs,games,observed,cache=TASK/'qb',historical=week is not None)
+    inputs.update(qbx=quarterbacks['training'],qb=quarterbacks)
+    training_key=digest({'base':training_key,'qb':quarterbacks['training_key']})
     arrays, home, fit_meta = fit_window(inputs, prior, expectancy, training_key)
+    if 'lam' not in arrays and fit_meta.get('prior_only'):
+        import numpy as np
+        arrays['lam']=np.random.default_rng(CONFIG.seed+1).normal(1.,.5,len(arrays['theta']))
     public, draws = make_snapshot(inputs, prior, expectancy, games, observed, key, arrays, home, fit_meta, week)
     row = export.write(public, draws, PUBLIC)
     print(json.dumps({'published': row, 'fit_reused': fit_meta['fit_reused'], 'api_requests': 0}))

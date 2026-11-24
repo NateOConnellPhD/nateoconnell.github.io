@@ -38,7 +38,7 @@
     const n=d.sigma?.length;
     if(d.schema!==schema||!Number.isInteger(n)||n<100||!d.home?.national||!d.noise||d.noise.length!==2)
       throw new Error('Invalid saved forecast draws');
-    for(const v of [...Object.values(d.teams),...Object.values(d.home),d.sigma,d.nu,...d.noise,...Object.values(d.last||{}),...Object.values(d.drift||{})])
+    for(const v of [...Object.values(d.teams),...Object.values(d.home),d.sigma,d.nu,...d.noise,...Object.values(d.last||{}),...Object.values(d.drift||{}),...(d.lam?[d.lam]:[])])
       if(!Array.isArray(v)||v.length!==n||v.some(x=>!Number.isFinite(x)))throw new Error('Forecast draws do not align');
     if(d.last&&Object.keys(d.teams).some(id=>!d.last[id]||!d.drift?.[id]))throw new Error('Missing weekly drift draws');
     if(d.sigma.some(x=>x<=0)||d.nu.some(x=>x<=2))throw new Error('Invalid predictive scale');
@@ -46,22 +46,27 @@
       if(!Number.isFinite(d.means[key]?.[id]))throw new Error('Missing full-draw means');
     return d;
   }
-  function matchup(d,home,away,neutral,ahead=1) {
+  function matchup(d,home,away,neutral,ahead=1,qbs={}) {
     if(home===away||!d.teams[home]||!d.teams[away])throw new Error('Choose two different teams.');
     if(!Number.isInteger(ahead)||ahead<1||ahead>52)throw new Error('Choose a horizon from 1 to 52 weeks.');
     const strengthAt=id=>d.last?d.last[id].map((v,i)=>v+Math.sqrt(ahead)*d.drift[id][i]):d.teams[id];
-    const h=strengthAt(home),a=strengthAt(away),n=h.length;
+    const qx=(id,choice)=>{const q=d.quarterbacks?.[id];if(!q||choice==='mix')return 0;
+      const x=choice?q.options?.[choice]:q.x;if(!Number.isFinite(x))throw new Error('Unknown quarterback scenario');return x;};
+    const hx=qx(home,qbs.home),ax=qx(away,qbs.away),lam=d.lam||Array(d.sigma.length).fill(0);
+    const baseH=strengthAt(home),baseA=strengthAt(away);
+    const h=baseH.map((v,i)=>v+lam[i]*hx),a=baseA.map((v,i)=>v+lam[i]*ax),n=h.length;
     const strength=h.map((v,i)=>v-a[i]);
     const loc=strength.map((v,i)=>v+(neutral?0:d.home.national[i]+(d.home[home]?.[i]||0)));
     const pred=loc.flatMap((v,i)=>[v+d.noise[0][i],v+d.noise[1][i]]).sort((a,b)=>a-b);
     const p=mean(loc.map((v,i)=>tcdf(v/d.sigma[i],d.nu[i])));
     const fullPower=(id,values)=>d.means?.last?d.means.last[id]+Math.sqrt(ahead)*d.means.drift[id]:(d.means?.teams?.[id]??mean(values));
-    const sorted=[...loc].sort((a,b)=>a-b),margin=d.means?fullPower(home,h)-fullPower(away,a)
+    const lm=d.lambda_mean??mean(lam);
+    const sorted=[...loc].sort((a,b)=>a-b),margin=d.means?fullPower(home,baseH)-fullPower(away,baseA)+lm*(hx-ax)
       +(neutral?0:d.means.home.national+(d.means.home[home]||0)):mean(loc);
     const result={margin,homeLine:-margin,pHome:p,pAway:1-p,pBetter:mean(strength.map(v=>v>0?1:v===0?.5:0)),
       expectedMedian:quantile(sorted,.5),expected80:[quantile(sorted,.1),quantile(sorted,.9)],
       range80:[quantile(pred,.1),quantile(pred,.9)],range95:[quantile(pred,.025),quantile(pred,.975)],
-      homeDraws:h,awayDraws:a,pred,parts:{home:fullPower(home,h),away:fullPower(away,a),national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
+      homeDraws:h,awayDraws:a,pred,parts:{home:fullPower(home,baseH),away:fullPower(away,baseA),qbHome:lm*hx,qbAway:lm*ax,national:neutral?0:(d.means?.home.national??mean(d.home.national)),stadium:neutral?0:(d.means?.home[home]??mean(d.home[home]||Array(n).fill(0)))}};
     if(d.gaussian) {
       const g=d.gaussian,hg=g.teams[home],ag=g.teams[away],slot=Math.max(0,g.home_ids.indexOf(home));
       const national=neutral?0:g.home_mean[0],stadium=neutral||!slot?0:g.home_mean[slot];
@@ -103,13 +108,13 @@
     const pct=v=>v>.995?'>99%':v<.005?'<1%':`${(100*v).toFixed(1)}%`;
     const date=v=>new Date(v).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'America/New_York'});
     const interval=v=>`${sign(v[0])} to ${sign(v[1])}`;
-    const cache=new Map();let index,data,draws,backtest,sequence=0,initializing=null;
+    const cache=new Map();let index,data,draws,backtest,qbStatus,sequence=0,initializing=null;
     const base=new URL('./',new URL(root.dataset.index,location.href));
     function read(file) {
       if(!/^[a-z0-9-]+\.json$/.test(file))return Promise.reject(new Error('Invalid forecast file'));
       if(!cache.has(file)) {
         const pending=(async()=>{const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),20000);
-          try {const r=await fetch(new URL(file,base),{signal:abort.signal,cache:file==='index.json'?'no-cache':'default'});
+          try {const r=await fetch(new URL(file,base),{signal:abort.signal,cache:['index.json','qb-status.json'].includes(file)?'no-cache':'default'});
             if(!r.ok)throw new Error('The saved projections could not be loaded.');return await r.json();
           } finally {clearTimeout(timer);}})();
         cache.set(file,pending);pending.catch(()=>cache.delete(file));
@@ -153,10 +158,23 @@
     function renderMatchup() {
       if(!draws)return;
       try {
-        const h=el('home').value,a=el('away').value,r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1));
+        const h=el('home').value,a=el('away').value;
+        for(const side of ['home','away']) {
+          const id=el(side).value,sel=el(side+'-qb'),q=data.quarterbacks?.[id];
+          if(sel.dataset.team!==id) {
+            sel.replaceChildren(node('option',q?.name?`Expected: ${q.name}`:'No saved QB adjustment',{value:''}),
+              node('option','Usual passer mix (zero adjustment)',{value:'mix'}),
+              ...(q?.options||[]).map(p=>node('option',`${p.name} · ${p.dropbacks} dropbacks`,{value:p.id})));
+            sel.value='';sel.dataset.team=id;
+          }
+          sel.disabled=!q?.options?.length;
+        }
+        const choices={home:el('home-qb').value,away:el('away-qb').value};
+        const r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1),choices);
+        el('qb-note').textContent=data.quarterbacks?['home','away'].map(side=>{const q=data.quarterbacks[el(side).value];return `${team(el(side).value)}: ${q?.source||'unavailable'}${q?.note?' — '+q.note:''}.`;}).join(' ')+' QB selections are local scenarios; they do not update starter status.':'This older snapshot predates quarterback adjustments.';
         // Retain the full-draw probabilities for a scheduled matchup.
         const official=data.games.find(g=>g.home===h&&g.away===a&&g.neutral===(el('site').value==='neutral'));
-        if(official&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
+        if(official&&!choices.home&&!choices.away&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
         el('matchup-error').textContent='';el('matchup-result').hidden=false;
         el('line').textContent=line(r.margin);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
         el('home-label').textContent=`${team(h)} wins`;el('away-label').textContent=`${team(a)} wins`;
@@ -164,7 +182,7 @@
         el('range-label').textContent=`80% range · ${team(h)}’s final margin`;
         el('matchup-note').textContent=`${team(h)}’s expected margin: ${sign(r.margin)} points (posterior median ${sign(r.expectedMedian)}; 80% interval ${interval(r.expected80)}). Its chance of being the stronger team on a neutral field is ${pct(r.pBetter)}. The 95% range for an actual game is ${interval(r.range95)} points. Positive margins favor ${team(h)}; negative margins favor ${team(a)}.`;
         const parts=r.parts;
-        table(el('line-parts'),['Component','Points toward home margin'],[[`${team(h)} power`,sign(parts.home)],[`${team(a)} power (subtracted)`,sign(-parts.away)],['National home advantage',sign(parts.national)],['Host’s additional advantage',sign(parts.stadium)],['Expected home margin',sign(r.margin)]]);
+        table(el('line-parts'),['Component','Points toward home margin'],[[`${team(h)} usual-mix power`,sign(parts.home)],[`${team(a)} usual-mix power (subtracted)`,sign(-parts.away)],[`${team(h)} QB adjustment`,sign(parts.qbHome||0)],[`${team(a)} QB adjustment (subtracted)`,sign(-(parts.qbAway||0))],['National home advantage',sign(parts.national)],['Host’s additional advantage',sign(parts.stadium)],['Expected home margin',sign(r.margin)]]);
         renderDetails(h,a);
         histogram(el('strength-chart'),[{name:team(h)+' (blue)',values:r.homeDraws,color:'#245a82'},{name:team(a)+' (gold)',values:r.awayDraws,color:'#b67d25'}],'Uncertainty in the two teams’ power estimates, in points');
         histogram(el('margin-chart'),[{name:`${team(h)}’s final margin`,values:r.pred,color:'#245a82'}],'Posterior predictive distribution of the final score margin');
@@ -175,7 +193,7 @@
       const rows=data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q)));
       table(el('games'),['Date','Matchup','Model line','Market opener','Market latest','Home win','Away win','80% final-margin range (home)'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
-        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
+        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('home-qb').value='';el('away-qb').value='';el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
         const by=Math.round(Math.abs(g.home_margin)*2)/2;
         const marketLine=v=>Number.isFinite(v)?(v===0?'Pick’em':`${team(v<0?g.home:g.away)} −${Math.abs(v).toFixed(1)}`):'Unavailable';
         return [date(g.date),b,by?`${team(g.home_margin>0?g.home:g.away)} −${by.toFixed(1)}`:'Pick’em',marketLine(g.market?.open),marketLine(g.market?.latest),pct(g.p_home),pct(1-g.p_home),interval([g.margin_lo80,g.margin_hi80])];
@@ -186,14 +204,17 @@
       if(!data)return;const q=el('power-search').value.trim().toLowerCase(),conf=el('conference').value;
       const rows=data.ratings.filter(r=>(!conf||r.conference===conf)&&(!q||r.name.toLowerCase().includes(q)));
       const shown=el('limit').value==='all'?rows:rows.slice(0,25);
-      table(el('powers'),['Rank','Team','Record','Mean (pts)','Median','95% interval','80% rank range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
+      table(el('powers'),['Rank','Team','Record','Mean (usual mix)','Expected QB','QB adjustment','Current-starter power','Median','95% interval','80% rank range','P(best)','P(top 4)','P(top 12)','P(top 25)'],shown.map(r=>{
         const name=node('button',r.name,{type:'button',class:'cfb-forecast-game'});
         name.addEventListener('click',()=>{el('home').value=r.id;
           if(el('away').value===r.id)el('away').value=data.ratings.find(t=>t.id!==r.id).id;
           el('site').value='neutral';el('horizon').value='1';selectView('compare',true);renderMatchup();});
-        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
+        return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),r.qb_now||'Unavailable',sign(r.qb_adjustment),sign(r.rating_qb_now),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
       }));
       el('power-count').textContent=`Showing ${shown.length} of ${rows.length} matching FBS teams. Order is by posterior mean power; probabilities describe strength, not playoff qualification.`;
+      const qm=data.meta.quarterbacks;
+      el('qb-status').textContent=qm?`QB play-by-play observed ${qm.observed_at?date(qm.observed_at):'before this season'}. ${qm.starter_rule} ${qm.missing_training_game_ids.length} training games lack usable passer data.${qm.warnings?.length?' A source refresh failed; the last usable data are shown.':''}`:'This saved forecast does not include the QB model.';
+      if(qbStatus?.season===data.meta.season)el('qb-status').textContent+=` Last daily source check: ${date(qbStatus.checked_at)}.${qbStatus.warnings?.length?' Source refresh needs attention; saved estimates have been retained.':''}`;
     }
     function trajectory(target,path,label) {
       const w=640,h=240,l=48,r=620,top=20,b=205;
@@ -220,9 +241,11 @@
         }else if(info.fcs_prior)prior.append(node('p',`FCS prior mean ${sign(info.fcs_prior.mean)} points, including a ${sign(info.fcs_prior.deviation)} deviation from the FCS average. Team-specific prior SD ${fmt(info.fcs_prior.sd)} points; uncertainty in the division average is additional.`));
         else prior.append(node('p','No FBS team-specific preseason regression prior was available. The model uses the relevant division prior.'));
         section.append(prior);
+        const qi=data.qb_importance?.find(q=>q.team_id===id);
+        if(qi)section.append(node('p',`QB importance: ${qi.qb} versus ${qi.backup} changes the estimate by ${sign(qi.importance_pts)} points, using ${fmt(qi.dropbacks_per_game)} dropbacks per game. This compares the last starter with the recent backup selected by the model; it is not an injury assessment.`));
         const games=node('details');games.append(node('summary','Game evidence in this fit'));
         const wrap=node('div',null,{class:'cfb-forecast-table',tabindex:'0'});
-        table(wrap,['Week','Opponent','Venue','Actual margin','Blended margin','Opponent strength','Venue effect','Game-implied strength'],info.games.map(g=>[g.week,team(g.opponent),g.site,sign(g.margin),sign(g.target),sign(g.opponent_strength),sign(g.home_edge),sign(g.game_implied_strength)]));games.append(wrap);section.append(games);return section;});
+        table(wrap,['Week','Opponent','Venue','Actual margin','Blended margin','Opponent strength','Venue effect','QB effect','Game-implied strength'],info.games.map(g=>[g.week,team(g.opponent),g.site,sign(g.margin),sign(g.target),sign(g.opponent_strength),sign(g.home_edge),sign(g.qb_edge||0),sign(g.game_implied_strength)]));games.append(wrap);section.append(games);return section;});
       el('team-details').replaceChildren(...cards);
     }
     function renderEvaluation() {
@@ -239,6 +262,7 @@
         const value=await read(row.file);if(turn!==sequence)return;
         if(value.schema!==schema||!value.ratings?.length||!Array.isArray(value.games))throw new Error('Invalid forecast snapshot');
         data=value;el('snapshot').value=id;
+        for(const side of ['home','away'])delete el(side+'-qb').dataset.team;
         const m=data.meta;
         el('horizon').disabled=!m.model;
         const horizons=[...new Set([1,2,3,4,6,8,12,...data.games.map(g=>g.ahead||1)])].sort((a,b)=>a-b);
@@ -269,13 +293,14 @@
         index=await read('index.json');if(index.schema!==schema||!index.snapshots?.length)throw new Error('No saved projections yet.');
         el('snapshot').replaceChildren(...index.snapshots.map(r=>node('option',`${r.season} · week ${r.week} · ${date(r.through_date)}${r.id===index.latest?' · latest':''}`,{value:r.id})));
         await selectSnapshot(index.latest);
+        try{qbStatus=await read('qb-status.json');renderRatings();}catch(_){} // Not present in older deployments.
         backtest=await read('backtest.json');renderEvaluation();
       }catch(e){el('status').textContent=`${e.message} Use Reload to try again.`;initializing=null;}})();
       return initializing;
     }
     el('snapshot').addEventListener('change',()=>selectSnapshot(el('snapshot').value));
-    el('reload').addEventListener('click',()=>{cache.delete('index.json');initializing=null;initialize();});
-    for(const key of ['home','away','site','horizon'])el(key).addEventListener('change',renderMatchup);
+    el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');qbStatus=null;initializing=null;initialize();});
+    for(const key of ['home','away','site','horizon','home-qb','away-qb'])el(key).addEventListener('change',renderMatchup);
     for(const key of ['eval-period','eval-group'])el(key).addEventListener('change',renderEvaluation);
     el('swap').addEventListener('click',()=>{const h=el('home').value;el('home').value=el('away').value;el('away').value=h;renderMatchup();});
     for(const key of ['week','search'])el(key).addEventListener(key==='search'?'input':'change',renderGames);

@@ -27,7 +27,7 @@ def efficiency_target(margin, expectancy, config=CONFIG):
 
 def forecast_model(n_teams, home, away, venue, margin, host, home_prior, structure,
                    has_prior, prior_mean, prior_sd, fcs_mean, fcs_prior=None, fcs_sd=5.,
-                   week=None, n_weeks=1, config=CONFIG):
+                   week=None, n_weeks=1, config=CONFIG, qbx=None):
     # Execute the supplied model. This adapter only maps the saved-data schema;
     # priors, likelihood, latent structure and parameter names live in reference/.
     import jax.numpy as jnp
@@ -39,7 +39,7 @@ def forecast_model(n_teams, home, away, venue, margin, host, home_prior, structu
         prev_mean=prior_mean, s_prev=prior_sd, fcs_mu=fcs_mean, fcs_sd=5.,
         w=jnp.ones(len(home)), y=margin, learn_s=True, wk=week, n_weeks=n_weeks,
         dynamic=n_weeks > 1, q_scale=config.drift_sd, conf_scale=None,
-        fcs_prior=fcs_prior, fcs_s=fcs_sd)
+        fcs_prior=fcs_prior, fcs_s=fcs_sd, qbx=qbx)
 
 
 def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws, target_accept=None):
@@ -66,6 +66,7 @@ def fit(inputs, prior, home_prior, gap, target, *, seed, warmup, draws, target_a
         structure=inputs['strength_structure'], has_prior=jnp.asarray(has), prior_mean=jnp.asarray(pm),
         prior_sd=prior['sd'], fcs_mean=gap, fcs_prior=jnp.asarray(fcs), fcs_sd=prior['fcs_sd'],
         week=jnp.asarray([max(g['week']-1, 0) for g in inputs['games']]), n_weeks=n_weeks,
+        qbx=jnp.asarray(inputs['qbx']) if 'qbx' in inputs else None,
         extra_fields=('energy', 'num_steps', 'accept_prob', 'potential_energy', 'adapt_state.step_size'))
     sampler.forecast_target_accept = target_accept
     return sampler
@@ -92,7 +93,7 @@ def diagnose(sampler):
     d.update(transition_details(samples, extra))
     # Diagnostics include all stochastic parameters. Persist only arrays needed
     # for prediction; duplicated latent/deterministic paths waste task storage.
-    keep = ('theta', 'theta_last', 'walk', 'q', 'home_values', 'sigma', 'nu', 's_prev')
+    keep = ('theta', 'theta_last', 'walk', 'q', 'home_values', 'sigma', 'nu', 's_prev', 'lam')
     saved = {k: v for k, v in samples.items() if k in keep}
     import jax
     jax.clear_caches()
@@ -131,6 +132,7 @@ def prediction_arrays(samples, inputs, target):
     trajectory = path.mean(0)
     loc = trajectory[data['home'], weeks] - trajectory[data['away'], weeks]
     loc += np.asarray(data['venue']) * (hv[0] + np.where(host > 0, hv[host], 0.))
+    if 'lam' in flat: loc += flat['lam'].mean() * np.asarray(inputs['qbx'])
     denom = np.mean((target - loc)**2)
     factor = np.sqrt(np.mean((np.asarray(data['margin']) - loc)**2) / denom) if denom > 0 else np.nan
     if not np.isfinite(factor) or factor <= 0: raise ValueError('Invalid predictive residual rescaling')
@@ -140,7 +142,7 @@ def prediction_arrays(samples, inputs, target):
     # Scaling by sqrt(weeks ahead) preserves the random-walk marginal variance.
     z = np.random.default_rng(CONFIG.seed).standard_normal(last.shape)
     return {'theta': last + q[:, None] * z, 'theta_last': last, 'drift': q[:, None] * z,
-            'q': q, 'trajectory_mean': trajectory, 'trajectory_sd': path.std(0),
+            'q': q, **({'lam': flat['lam']} if 'lam' in flat else {}), 'trajectory_mean': trajectory, 'trajectory_sd': path.std(0),
             'home_values': flat.get('home_values', flat.get('home_effect')), 'sigma': flat['sigma'] * factor, 'nu': flat['nu']}, float(factor)
 
 

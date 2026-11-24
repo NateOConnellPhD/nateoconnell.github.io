@@ -1,0 +1,4 @@
+# The handoff's RDS reader; no change to EPA generation or player identity.
+numpy==2.2.6
+pandas==3.0.5
+pyreadr==0.5.9

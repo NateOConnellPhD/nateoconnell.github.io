@@ -82,7 +82,18 @@ async function controller(hash='',overrides={}) {
   const modern=await controller('#projections',{'index.json':{...index,latest:'fixture',snapshots:[{...row,id:'fixture',file:'forecast-fixture.json'}]},'forecast-fixture.json':fixture,'draws-fixture.json':dynamic});
   assert.equal(modern.get('status').textContent,'');assert.equal(modern.get('details-card').hidden,false);
   assert.equal(modern.get('team-details').children.length,2);assert.equal(modern.get('horizon').value,'4');
-  assert.equal(modern.get('line-parts').children[0].children[1].children.length,5);
+  assert.equal(modern.get('line-parts').children[0].children[1].children.length,7);
+  const qbDraws={...dynamic,lam:dynamic.sigma.map((_,i)=>.5+i/dynamic.sigma.length),lambda_mean:1.,
+    quarterbacks:{[game.home]:{x:2,options:{backup:-4}},[game.away]:{x:-1,options:{backup:3}}}};
+  const base=api.matchup(qbDraws,game.home,game.away,true,1,{home:'mix',away:'mix'});
+  const starter=api.matchup(qbDraws,game.home,game.away,true,1);
+  const backup=api.matchup(qbDraws,game.home,game.away,true,1,{home:'backup'});
+  assert.ok(starter.margin>base.margin&&backup.margin<base.margin);
+  assert.ok(starter.pHome>base.pHome&&backup.pHome<base.pHome);
+  assert.ok(Math.abs(backup.parts.qbHome+4)<1e-12);
+  const reverseQB=api.matchup(qbDraws,game.away,game.home,true,1);
+  assert.ok(Math.abs(starter.pHome+reverseQB.pHome-1)<1e-12);
+  assert.throws(()=>api.matchup(qbDraws,game.home,game.away,true,1,{home:'unknown'}),/Unknown quarterback/);
   modern.get('eval-period').value='holdout';modern.get('eval-period').handlers.change();assert.match(modern.get('backtest-summary').textContent,/2026/);
   console.log(JSON.stringify({checks:'projection probabilities, venue, signs, payload integrity, tab isolation, charts, caching',games:data.games.length,maxProbabilityError,maxMarginError}));
 })().catch(e=>{console.error(e);process.exitCode=1;});

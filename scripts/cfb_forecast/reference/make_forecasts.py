@@ -1,7 +1,10 @@
 """Frozen production model, V7LDe75: current power ratings, forecasts for upcoming games, and the draws and team detail the
 explorer dashboard uses. Same model and inputs as the backtest variant V7LDe75 (see SPEC.md).
 
-usage: python code/make_forecasts.py DATA_DIR OUT_DIR SEASON [THROUGH_WEEK] [WARM KEEP CHAINS SEED]
+usage: python code/make_forecasts.py DATA_DIR OUT_DIR SEASON [THROUGH_WEEK] [WARM KEEP CHAINS SEED] [--qb]
+  --qb: add the QB term (variant V7LDe75S; code/qb_term.py): the margin model gets lambda * (x_home - x_away), x from
+  the Bayesian QB value model; upcoming games use each team's incumbent starter unless data/qb/qb_status_<season>.csv
+  names another (columns team, passer_id, note). Needs runs/qb/hyper_<season>.json and data/pbp/dropbacks_*.parquet.
   Training games: regular-season D-I games of SEASON through THROUGH_WEEK (default: the last completed week), from
   DATA_DIR/<season>_DI_completed_games_current.csv (else ..._frozen.csv); postgame win probabilities from the CFBD schedule.
   Upcoming games: FBS-involved games after THROUGH_WEEK. If THROUGH_WEEK is before the last completed week, the next
@@ -23,9 +26,11 @@ from forecast_model import fit_forecast, predict
 from historical_home import load_historical, robust_history_fit, current_home_prior
 from priors_v7 import build_v7_prior, V7_COLS
 
-data, out, season = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
-through = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] != '-' else None
-warm, keep, chains, seed = (int(x) for x in (sys.argv[5:9] if len(sys.argv) > 8 else (1000, 1000, 4, 2026)))
+argv = [a for a in sys.argv[1:] if not a.startswith('--')]; QB_ON = '--qb' in sys.argv
+data, out, season = Path(argv[0]), Path(argv[1]), int(argv[2])
+through = int(argv[3]) if len(argv) > 3 and argv[3] != '-' else None
+warm, keep, chains, seed = (int(x) for x in (argv[4:8] if len(argv) > 7 else (1000, 1000, 4, 2026)))
+VARIANT = 'V7LDe75S' if QB_ON else 'V7LDe75'
 out.mkdir(parents=True, exist_ok=True)
 t0 = time.time()
 cache = here.parent / 'runs' / 'season_ratings_cache.pkl'
@@ -67,7 +72,21 @@ ok = train.logit_wp.notna(); mg = train.home_points - train.away_points
 kk = float(np.polyfit(train.logit_wp[ok], mg[ok], 1)[0]) if ok.sum() > 30 else 4.5
 train['eff'] = np.where(ok, kk * train.logit_wp, mg)
 teams = sorted(set(train.home_team) | set(train.away_team) | set(upcoming.home_team) | set(upcoming.away_team))
-fit = fit_forecast(train, teams, division, conference, home_prior, prior=prior, half_life=None, alpha=0.75, learn_s=True,
+qbx_train, QB, override = None, None, {}
+if QB_ON:
+    from qb_term import QBTerm
+    QB = QBTerm(data, season, through, here.parent / 'runs' / 'qb' / f'hyper_{season}.json')
+    qbx_train = QB.x_training(train, 'start')
+    st_file = data / 'qb' / f'qb_status_{season}.csv'
+    status = pd.read_csv(st_file) if st_file.exists() else pd.DataFrame(columns=['team', 'passer_id', 'note'])
+    override = {t: int(pid) for t, pid in zip(status.team, status.passer_id) if pd.notna(pid)}
+    qx = {}
+    for t in set(upcoming.home_team) | set(upcoming.away_team):
+        qx[t] = QB.x_for(t, override.get(t))
+    upcoming['x_home'] = [qx[t][0] for t in upcoming.home_team]; upcoming['x_away'] = [qx[t][0] for t in upcoming.away_team]
+    upcoming['home_qb'] = [QB.names.get(qx[t][1], qx[t][1]) for t in upcoming.home_team]
+    upcoming['away_qb'] = [QB.names.get(qx[t][1], qx[t][1]) for t in upcoming.away_team]
+fit = fit_forecast(train, teams, division, conference, home_prior, prior=prior, half_life=None, alpha=0.75, learn_s=True, qbx=qbx_train,
                    asof_week=through + 1, dynamic=True, q_scale=1.5, conf_scale=None,
                    warm=warm, keep=keep, chains=chains, seed=seed)
 ix = {t: i for i, t in enumerate(teams)}
@@ -78,14 +97,14 @@ rows = []
 for wk, grp in upcoming.groupby('week'):
     ahead = max(int(wk) - through, 1)
     th = fit['theta'] if ahead == 1 else fit['theta_last'] + fit['q_draws'][:, None] * np.sqrt(ahead) * rng.standard_normal(fit['theta_last'].shape)
-    p = predict({**fit, 'theta': th}, grp)
+    p = predict({**fit, 'theta': th}, grp, qbx=(grp.x_home - grp.x_away).to_numpy() if QB_ON else None)
     rows.append(grp.join(p))
 up = pd.concat(rows) if rows else upcoming.assign(spread=np.nan, sd=np.nan, p_home=np.nan)
 up['lo80'] = up.spread - stats.norm.ppf(.9) * up.sd; up['hi80'] = up.spread + stats.norm.ppf(.9) * up.sd
 up['favorite'] = np.where(up.spread >= 0, up.home_team, up.away_team); up['fav_by'] = up.spread.abs()
 up['fav_win_prob'] = np.where(up.spread >= 0, up.p_home, 1 - up.p_home)
 keepc = [c for c in ['game_id', 'week', 'start_date', 'home_team', 'away_team', 'neutral_site', 'home_conference', 'away_conference',
-                     'home_points', 'away_points', 'spread', 'sd', 'p_home', 'lpd', 'pit', 'lo80', 'hi80', 'favorite', 'fav_by', 'fav_win_prob'] if c in up]
+                     'home_qb', 'away_qb', 'x_home', 'x_away', 'home_points', 'away_points', 'spread', 'sd', 'p_home', 'lpd', 'pit', 'lo80', 'hi80', 'favorite', 'fav_by', 'fav_win_prob'] if c in up]
 up[keepc].sort_values(['week', 'game_id']).to_csv(out / f'{season}_upcoming_forecasts.csv', index=False)
 
 # ---- power ratings (strength for next week's games, FBS) ----
@@ -107,6 +126,20 @@ for q, lab in ((.025, 'lo95'), (.1, 'lo80'), (.9, 'hi80'), (.975, 'hi95')):
     pr[lab] = [np.quantile(th[:, ix[t]], q) for t in fbs_list]
 pr['P_rank1'] = (ranks == 1).mean(0); pr['P_top4'] = (ranks <= 4).mean(0); pr['P_top12'] = (ranks <= 12).mean(0); pr['P_top25'] = (ranks <= 25).mean(0)
 pr['rank_lo80'] = np.quantile(ranks, .1, axis=0).astype(int); pr['rank_hi80'] = np.quantile(ranks, .9, axis=0).astype(int)
+if QB_ON:                                                       # rating with the team's current starter, and QB tables
+    lam = float(np.mean(fit['lam']))
+    cur = {t: QB.x_for(t, override.get(t)) for t in fbs_list}
+    pr['qb_now'] = [QB.names.get(cur[t][1], cur[t][1]) for t in pr.team]
+    pr['qb_adj'] = [lam * cur[t][0] for t in pr.team]; pr['rating_qb_now'] = pr.rating + pr.qb_adj
+    rows_ = []
+    for t in fbs_list:
+        mix = QB.S[QB.S.pos_team == t].groupby('passer_id').n.sum()
+        for pid, n_ in mix.items():
+            xq, _ = QB.x_for(t, pid)
+            rows_.append({'team': t, 'passer_id': pid, 'name': QB.names.get(pid, str(pid)), 'dropbacks': int(n_), 'value': QB.value(pid),
+                          'x': xq, 'incumbent': pid == cur[t][1], 'status_override': t in override and pid == override[t]})
+    pd.DataFrame(rows_).to_csv(out / f'{season}_qbs.csv', index=False)
+    QB.importance(fbs_list, lam).to_csv(out / f'{season}_qb_importance.csv', index=False)
 pr = pr.sort_values('rating', ascending=False).reset_index(drop=True); pr.insert(0, 'rank', np.arange(1, len(pr) + 1))
 pr.to_csv(out / f'{season}_power_ratings.csv', index=False)
 
@@ -138,9 +171,10 @@ pt.to_csv(out / f'{season}_prior_table.csv', index=False)
 
 np.savez_compressed(out / f'{season}_forecast_draws.npz', teams=np.asarray(teams), theta=th, home_values=fit['home_values'],
                     home_names=np.asarray(fit['home_names']), sigma=fit['sigma'], nu=fit['nu'], traj_mean=tm, traj_sd=tsd, theta_last=fit['theta_last'], q_draws=fit['q_draws'],
+                    lam=(fit['lam'] if fit.get('lam') is not None else np.zeros(0)),
                     fbs=np.asarray(fbs_list), conference=np.asarray([conference[t] for t in teams]),
                     division=np.asarray([division[t] for t in teams]))
-run = {'variant': 'V7LDe75', 'season': season, 'through_week': through, 'games_used': int(len(train)),
+run = {'variant': VARIANT, 'season': season, 'qb_lambda': float(np.mean(fit['lam'])) if fit.get('lam') is not None else None, 'through_week': through, 'games_used': int(len(train)),
        'last_completed_kickoff_utc': str(pd.to_datetime(train.start_date, errors='coerce', utc=True).max()),
        'upcoming_games': int(len(up)), 'efficiency_scale_pts_per_logit': kk, 'prior_s': prior['s'], 's_posterior': fit['s_prev_post'],
        'drift_q_posterior': fit['q_post'], 'max_rhat_theta': fit['max_rhat_theta'], 'divergences': fit['divergences'],
