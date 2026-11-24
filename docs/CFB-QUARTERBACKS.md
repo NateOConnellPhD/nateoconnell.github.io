@@ -32,8 +32,8 @@ team,passer_id,note
 
 Use the exact saved team name and ESPN passer ID. Removing a row restores the
 incumbent assumption. Overrides are excluded from historical reconstructions.
-Changing a QB in the public comparison tool is a local scenario, not a saved
-override. This release does not invent an injury feed or scrape injury news.
+The public comparison tool automatically uses the saved expected starter; it
+has no QB selector. This release does not invent an injury feed or scrape injury news.
 
 ## Daily collection and caching
 
@@ -77,9 +77,11 @@ the saved passing fit. Publication retains the last checked forecast on failure.
 The ranked power table remains strength with the usual passer mix, preserving
 the handoff's rating and rank-uncertainty definitions. The main table shows
 ratings and uncertainty. Clicking a team opens its details, including the
-expected QB, adjustment and current-starter power. Matchup choices adjust each
-aligned posterior draw and update probabilities, margins, intervals and plots.
-The comparison lists each QB adjustment separately. Importance compares the
+expected QB, adjustment and current-starter power. Matchup forecasts automatically
+include each expected starter's contribution in the aligned posterior draws,
+probabilities, margins, intervals and plots. QB controls and repeated starter
+status messages are absent from the matchup form. The component breakdown is
+expandable inside team details. Importance compares the
 incumbent with the supplied recent-backup rule; it is not a medical assessment.
 Snapshots that predate QB integration are identified once at the snapshot level;
 missing QB fields do not create an “Unavailable” column for every team. Source

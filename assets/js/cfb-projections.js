@@ -206,22 +206,10 @@
       if(!draws)return;
       try {
         const h=el('home').value,a=el('away').value;
-        for(const side of ['home','away']) {
-          const id=el(side).value,sel=el(side+'-qb'),q=data.quarterbacks?.[id];
-          if(sel.dataset.team!==id) {
-            sel.replaceChildren(node('option',q?.name?`Expected: ${q.name}`:'No saved QB adjustment',{value:''}),
-              node('option','Usual passer mix (zero adjustment)',{value:'mix'}),
-              ...(q?.options||[]).map(p=>node('option',`${p.name} · ${p.dropbacks} dropbacks`,{value:p.id})));
-            sel.value='';sel.dataset.team=id;
-          }
-          sel.disabled=!q?.options?.length;
-        }
-        const choices={home:el('home-qb').value,away:el('away-qb').value};
-        const r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1),choices);
-        el('qb-note').textContent=data.quarterbacks?['home','away'].map(side=>{const q=data.quarterbacks[el(side).value];return `${team(el(side).value)}: ${q?.source||'unavailable'}${q?.note?' — '+q.note:''}.`;}).join(' ')+' QB selections are local scenarios; they do not update starter status.':'This older snapshot predates quarterback adjustments.';
+        const r=matchup(draws,h,a,el('site').value==='neutral',Number(el('horizon').value||1));
         // Retain the full-draw probabilities for a scheduled matchup.
         const official=data.games.find(g=>g.home===h&&g.away===a&&g.neutral===(el('site').value==='neutral'));
-        if(official&&!choices.home&&!choices.away&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
+        if(official&&(official.ahead||1)===Number(el('horizon').value||1)&&!draws.gaussian){r.pHome=official.p_home;r.pAway=1-official.p_home;}
         el('matchup-error').textContent='';el('matchup-result').hidden=false;
         el('line').textContent=predictedMargin(r.margin,h,a);el('home-chance').textContent=pct(r.pHome);el('away-chance').textContent=pct(r.pAway);
         el('home-label').textContent=`${team(h)} wins`;el('away-label').textContent=`${team(a)} wins`;
@@ -254,7 +242,7 @@
       const columns=hasScores?['Home points · mean (80% range)','Away points · mean (80% range)']:['Predicted margin'];
       table(el('games'),['Date','Matchup',...columns,'Home win','Away win'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
-        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('home-qb').value='';el('away-qb').value='';el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
+        b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
         const score=s=>`${fmt(s.mean)} (${scoreRange(s,80)})`;
         const prediction=hasScores?[score(g.scores.home),score(g.scores.away)]:[predictedMargin(g.home_margin,g.home,g.away)];
         return [date(g.date),b,...prediction,pct(g.p_home),pct(1-g.p_home)];
@@ -271,7 +259,6 @@
         const name=node('button',r.name,{type:'button',class:'cfb-forecast-game','aria-label':`View details for ${r.name}`});
         name.addEventListener('click',()=>{el('home').value=r.id;
           if(el('away').value===r.id)el('away').value=data.ratings.find(t=>t.id!==r.id).id;
-          el('home-qb').value='';el('away-qb').value='';
           el('site').value='neutral';el('horizon').value='1';selectView('compare',true);renderMatchup();
           if(draws&&!el('details-card').hidden){el('details-card').scrollIntoView({behavior:'smooth',block:'start'});el('detail-title').focus({preventScroll:true});}});
         return [r.position,name,Array.isArray(r.record)?r.record.join('–'):'—',sign(r.mean),sign(r.median),interval([r.lo95,r.hi95]),`${r.rank_lo80.toFixed(0)}–${r.rank_hi80.toFixed(0)}`,pct(r.p_top1),pct(r.p_top4),pct(r.p_top12),pct(r.p_top25)];
@@ -308,7 +295,7 @@
             if(rating)rows.push(['Power with usual passer mix',sign(rating.mean)],['Power with expected starter',sign(rating.rating_qb_now)]);
             table(wrap,['Detail','Estimate'],rows);section.append(wrap);
           } else section.append(node('p','No eligible current-season dropbacks are saved for this team, so there is no starter-specific adjustment in this forecast.'));
-          section.append(node('p',`${quarterback.source}${quarterback.note?': '+quarterback.note:''}. Changing the quarterback above explores a scenario; these details show the saved forecast.`,{class:'small-note'}));
+          section.append(node('p',`${quarterback.source}${quarterback.note?': '+quarterback.note:''}. This contribution is included automatically in matchup forecasts.`,{class:'small-note'}));
         }
         if(!info){section.append(node('p','Detailed inputs were not saved for this team.'));return section;}
         if(info.path?.length)trajectory(section,info.path,`${team(id)}’s estimated weekly strength`);
@@ -410,7 +397,7 @@
     }
     el('snapshot').addEventListener('change',()=>selectSnapshot(el('snapshot').value));
     el('reload').addEventListener('click',()=>{cache.delete('index.json');cache.delete('qb-status.json');qbStatus=null;initializing=null;initialize();});
-    for(const key of ['home','away','site','horizon','home-qb','away-qb'])el(key).addEventListener('change',renderMatchup);
+    for(const key of ['home','away','site','horizon'])el(key).addEventListener('change',renderMatchup);
     for(const key of ['eval-period','eval-group'])el(key).addEventListener('change',renderEvaluation);
     el('swap').addEventListener('click',()=>{const h=el('home').value;el('home').value=el('away').value;el('away').value=h;renderMatchup();});
     for(const key of ['week','search'])el(key).addEventListener(key==='search'?'input':'change',renderGames);
