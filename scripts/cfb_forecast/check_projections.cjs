@@ -32,7 +32,16 @@ class Element {
   focus(){}scrollIntoView(){}
 }
 async function controller(hash='',overrides={}) {
-  const nodes=new Map(),get=k=>{if(!nodes.has(k))nodes.set(k,new Element(['snapshot','home','away','site','week','conference','limit'].includes(k)?'select':'div'));return nodes.get(k);};
+  // Only expose hooks present in the shipped template. Inventing an element for
+  // every selector concealed accesses to controls that had already been removed.
+  const template=fs.readFileSync(path.resolve(__dirname,'../../_includes/cfb-projections.html'),'utf8');
+  const nodes=new Map();
+  for(const [,tag,attrs] of template.matchAll(/<([a-z][\w-]*)\b([^>]*)>/g)) {
+    for(const [,key] of attrs.matchAll(/\bdata-projection-([\w-]+)(?=[\s=>]|$)/g)) {
+      const element=new Element(tag);element.hidden=/\bhidden\b/.test(attrs);nodes.set(key,element);
+    }
+  }
+  const get=k=>nodes.get(k)||null;
   get('limit').value='all';const root=new Element(),main=new Element();root.dataset.index='/assets/data/cfb/projections/index.json';
   root.querySelector=s=>get(s.match(/data-projection-([^\]]+)/)[1]);
   const buttons=['merit','projections'].map(name=>{const b=new Element('button');b.dataset.cfbProductTab=name;return b;});
@@ -73,6 +82,18 @@ async function controller(hash='',overrides={}) {
   p.buttons[0].handlers.click();p.buttons[1].handlers.click();await p.settle();assert.equal(p.requests.length,before,'Changing teams/tabs must reuse static data');
   p.get('away').value=p.get('home').value;p.get('away').handlers.change();assert.match(p.get('matchup-error').textContent,/different/);
   const direct=await controller('#projections');assert.equal(direct.main.hidden,true);assert.ok(direct.requests.length>0);
+  assert.equal(direct.get('home-qb'),null);assert.equal(direct.get('away-qb'),null);
+  assert.equal(direct.get('status').textContent,'');assert.equal(direct.get('content').hidden,false);
+  assert.equal(direct.get('matchup-error').textContent,'');assert.equal(direct.get('matchup-result').hidden,false);
+  for(const snapshot of index.snapshots) {
+    direct.get('snapshot').value=snapshot.id;
+    await direct.get('snapshot').handlers.change();await direct.settle();
+    assert.equal(direct.get('status').textContent,'',`Snapshot ${snapshot.id} must load`);
+    assert.equal(direct.get('content').hidden,false);
+    assert.equal(direct.get('matchup-error').textContent,'');assert.equal(direct.get('matchup-result').hidden,false);
+  }
+  direct.get('reload').handlers.click();await direct.settle();
+  assert.equal(direct.get('snapshot').value,index.latest);assert.equal(direct.get('status').textContent,'');
   // Exercise the new drift/details controller using in-memory data, not a browser.
   const dynamic={...draws,last:draws.teams,drift:Object.fromEntries(Object.entries(draws.teams).map(([id,x],j)=>[id,x.map((_,i)=>(j%2?1:-1)*(i/x.length-.5)*2)]))};
   delete dynamic.teams;delete dynamic.means;api.validateDraws(dynamic);

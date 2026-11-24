@@ -359,7 +359,6 @@
         const value=await read(row.file);if(turn!==sequence)return;
         if(value.schema!==schema||!value.ratings?.length||!Array.isArray(value.games))throw new Error('Invalid forecast snapshot');
         data=value;el('snapshot').value=id;
-        for(const side of ['home','away'])delete el(side+'-qb').dataset.team;
         const m=data.meta;
         el('horizon').disabled=!m.model;
         const horizons=[...new Set([1,2,3,4,6,8,12,...data.games.map(g=>g.ahead||1)])].sort((a,b)=>a-b);
