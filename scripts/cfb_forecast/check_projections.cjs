@@ -160,6 +160,9 @@ async function controller(hash='',overrides={}) {
   assert.equal(modern.get('score-summary').children[0].children[1].children.length,2);
   assert.ok(Number.isFinite(Number(modern.get('home-score').textContent)));
   assert.ok(modern.get('games').children[0].children[0].children[0].children.some(h=>/Home points/.test(h.textContent)));
+  assert.deepEqual(headers(modern.get('games')),['Date','Matchup','Home points · mean (95% range)',
+    'Away points · mean (95% range)','Predicted margin','Home win','Away win']);
+  assert.equal(rows(modern.get('games'))[0][4],modern.get('line').textContent);
   const scoreBefore=modern.get('home-score').textContent,scoreRangeBefore=rows(modern.get('score-summary'))[0][3];
   const gameRangeBefore=rows(modern.get('games'))[0][2],requestsBefore=modern.requests.length;
   modern.get('coverage').value='80';modern.get('coverage').handlers.change();

@@ -262,13 +262,13 @@
       if(!data)return;const week=el('week').value,q=el('search').value.trim().toLowerCase(),level=coverage();
       const rows=orderGames(data.games.filter(g=>(!week||`${g.season_type}:${g.week}`===week)&&(!q||`${team(g.home)} ${team(g.away)}`.toLowerCase().includes(q))),data.ratings);
       const hasScores=data.games.length>0&&data.games.every(g=>g.scores?.home&&g.scores?.away);
-      const columns=hasScores?[`Home points · mean (${level}% range)`,`Away points · mean (${level}% range)`]:['Predicted margin'];
-      table(el('games'),['Date','Matchup',...columns,'Home win','Away win'],rows.map(g=>{
+      const columns=hasScores?[`Home points · mean (${level}% range)`,`Away points · mean (${level}% range)`]:[];
+      table(el('games'),['Date','Matchup',...columns,'Predicted margin','Home win','Away win'],rows.map(g=>{
         const b=node('button',`${team(g.away)} ${g.neutral?'vs.':'at'} ${team(g.home)}`,{type:'button',class:'cfb-forecast-game'});
         b.addEventListener('click',()=>{el('home').value=g.home;el('away').value=g.away;el('site').value=g.neutral?'neutral':'home';el('horizon').value=String(g.ahead||1);selectView('compare');renderMatchup();el('matchup').scrollIntoView({behavior:'smooth',block:'start'});});
         const score=s=>`${fmt(s.mean)} (${scoreRange(s,level)})`;
-        const prediction=hasScores?[score(g.scores.home),score(g.scores.away)]:[predictedMargin(g.home_margin,g.home,g.away)];
-        return [date(g.date),b,...prediction,pct(g.p_home),pct(1-g.p_home)];
+        const prediction=hasScores?[score(g.scores.home),score(g.scores.away)]:[];
+        return [date(g.date),b,...prediction,predictedMargin(g.home_margin,g.home,g.away),pct(g.p_home),pct(1-g.p_home)];
       }));
       el('games-note').textContent=rows.length
         ? (hasScores?'':scoreAvailability()+' ')+`${rows.length} scheduled games match your selection. `+(hasScores?`Point ranges include game-to-game variation. Select a game for score distributions, medians, and ${level}% ranges.`:'Select a game to explore the predicted margin and its uncertainty.')
