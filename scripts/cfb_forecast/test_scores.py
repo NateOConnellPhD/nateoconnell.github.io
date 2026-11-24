@@ -91,12 +91,22 @@ class ScoreTests(unittest.TestCase):
                 _, key3, reused = scores.load_or_fit(changed, 2026, self.teams, tmp)
                 self.assertNotEqual(key, key3); self.assertEqual(fit.call_count, 2)
                 self.assertEqual(len(list(Path(tmp).glob('*.json'))), 1)
-        inputs = {'season': 2026}
-        with patch.object(publish.source, 'load', return_value=(inputs, {}, [], [], 'now', 'same margin key')), \
-             patch.object(publish.qb_data, 'identity', return_value={}), \
-             patch.object(scores, 'load_rows', side_effect=[self.rows, changed]):
-            a = publish.request(2026); b = publish.request(2026)
-            self.assertEqual(a[-2], b[-2]); self.assertNotEqual(a[-1], b[-1])
+        current_games = [{'id': r['id'], 'home_id': int(r['home']), 'away_id': int(r['away']),
+                          'home_points': r['hp'], 'away_points': r['ap']}
+                         for r in self.rows if r['season'] == 2026]
+        # source.load always supplies a games list, including an empty one before
+        # the season. Keep the mock contract complete for QB availability checks.
+        for games, week in ((current_games, None), ([], None), (current_games, 12)):
+            with self.subTest(played_games=len(games), forecast_week=week):
+                inputs = {'season': 2026, 'games': games}
+                with patch.object(publish.source, 'load', return_value=(inputs, {}, [], [], 'now', 'same margin key')), \
+                     patch.object(publish.qb_data, 'identity', return_value={}) as qb_identity, \
+                     patch.object(scores, 'load_rows', side_effect=[self.rows, changed]):
+                    a = publish.request(2026, week); b = publish.request(2026, week)
+                    self.assertEqual(a[-2], b[-2]); self.assertNotEqual(a[-1], b[-1])
+                    self.assertEqual(qb_identity.call_count, 2)
+                    qb_identity.assert_called_with(2026, historical=week is not None,
+                                                   require_current=bool(games))
 
     def test_score_pairs_preserve_margin_and_reversal_including_extreme_draws(self):
         d = scores.browser_draws(self.fitted, 100)
