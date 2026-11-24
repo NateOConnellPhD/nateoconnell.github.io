@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -16,6 +17,40 @@ from scipy.stats import t
 
 
 class ForecastTests(unittest.TestCase):
+    def test_installation_finishes_before_fit_cache_restore(self):
+        workflow=(ROOT/'.github/workflows/cfb-projections.yml').read_text()
+        restore=workflow.index('uses: actions/cache/restore@')
+        installs=list(re.finditer(r'pip install[^\n]+',workflow))
+        self.assertEqual(len(installs),2)
+        for install in installs:
+            self.assertLess(install.start(),restore,'Restored posteriors must not overlap pip temporary files')
+            self.assertIn('--no-cache-dir',install.group())
+            self.assertIn('--no-compile',install.group())
+            self.assertIn('--only-binary=:all:',install.group())
+
+    def test_forecast_cache_retains_current_attempts_and_respects_directory_boundary(self):
+        identity={'seed':123,'training_key':'current'}
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as tmp:
+            task=Path(tmp);cache=task/'forecast-fits';cache.mkdir()
+            keep=[]
+            for w,d in forecast.SAMPLING_ATTEMPTS:
+                folder=cache/publish.digest({**identity,'warmup':w,'draws':d});folder.mkdir()
+                (folder/'posterior.npz').write_bytes(b'current fit');keep.append(folder)
+            old=cache/publish.digest({'training_key':'old'});old.mkdir()
+            (old/'posterior.npz').write_bytes(b'obsolete fit')
+            unrelated=cache/'notes';unrelated.mkdir();(unrelated/'keep').write_text('untouched')
+            public=task/'assets/data/cfb/projections';public.mkdir(parents=True)
+            (public/'index.json').write_text('published results')
+            link=cache/('f'*64);link.symlink_to(public,target_is_directory=True)
+            with self.assertRaisesRegex(ValueError,'linked'):publish.retain_matching_fit_cache(cache,identity)
+            self.assertTrue(old.exists(),'Check boundaries before removing any cache entry')
+            link.unlink()
+            publish.retain_matching_fit_cache(cache,identity)
+            self.assertFalse(old.exists())
+            self.assertTrue(all((p/'posterior.npz').read_bytes()==b'current fit' for p in keep))
+            self.assertEqual((unrelated/'keep').read_text(),'untouched')
+            self.assertEqual((public/'index.json').read_text(),'published results')
+
     def fixture(self):
         n = 1000; shared = np.linspace(-5, 5, n)
         arrays = {'theta': np.column_stack([shared + 8, shared, shared - 12]),
@@ -136,6 +171,11 @@ class ForecastTests(unittest.TestCase):
                  patch('cfb_forecast.home.load_or_estimate', return_value=home), \
                  patch.object(forecast, 'fit', return_value=None) as fitter, \
                  patch.object(forecast, 'diagnose', return_value=(samples, {'sampling_checks_passed': True}, {})):
+                def check_cache_before_fit(*args,**kwargs):
+                    cache=publish.TASK/'forecast-fits'
+                    self.assertEqual(list(cache.iterdir()) if cache.exists() else [],[],
+                        'A new fit must not share disk with an obsolete posterior')
+                fitter.side_effect=check_cache_before_fit
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)
                 publish.complete(2026); self.assertEqual(fitter.call_count, 1)
                 qb_identity['status']='reported out'

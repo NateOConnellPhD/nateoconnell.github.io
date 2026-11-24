@@ -65,7 +65,7 @@ jobs:
         run: |
           mkdir -p "$TMPDIR"
           python3 -m venv .codex-tmp/cfb-refit/venv
-          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --no-cache-dir -r scripts/cfb_forecast/qb-requirements.txt
+          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --disable-pip-version-check --no-cache-dir --no-compile --only-binary=:all: -r scripts/cfb_forecast/qb-requirements.txt
       - name: Refresh quarterback play-by-play daily (conditional downloads)
         run: python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -B scripts/cfb_forecast/qb_data.py --season "$CFB_FORECAST_SEASON"
       - name: Refresh public QB injuries and rosters daily
@@ -90,6 +90,13 @@ jobs:
           args=(--season "$CFB_FORECAST_SEASON")
           if [ -n "$CFB_FORECAST_WEEK" ]; then args+=(--week "$CFB_FORECAST_WEEK"); fi
           python3 -B scripts/cfb_forecast/publish.py prepare "${args[@]}"
+      # Install before restoring posteriors: pip temporarily holds wheels and
+      # unpacked packages alongside the installed environment.
+      - name: Install pinned numerical packages
+        if: steps.prepare.outputs.needs_update == 'true'
+        run: |
+          mkdir -p "$TMPDIR"
+          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --disable-pip-version-check --no-cache-dir --no-compile --only-binary=:all: -r scripts/cfb/requirements.txt
       - uses: actions/cache/restore@v6
         if: steps.prepare.outputs.needs_update == 'true'
         with:
@@ -100,11 +107,6 @@ jobs:
             .codex-tmp/cfb-refit/scores
           key: forecast-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: forecast-${{ runner.os }}-
-      - name: Install pinned numerical packages
-        if: steps.prepare.outputs.needs_update == 'true'
-        run: |
-          mkdir -p "$TMPDIR"
-          python3 -B scripts/cfb/run_bounded.py .codex-tmp/cfb-refit/venv/bin/python -m pip install --no-cache-dir -r scripts/cfb/requirements.txt
       - name: Check projections without sampling
         if: steps.prepare.outputs.needs_update == 'true'
         run: |

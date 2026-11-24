@@ -6,6 +6,8 @@ from importlib.metadata import version
 import json
 import os
 from pathlib import Path
+import re
+import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +49,20 @@ def prepare(season, week=None):
     print(json.dumps({'season': season, 'needs_update': needed, 'input_key': key, 'api_requests': 0}))
 
 
+def retain_matching_fit_cache(cache, identity):
+    """Free obsolete job-owned posteriors before writing a replacement, not after."""
+    if cache.is_symlink(): raise ValueError('Refusing a linked forecast cache directory')
+    if not cache.exists(): return
+    keep = {digest({**identity, 'warmup': w, 'draws': d}) for w,d in forecast.SAMPLING_ATTEMPTS}
+    remove = []
+    for folder in cache.iterdir():
+        if not re.fullmatch(r'[0-9a-f]{64}', folder.name): continue
+        if folder.is_symlink(): raise ValueError('Refusing a linked forecast fit directory')
+        if folder.is_dir() and folder.name not in keep: remove.append(folder)
+    for folder in remove: shutil.rmtree(folder)
+    if remove: print(json.dumps({'event':'pruned_forecast_fits','removed':len(remove)}), flush=True)
+
+
 def fit_window(inputs, prior, expectancy, training_key):
     """Shared fitting path for a live refresh or a historical forecast window."""
     from full_fit_retry import checked_full_fit
@@ -62,6 +78,9 @@ def fit_window(inputs, prior, expectancy, training_key):
         'source': {k:v for k,v in source_identity().items() if not k.endswith(('/export.py','/publish.py','/scores.py','/qb_availability.py'))},
         'home': digest(home), 'gap': prior['fcs_gap'],
         'packages': {p:version(p) for p in ('numpy','scipy','jax','jaxlib','numpyro','arviz')}, 'seed':CONFIG.seed, 'chains':4}
+    # Keep both supported sampling attempts for cache reuse. Other identities
+    # cannot be reused here; retaining them doubles disk use during a new fit.
+    retain_matching_fit_cache(TASK / 'forecast-fits', identity)
     samples, report, fit_key, reused = checked_full_fit(identity, TASK / 'forecast-fits',
         {'season':inputs['season'], 'week':inputs.get('last_training_week',max(g['week'] for g in inputs['games']))},
         lambda **settings: forecast.fit(inputs, prior, home, prior['fcs_gap'], target, **settings), forecast.diagnose, lambda _: {},
@@ -130,11 +149,6 @@ def complete(season, week=None):
     public['meta']['score_model'].update(fit_key=score_key, fit_reused=score_reused)
     row = export.write(public, draws, PUBLIC)
     print(json.dumps({'published': row, 'fit_reused': fit_meta['fit_reused'], 'api_requests': 0}))
-    # Only this isolated forecasting job's cache: keep the current passing fit.
-    import shutil
-    if (TASK / 'forecast-fits').exists():
-        for p in (TASK / 'forecast-fits').iterdir():
-            if p.is_dir() and p.name != fit_meta['fit_key']: shutil.rmtree(p)
 
 
 def main():
