@@ -33,7 +33,8 @@ def request(season, week=None):
     # Observation timestamps alone do not trigger fitting or publication.
     key = digest({'training_key': training_key, 'prior': prior, 'games': games,
                   'scores': inputs['score_rows'],
-                  'qb': qb_data.identity(season, historical=week is not None), 'source': source_identity()})
+                  'qb': qb_data.identity(season, historical=week is not None,
+                                         require_current=bool(inputs['games'])), 'source': source_identity()})
     return inputs, prior, expectancy, games, observed, training_key, key
 
 

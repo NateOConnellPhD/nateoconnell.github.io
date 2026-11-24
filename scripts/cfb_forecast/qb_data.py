@@ -57,7 +57,13 @@ def download(relative, path, etag=None, limit=128*1024*1024):
 def validate(frame, season):
     import numpy as np
     if not set(COLUMNS) <= set(frame.columns) or frame.empty: raise ValueError('No usable QB dropbacks')
-    if frame[COLUMNS].isna().any().any(): raise ValueError('Incomplete QB dropback row')
+    missing = frame[COLUMNS].isna()
+    if missing.any().any():
+        fields = ', '.join(missing.columns[missing.any()])
+        rows = missing.any(axis=1)
+        games = ', '.join(map(str, frame.loc[rows, 'game_id'].drop_duplicates().head(5)))
+        raise ValueError(f'Incomplete QB dropback rows for {season}: missing {fields}; '
+                         f'game IDs {games} ({int(rows.sum())} rows)')
     numeric = frame[['season','week','game_id','passer_id','n','epa_sum','epa2_sum','first_play']].to_numpy(float)
     if not np.isfinite(numeric).all() or (frame.season != season).any() or (frame.n <= 0).any():
         raise ValueError('Invalid QB season or numerical input')
@@ -87,14 +93,34 @@ def refresh(season, directory=DIRECTORY, task=TASK, now=None, fetch=download, pu
         try:
             src = fetch(pbp_url, raw, info.get('etag') if old and same_source else None)
             # Current roster refresh is independent of play-by-play changes.
+            # Older saved schedules have only IDs/dates: fetch their metadata
+            # once, even if the provider's schedule ETag has not changed.
+            has_labels = old and old.get('schedule') and all(
+                r.get('season_type') in {'regular','postseason'} for r in old['schedule'])
             sch = fetch(schedule_url, schedule,
-                        info.get('schedule_etag') if old and same_source else None, limit=8*1024*1024)
+                        info.get('schedule_etag') if has_labels and same_source else None, limit=8*1024*1024)
             value = dict(old) if old else {}
+            if sch:
+                with gzip.open(schedule, 'rb') as stream: body = stream.read(8*1024*1024+1)
+                if len(body) > 8*1024*1024: raise ValueError('QB schedule exceeds decompressed size limit')
+                rows = list(csv.DictReader(io.StringIO(body.decode('utf-8-sig'))))
+                fbs = {r[side+'_team'] for r in rows for side in ('home','away') if r[side+'_division']=='fbs'}
+                if len(fbs) < 100: raise ValueError('Incomplete QB season classification')
+                value['fbs'] = sorted(fbs)
+                value['schedule'] = [{'id':int(r['game_id']), 'date':r['start_date'],
+                    'season_type':r['season_type']} for r in rows if r.get('start_date')]
             if src:
                 try: df = next(iter(pyreadr.read_r(str(raw)).values()))
                 except Exception as error:
                     raise ValueError(f'Cannot read QB play-by-play: {type(error).__name__}') from error
-                frame, names = dropbacks(df, year); del df; gc.collect()
+                season_types = {}
+                for row in value.get('schedule', []):
+                    label = row.get('season_type')
+                    if label not in {'regular','postseason'}: continue
+                    if row['id'] in season_types and season_types[row['id']] != label:
+                        raise ValueError(f"Conflicting QB schedule labels for game {row['id']}")
+                    season_types[row['id']] = label
+                frame, names = dropbacks(df, year, season_types); del df; gc.collect()
                 validate(frame, year)
                 if old:
                     old_keys = {(r[3],r[6]) for r in old['rows']}
@@ -103,14 +129,6 @@ def refresh(season, directory=DIRECTORY, task=TASK, now=None, fetch=download, pu
                 value.update(columns=COLUMNS, rows=frame[COLUMNS].values.tolist(),
                     names={**(old or {}).get('names',{}), **names})
                 del frame
-            if sch:
-                with gzip.open(schedule, 'rb') as stream: body = stream.read(8*1024*1024+1)
-                if len(body) > 8*1024*1024: raise ValueError('QB schedule exceeds decompressed size limit')
-                rows = list(csv.DictReader(io.StringIO(body.decode('utf-8-sig'))))
-                fbs = {r[side+'_team'] for r in rows for side in ('home','away') if r[side+'_division']=='fbs'}
-                if len(fbs) < 100: raise ValueError('Incomplete QB season classification')
-                value['fbs'] = sorted(fbs)
-                value['schedule'] = [{'id':int(r['game_id']), 'date':r['start_date']} for r in rows if r.get('start_date')]
             if not value or not value.get('fbs'): raise ValueError('Missing QB baseline')
             value.update(season=year, schema='qb-dropbacks-v1')
             body_key = digest({k:value[k] for k in ('columns','rows','fbs','schedule')})
@@ -141,11 +159,16 @@ def refresh(season, directory=DIRECTORY, task=TASK, now=None, fetch=download, pu
     print(json.dumps({'qb_checked_at':stamp,'warnings':failures,'missing_history':missing}))
 
 
-def identity(season, directory=DIRECTORY, historical=False):
+def identity(season, directory=DIRECTORY, historical=False, *, require_current=False):
     """Stdlib preflight; timestamps never invalidate the model fit."""
     files = {str(y):read(Path(directory)/f'{y}.json') for y in range(2021,season+1)}
     if any(files[str(y)] is None for y in range(2021,season)):
         raise ValueError('QB history is missing; run the daily QB refresh before publishing')
+    if require_current and files[str(season)] is None:
+        state = read(Path(directory)/'refresh.json', {})
+        reason = state.get('seasons', {}).get(str(season), {}).get('error')
+        raise ValueError(f'Missing QB dropbacks for {season}: '
+                         f'{reason or "run the daily QB refresh before publishing"}')
     status = Path(directory)/'status'/f'{season}.csv'
     return {'data':{y:v['input_key'] if v else None for y,v in files.items()},
         'names':digest({y:v.get('names',{}) if v else {} for y,v in files.items()}),

@@ -1,9 +1,9 @@
 """Dataframe boundary for the handoff's pipeline/pbp_dropbacks.py.
 
-Same passer repair, garbage-time thresholds, grouping and name selection;
-only the RDS input and parquet output have moved to the daily collector.
+Same passer repair, garbage-time thresholds, grouping and name selection.
+Missing season labels are recovered from the schedule by game ID before grouping.
 """
-def dropbacks(df, season):
+def dropbacks(df, season, season_types=None):
     import numpy as np
     import pandas as pd
     required = {'pass', 'EPA', 'completion_player_id', 'incompletion_player_id',
@@ -12,6 +12,14 @@ def dropbacks(df, season):
     if not required <= set(df.columns):
         raise ValueError('Play-by-play schema changed: ' + ', '.join(sorted(required - set(df.columns))))
     p = df[(df['pass'].astype(float) == 1) & df.EPA.notna()].copy()
+    # The live feed can omit this label even when its game and EPA are complete.
+    # Recover metadata from the schedule, never infer regular/postseason from a
+    # week number. Do this before grouping so one passer-game stays one row.
+    if season_types:
+        p['season_type'] = p.season_type.astype(object)
+        missing = p.season_type.isna() | p.season_type.isin(['', 'NA'])
+        p.loc[missing, 'season_type'] = pd.to_numeric(
+            p.loc[missing, 'game_id'], errors='coerce').map(season_types)
     pid = pd.to_numeric(p.completion_player_id, errors='coerce')
     other = pd.to_numeric(p.incompletion_player_id, errors='coerce')
     for c in ('interception_thrown_player_id', 'sack_taken_player_id'):

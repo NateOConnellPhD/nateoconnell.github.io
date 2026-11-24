@@ -32,6 +32,34 @@ class QBTests(unittest.TestCase):
         self.assertEqual(frame.epa_sum.tolist(),[1.]); self.assertEqual(frame.epa2_sum.tolist(),[7.])
         self.assertEqual(frame.first_play.tolist(),[1])
 
+    def test_missing_season_labels_use_game_schedule_before_grouping(self):
+        base={'pass':1.,'EPA':1.,'completion_player_id':None,'incompletion_player_id':10,
+            'interception_thrown_player_id':None,'sack_taken_player_id':None,'pos_team':'A','def_pos_team':'B',
+            'game_id':1,'home':'A','away':'B','week':1,'season_type':'regular','pos_score_diff_start':0.,'period':1}
+        plays=pd.DataFrame([{**base,'game_play_number':1},
+            {**base,'game_play_number':2,'season_type':None,'EPA':-2.},
+            {**base,'game_id':2,'game_play_number':1,'season_type':None},
+            {**base,'game_id':3,'game_play_number':1,'season_type':'postseason'}])
+        # RDS factors can be categorical, including an entirely missing label.
+        plays['season_type']=pd.Categorical(plays.season_type)
+        frame,_=dropbacks(plays,2026,{1:'regular',2:'postseason'})
+        qb_data.validate(frame,2026)
+        by=frame.set_index('game_id')
+        self.assertEqual(by.season_type.to_dict(),{1:'regular',2:'postseason',3:'postseason'})
+        self.assertEqual(by.n.to_dict(),{1:2,2:1,3:1})
+        self.assertEqual(by.epa_sum.to_dict(),{1:-1.,2:1.,3:1.})
+        self.assertEqual(by.epa2_sum.to_dict(),{1:5.,2:1.,3:1.})
+        self.assertEqual(by.first_play.to_dict(),{1:1,2:1,3:1})
+        # The original records are not mutated; unknown games aren't guessed.
+        self.assertEqual(int(plays.season_type.isna().sum()),2)
+        unresolved,_=dropbacks(plays,2026,{1:'regular'})
+        with self.assertRaisesRegex(ValueError,r'missing season_type; game IDs 2 \(1 rows\)'):
+            qb_data.validate(unresolved,2026)
+        for field in ('first_play','def_pos_team'):
+            broken=frame.copy();broken[field]=None
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError,'missing '+field):
+                qb_data.validate(broken,2026)
+
     def test_export_preserves_mix_ratings_and_joint_qb_draws(self):
         n=400; lam=np.linspace(.5,1.5,n)
         arrays={'theta':np.tile([8.,0.],(n,1)), 'home_values':np.zeros((n,1)),
@@ -74,6 +102,22 @@ class QBTests(unittest.TestCase):
             self.assertEqual(before['data'],after['data']);self.assertNotEqual(before['status'],after['status'])
             self.assertEqual(before,qb_data.identity(2026,directory,historical=True))
 
+    def test_preflight_requires_current_qb_data_only_after_games(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as temp:
+            directory=Path(temp)
+            for y in range(2021,2026):
+                (directory/f'{y}.json').write_text(json.dumps({'input_key':str(y)}))
+            (directory/'refresh.json').write_text(json.dumps({'seasons':{'2026':{
+                'error':'Incomplete QB dropback rows for 2026: missing season_type; game IDs 123'}}}))
+            self.assertIsNone(qb_data.identity(2026,directory)['data']['2026'])
+            for historical in (False,True):
+                with self.subTest(historical=historical), self.assertRaisesRegex(ValueError,
+                        'Missing QB dropbacks for 2026: .*missing season_type; game IDs 123'):
+                    qb_data.identity(2026,directory,historical=historical,require_current=True)
+            (directory/'2026.json').write_text(json.dumps({'input_key':'current'}))
+            self.assertEqual(qb_data.identity(2026,directory,require_current=True)['data']['2026'],'current')
+
     def test_daily_refresh_bootstrap_revalidation_and_last_good_data(self):
         from tempfile import TemporaryDirectory
         base={'pass':1.,'EPA':1.,'completion_player_id':None,'incompletion_player_id':10,
@@ -82,23 +126,33 @@ class QBTests(unittest.TestCase):
             'game_play_number':1}
         calls=[]
         def fetch(url,path,etag=None,limit=None):
-            calls.append(url)
+            calls.append((url,etag))
             if etag: return None
             path.parent.mkdir(parents=True,exist_ok=True)
             if url.endswith('.csv.gz'):
-                path.write_bytes(gzip.compress(('game_id,start_date,home_team,away_team,home_division,away_division\n'+
-                    '\n'.join(f'{i},2026-09-01T00:00:00Z,T{i},B,fbs,fcs' for i in range(100))).encode()))
+                path.write_bytes(gzip.compress(('game_id,start_date,home_team,away_team,home_division,away_division,season_type\n'+
+                    '\n'.join(f'{i},2026-09-01T00:00:00Z,T{i},B,fbs,fcs,regular' for i in range(100))).encode()))
             else: path.write_bytes(b'fixture')
             return {'etag':'saved','sha256':'fixture','url':qb_data.BASE+url}
-        with TemporaryDirectory() as temp, patch.dict(sys.modules,{'pyreadr':SimpleNamespace(read_r=lambda _: {None:pd.DataFrame([base])})}):
+        with TemporaryDirectory() as temp, patch.dict(sys.modules,{'pyreadr':SimpleNamespace(
+                read_r=lambda _: {None:pd.DataFrame([base,{**base,'game_play_number':2,'season_type':None}])})}):
             directory=Path(temp)/'saved';task=Path(temp)/'download'
             now=dt.datetime(2026,11,23,tzinfo=dt.timezone.utc)
             qb_data.refresh(2026,directory,task,now,fetch)
             self.assertEqual(len(calls),12); self.assertFalse(task.exists())
+            current=json.loads((directory/'2026.json').read_text())
+            self.assertEqual(len(current['rows']),1)
+            self.assertEqual(current['rows'][0][2],'regular')
+            self.assertEqual(current['rows'][0][9],2)
             first=qb_data.identity(2026,directory)
             qb_data.refresh(2026,directory,task,now,fetch);self.assertEqual(len(calls),12)
+            # Migrate the previous IDs/dates-only cache even if the schedule ETag is unchanged.
+            legacy={**current,'schedule':[{k:v for k,v in r.items() if k!='season_type'} for r in current['schedule']]}
+            (directory/'2026.json').write_text(json.dumps(legacy))
             qb_data.refresh(2026,directory,task,now+dt.timedelta(days=1),fetch)
             self.assertEqual(len(calls),24);self.assertEqual(first,qb_data.identity(2026,directory))
+            self.assertEqual(calls[-1],('cfb_schedules/cfb_schedules_2026.csv.gz',None))
+            self.assertTrue(all(r['season_type']=='regular' for r in json.loads((directory/'2026.json').read_text())['schedule']))
             def failed(*a,**kw): raise ValueError('test outage')
             qb_data.refresh(2026,directory,task,now+dt.timedelta(days=2),failed)
             self.assertEqual(first,qb_data.identity(2026,directory))
